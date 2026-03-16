@@ -1,41 +1,82 @@
-# Prerequisites
-*.d
+# =====================================
+# Build outputs
+# =====================================
 
-# Compiled Object files
-*.slo
-*.lo
+bin/
+bin-int/
+build/
+
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
 *.a
 *.lib
-
-# Executables
+*.so
+*.dll
 *.exe
 *.out
-*.app
 
-# debug information files
-*.dwo
+# =====================================
+# Premake / generated build files
+# =====================================
+
+Makefile
+*.make
+*.make2
+
+# =====================================
+# Clangd / LSP caches
+# =====================================
+
+.cache/
+.cache/clangd/
+.cache/clangd/index/
+
+# =====================================
+# Compile database
+# =====================================
+
+compile_commands.json
+
+# =====================================
+# Editor / IDE
+# =====================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =====================================
+# OS files
+# =====================================
+
+.DS_Store
+Thumbs.db
+
+# =====================================
+# Debug / crash dumps
+# =====================================
+
+core
+core.*
+*.core
+
+# =====================================
+# Logs
+# =====================================
+
+*.log
+
+# =====================================
+# RenderDoc captures
+# =====================================
+
+*.rdc
+
+# =====================================
+# Temporary files
+# =====================================
+
+tmp/
+temp/

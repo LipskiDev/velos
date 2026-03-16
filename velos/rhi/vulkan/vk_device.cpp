@@ -7,6 +7,8 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
+#include <GLFW/glfw3.h>
+
 namespace Velos::RHI {
 
 VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
@@ -53,11 +55,23 @@ void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
   appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
   appInfo.apiVersion = VK_API_VERSION_1_3;
 
-  std::vector<const char *> extensions = {};
-
   std::vector<const char *> layers = {};
   if (desc.enableValidation) {
     layers.push_back("VK_LAYER_KHRONOS_validation");
+  }
+
+  uint32_t glfwExtensionCount = 0;
+  const char **glfwExtensions =
+      glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+  if (!glfwExtensions) {
+    throw std::runtime_error(
+        "GLFW did not return required Vulkan instance extensions");
+  }
+
+  std::vector<const char *> extensions(glfwExtensions,
+                                       glfwExtensions + glfwExtensionCount);
+
+  if (desc.enableValidation) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
@@ -136,16 +150,23 @@ void VulkanDevice::CreateLogicalDevice() {
 
   VkPhysicalDeviceFeatures deviceFeatures{};
 
+  const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   createInfo.queueCreateInfoCount = 1;
   createInfo.pQueueCreateInfos = &queueCreateInfo;
   createInfo.pEnabledFeatures = &deviceFeatures;
+  createInfo.enabledExtensionCount = 1;
+  createInfo.ppEnabledExtensionNames = deviceExtensions;
 
   VK_CHECK(vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_),
            "Failed to create Vulkan logical device");
 
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+
+  presentQueueFamily_ = graphicsQueueFamily_;
+  presentQueue_ = graphicsQueue_;
 }
 
 void VulkanDevice::CreateCommandObjects() {
@@ -169,22 +190,33 @@ void VulkanDevice::CreateCommandObjects() {
   commandList_ = std::make_unique<VulkanCommandList>(commandBuffer_);
 }
 
+void VulkanDevice::CollectGarbage() {
+  // no-op
+}
+
+SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
+  if (swapchain_) {
+    throw std::runtime_error("Only one swapchain is supported for now");
+  }
+
+  swapchain_ = std::make_unique<VulkanSwapchain>(
+      instance_, physicalDevice_, device_, presentQueueFamily_, desc);
+
+  return SwapchainHandle{1};
+}
+
 void VulkanDevice::WaitIdle() {
   if (device_ != VK_NULL_HANDLE) {
     VK_CHECK(vkDeviceWaitIdle(device_), "vkDeviceWaitIdle failed");
   }
 }
 
-void VulkanDevice::CollectGarbage() {
-  // no-op
-}
+void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
 
-SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &) {
-  throw std::runtime_error("CreateSwapchain not implemented yet");
-}
-
-void VulkanDevice::DestroySwapchain(SwapchainHandle) {
-  throw std::runtime_error("DestroySwapchain not implemented yet");
+  swapchain_.reset();
 }
 
 void VulkanDevice::ResizeSwapchain(SwapchainHandle, u32, u32) {

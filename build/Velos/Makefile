@@ -81,6 +81,7 @@ GENERATED += $(OBJDIR)/rhi_device.o
 GENERATED += $(OBJDIR)/vk_command_list.o
 GENERATED += $(OBJDIR)/vk_device.o
 GENERATED += $(OBJDIR)/vk_loader.o
+GENERATED += $(OBJDIR)/vk_swapchain.o
 GENERATED += $(OBJDIR)/vlpch.o
 GENERATED += $(OBJDIR)/window.o
 OBJECTS += $(OBJDIR)/application.o
@@ -89,6 +90,7 @@ OBJECTS += $(OBJDIR)/rhi_device.o
 OBJECTS += $(OBJDIR)/vk_command_list.o
 OBJECTS += $(OBJDIR)/vk_device.o
 OBJECTS += $(OBJDIR)/vk_loader.o
+OBJECTS += $(OBJDIR)/vk_swapchain.o
 OBJECTS += $(OBJDIR)/vlpch.o
 OBJECTS += $(OBJDIR)/window.o
 
@@ -176,6 +178,9 @@ $(OBJDIR)/vk_device.o: ../../velos/rhi/vulkan/vk_device.cpp
 	@echo "$(notdir $<)"
 	$(SILENT) $(CXX) -include $(PCH_PLACEHOLDER) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 $(OBJDIR)/vk_loader.o: ../../velos/rhi/vulkan/vk_loader.cpp
+	@echo "$(notdir $<)"
+	$(SILENT) $(CXX) -include $(PCH_PLACEHOLDER) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
+$(OBJDIR)/vk_swapchain.o: ../../velos/rhi/vulkan/vk_swapchain.cpp
 	@echo "$(notdir $<)"
 	$(SILENT) $(CXX) -include $(PCH_PLACEHOLDER) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 

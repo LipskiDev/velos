@@ -1,10 +1,14 @@
 #pragma once
 
 #include "../rhi_device.h"
+#include "rhi/rhi_handles.h"
 #include "vk_command_list.h"
+#include "vk_swapchain.h"
 #include "volk.h"
+#include <algorithm>
 #include <memory>
 #include <vulkan/vulkan_core.h>
+
 namespace Velos::RHI {
 class VulkanCommandList;
 
@@ -64,9 +68,13 @@ private:
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;
 
+  VkQueue presentQueue_ = VK_NULL_HANDLE;
+  u32 presentQueueFamily_ = 0;
+
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
 
   std::unique_ptr<VulkanCommandList> commandList_;
+  std::unique_ptr<VulkanSwapchain> swapchain_;
 };
 } // namespace Velos::RHI
