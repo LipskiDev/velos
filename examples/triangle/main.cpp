@@ -1,5 +1,6 @@
 #include "core/window.h"
 #include "rhi/rhi_command_list.h"
+#include "rhi/vulkan/vk_device.h"
 #include <core/application.h>
 #include <exception>
 #include <iostream>
@@ -35,23 +36,43 @@ int main() {
       .debugName = "Main Swapchain",
   });
 
-  FrameBeginResult frame = device->BeginFrame(SwapchainHandle{});
-  ICommandList &cmd = device->GetCommandList(frame.commandList);
+  VulkanDevice *vkDevice = dynamic_cast<VulkanDevice *>(device);
+  if (!vkDevice) {
+    throw std::runtime_error("Device is not a VulkanDevice");
+  }
 
-  cmd.Begin();
-  cmd.SetViewport({.x = 0.0f,
-                   .y = 0.0f,
-                   .width = 1280.0f,
-                   .height = 720.0f,
-                   .minDepth = 0.0f,
-                   .maxDepth = 1.0f});
+  std::cout << "Entering render loop\n";
 
-  cmd.SetScissor({.offset = {0, 0}, .extent = {1280, 720}});
-  cmd.End();
+  while (!app.GetWindow().ShouldClose()) {
 
-  device->SubmitAndPresent(frame.commandList, SwapchainHandle{});
+    app.GetWindow().PollEvents();
 
-  std::cout << "Command list record + submit worked\n";
+    FrameBeginResult frame = device->BeginFrame(swapchain);
+    if (!frame.success)
+      continue;
+
+    ICommandList &cmd = device->GetCommandList(frame.commandList);
+
+    cmd.Begin();
+
+    cmd.SetViewport({.x = 0.0f,
+                     .y = 0.0f,
+                     .width = 1280.0f,
+                     .height = 720.0f,
+                     .minDepth = 0.0f,
+                     .maxDepth = 1.0f});
+
+    cmd.SetScissor({.offset = {0, 0}, .extent = {1280, 720}});
+
+    // Temporary clear
+    vkDevice->ClearCurrentSwapchainImage(1.0f, 0.1f, 0.2f, 1.0f);
+
+    cmd.End();
+
+    device->SubmitAndPresent(frame.commandList, swapchain);
+  }
+
+  std::cout << "Shutting down\n";
 
   device->WaitIdle();
 

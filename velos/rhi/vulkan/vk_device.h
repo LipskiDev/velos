@@ -44,6 +44,8 @@ public:
   void SubmitAndPresent(CommandListHandle commandList,
                         SwapchainHandle swapchain) override;
 
+  void ClearCurrentSwapchainImage(float r, float g, float b, float a);
+
   void WaitIdle() override;
   void CollectGarbage() override;
 
@@ -52,6 +54,10 @@ private:
   void PickPhysicalDevice();
   void CreateLogicalDevice();
   void CreateCommandObjects();
+  void CreateSyncObjects();
+  void CreateSwapchainSyncObjects();
+
+  void DestroySwapchainSyncObjects();
 
 public:
   VkInstance GetVkInstance() const { return instance_; }
@@ -76,5 +82,10 @@ private:
 
   std::unique_ptr<VulkanCommandList> commandList_;
   std::unique_ptr<VulkanSwapchain> swapchain_;
+
+  VkSemaphore imageAvailableSemaphore_;
+  std::vector<VkSemaphore> renderFinishedSemaphores_;
+  VkFence inFlightFence_;
+  u32 currentBackbufferIndex_;
 };
 } // namespace Velos::RHI
