@@ -43,6 +43,14 @@ VulkanDevice::~VulkanDevice() {
     }
     pipelines_.clear();
 
+    for (TextureHandle handle : swapchainTextureHandles_) {
+      textures_.erase(handle.id);
+    }
+    swapchainTextureHandles_.clear();
+
+    DestroySwapchainSyncObjects();
+    swapchain_.reset();
+
     DestroySwapchainSyncObjects();
 
     if (inFlightFence_ != VK_NULL_HANDLE) {
@@ -176,10 +184,16 @@ void VulkanDevice::CreateLogicalDevice() {
 
   VkPhysicalDeviceFeatures deviceFeatures{};
 
+  VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
+  dynamicRenderingFeatures.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+  dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+
   const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  createInfo.pNext = &dynamicRenderingFeatures;
   createInfo.queueCreateInfoCount = 1;
   createInfo.pQueueCreateInfos = &queueCreateInfo;
   createInfo.pEnabledFeatures = &deviceFeatures;
@@ -213,7 +227,7 @@ void VulkanDevice::CreateCommandObjects() {
   VK_CHECK(vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer_),
            "Failed to allocate Vulkan command buffer");
 
-  commandList_ = std::make_unique<VulkanCommandList>(commandBuffer_);
+  commandList_ = std::make_unique<VulkanCommandList>(*this, commandBuffer_);
 }
 
 void VulkanDevice::CreateSyncObjects() {
@@ -264,6 +278,63 @@ void VulkanDevice::CollectGarbage() {
   // no-op
 }
 
+void VulkanDevice::TransitionCurrentSwapchainImageForRendering() {
+  if (!swapchain_) {
+    throw std::runtime_error("No swapchain available");
+  }
+
+  const VulkanSwapchainImage &image =
+      swapchain_->GetImage(currentBackbufferIndex_);
+
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcAccessMask = 0;
+  barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image.image;
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+
+  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0,
+                       nullptr, 0, nullptr, 1, &barrier);
+}
+
+void VulkanDevice::TransitionCurrentSwapchainImageForPresent() {
+  if (!swapchain_) {
+    throw std::runtime_error("No swapchain available");
+  }
+
+  const VulkanSwapchainImage &image =
+      swapchain_->GetImage(currentBackbufferIndex_);
+
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.dstAccessMask = 0;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image.image;
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+
+  vkCmdPipelineBarrier(commandBuffer_,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+}
+
 SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
   if (swapchain_) {
     throw std::runtime_error("Only one swapchain is supported for now");
@@ -271,6 +342,23 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
 
   swapchain_ = std::make_unique<VulkanSwapchain>(
       instance_, physicalDevice_, device_, presentQueueFamily_, desc);
+
+  swapchainTextureHandles_.clear();
+  for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
+    const VulkanSwapchainImage &image = swapchain_->GetImage(i);
+
+    const u32 handleId = nextTextureHandle_++;
+    textures_.emplace(
+        handleId,
+        VulkanTexture{
+            .image = image.image,
+            .view = image.view,
+            .format =
+                Format::BGRA8_UNORM, // or derive properly from swapchain format
+            .owned = false});
+
+    swapchainTextureHandles_.push_back(TextureHandle{handleId});
+  }
 
   CreateSwapchainSyncObjects();
 
@@ -375,6 +463,15 @@ TextureHandle VulkanDevice::CreateTexture(const TextureDesc &) {
 
 void VulkanDevice::DestroyTexture(TextureHandle) {
   throw std::runtime_error("DestroyTexture not implemented yet");
+}
+
+const VulkanTexture &VulkanDevice::GetTexture(TextureHandle handle) const {
+  auto it = textures_.find(handle.id);
+  if (it == textures_.end()) {
+    throw std::runtime_error("Invalid texture handle");
+  }
+
+  return it->second;
 }
 
 SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &) {
@@ -659,24 +756,20 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   if (result == VK_SUBOPTIMAL_KHR) {
     currentBackbufferIndex_ = imageIndex;
 
-    return FrameBeginResult({
-        .commandList = CommandListHandle{1},
-        .backbuffer = TextureHandle{},
-        .backbufferIndex = imageIndex,
-        .success = true,
-    });
+    return FrameBeginResult{.commandList = CommandListHandle{1},
+                            .backbuffer = swapchainTextureHandles_[imageIndex],
+                            .backbufferIndex = imageIndex,
+                            .success = true};
   }
 
   VK_CHECK(result, "Failed to acquire next swapchain image");
 
   currentBackbufferIndex_ = imageIndex;
 
-  return FrameBeginResult({
-      .commandList = CommandListHandle{1},
-      .backbuffer = TextureHandle{},
-      .backbufferIndex = imageIndex,
-      .success = true,
-  });
+  return FrameBeginResult{.commandList = CommandListHandle{1},
+                          .backbuffer = swapchainTextureHandles_[imageIndex],
+                          .backbufferIndex = imageIndex,
+                          .success = true};
 }
 
 ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {

@@ -74,7 +74,13 @@ int main() {
       .vertexShader = vertexShader,
       .fragmentShader = fragmentShader,
       .topology = PrimitiveTopology::TriangleList,
-      .colorFormat = Format::RGBA8_UNORM,
+      .raster =
+          {
+              .cullBackFaces = false,
+              .frontFaceCCW = true,
+              .wireframe = false,
+          },
+      .colorFormat = Format::BGRA8_UNORM,
       .debugName = "Triangle Pipeline",
   });
 
@@ -89,6 +95,15 @@ int main() {
       continue;
 
     ICommandList &cmd = device->GetCommandList(frame.commandList);
+    ColorAttachmentDesc colorAttachment{.texture = frame.backbuffer,
+                                        .loadOp = LoadOp::Clear,
+                                        .storeOp = StoreOp::Store,
+                                        .clearValue = {0.1f, 0.1f, 0.2f, 1.0f}};
+
+    RenderingInfo renderingInfo{.renderArea = {{0, 0}, {1280, 720}},
+                                .colorAttachments = &colorAttachment,
+                                .colorAttachmentCount = 1,
+                                .depthAttachment = nullptr};
 
     cmd.Begin();
 
@@ -101,8 +116,14 @@ int main() {
 
     cmd.SetScissor({.offset = {0, 0}, .extent = {1280, 720}});
 
-    // Temporary clear
-    vkDevice->ClearCurrentSwapchainImage(1.0f, 0.1f, 0.2f, 1.0f);
+    vkDevice->TransitionCurrentSwapchainImageForRendering();
+
+    cmd.BeginRendering(renderingInfo);
+    cmd.BindPipeline(pipeline);
+    cmd.Draw(3);
+    cmd.EndRendering();
+
+    vkDevice->TransitionCurrentSwapchainImageForPresent();
 
     cmd.End();
 

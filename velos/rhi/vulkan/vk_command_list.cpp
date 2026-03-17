@@ -1,12 +1,15 @@
 #include "rhi/vulkan/vk_command_list.h"
+#include "rhi/rhi_command_list.h"
 #include "rhi/vulkan/vk_common.h"
+#include "rhi/vulkan/vk_device.h"
 
 #include <stdexcept>
 
 namespace Velos::RHI {
 
-VulkanCommandList::VulkanCommandList(VkCommandBuffer commandBuffer)
-    : commandBuffer_(commandBuffer) {}
+VulkanCommandList::VulkanCommandList(VulkanDevice &device,
+                                     VkCommandBuffer commandBuffer)
+    : device_(device), commandBuffer_(commandBuffer) {}
 
 void VulkanCommandList::Begin() {
   VK_CHECK(vkResetCommandBuffer(commandBuffer_, 0),
@@ -64,16 +67,84 @@ void VulkanCommandList::UploadTexture(const TextureUploadDesc &) {
   throw std::runtime_error("UploadTexture not implemented yet");
 }
 
-void VulkanCommandList::BeginRendering(const RenderingInfo &) {
-  throw std::runtime_error("BeginRendering not implemented yet");
+void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
+  if (renderingInfo.colorAttachmentCount == 0 ||
+      !renderingInfo.colorAttachments) {
+    throw std::runtime_error(
+        "BeginRendering requires at least one color attachment");
+  }
+
+  if (renderingInfo.colorAttachmentCount != 1) {
+    throw std::runtime_error(
+        "BeginRendering currently supports exactly one color attachment");
+  }
+
+  const ColorAttachmentDesc &colorAttachment =
+      renderingInfo.colorAttachments[0];
+  const VulkanTexture &colorTexture =
+      device_.GetTexture(colorAttachment.texture);
+
+  VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  switch (colorAttachment.loadOp) {
+  case LoadOp::Load:
+    loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    break;
+  case LoadOp::Clear:
+    loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    break;
+  case LoadOp::DontCare:
+    loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    break;
+  }
+
+  VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  switch (colorAttachment.storeOp) {
+  case StoreOp::Store:
+    storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    break;
+  case StoreOp::DontCare:
+    storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    break;
+  }
+
+  VkClearValue clearValue{};
+  clearValue.color.float32[0] = colorAttachment.clearValue.r;
+  clearValue.color.float32[1] = colorAttachment.clearValue.g;
+  clearValue.color.float32[2] = colorAttachment.clearValue.b;
+  clearValue.color.float32[3] = colorAttachment.clearValue.a;
+
+  VkRenderingAttachmentInfo colorAttachmentInfo{};
+  colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+  colorAttachmentInfo.imageView = colorTexture.view;
+  colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  colorAttachmentInfo.loadOp = loadOp;
+  colorAttachmentInfo.storeOp = storeOp;
+  colorAttachmentInfo.clearValue = clearValue;
+
+  VkRenderingInfo vkRenderingInfo{};
+  vkRenderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+  vkRenderingInfo.renderArea.offset.x = renderingInfo.renderArea.offset.x;
+  vkRenderingInfo.renderArea.offset.y = renderingInfo.renderArea.offset.y;
+  vkRenderingInfo.renderArea.extent.width =
+      renderingInfo.renderArea.extent.width;
+  vkRenderingInfo.renderArea.extent.height =
+      renderingInfo.renderArea.extent.height;
+  vkRenderingInfo.layerCount = 1;
+  vkRenderingInfo.colorAttachmentCount = 1;
+  vkRenderingInfo.pColorAttachments = &colorAttachmentInfo;
+  vkRenderingInfo.pDepthAttachment = nullptr;
+  vkRenderingInfo.pStencilAttachment = nullptr;
+
+  vkCmdBeginRendering(commandBuffer_, &vkRenderingInfo);
 }
 
-void VulkanCommandList::EndRendering() {
-  throw std::runtime_error("EndRendering not implemented yet");
-}
+void VulkanCommandList::EndRendering() { vkCmdEndRendering(commandBuffer_); }
 
-void VulkanCommandList::BindPipeline(PipelineHandle) {
-  throw std::runtime_error("BindPipeline not implemented yet");
+void VulkanCommandList::BindPipeline(PipelineHandle pipeline) {
+  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+
+  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    vkPipeline.pipeline);
 }
 
 void VulkanCommandList::BindVertexBuffer(u32, BufferHandle, u64) {
@@ -96,8 +167,8 @@ void VulkanCommandList::PushConstants(ShaderStage, u32, u32, const void *) {
   throw std::runtime_error("PushConstants not implemented yet");
 }
 
-void VulkanCommandList::Draw(u32, u32) {
-  throw std::runtime_error("Draw not implemented yet");
+void VulkanCommandList::Draw(u32 vertexCount, u32 firstVertex) {
+  vkCmdDraw(commandBuffer_, vertexCount, 1, firstVertex, 0);
 }
 
 void VulkanCommandList::DrawIndexed(u32, u32, i32) {

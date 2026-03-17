@@ -7,7 +7,6 @@
 #include "vk_command_list.h"
 #include "vk_swapchain.h"
 #include "volk.h"
-#include <algorithm>
 #include <memory>
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
@@ -23,6 +22,13 @@ struct VulkanShader {
 struct VulkanPipeline {
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipelineLayout layout = VK_NULL_HANDLE;
+};
+
+struct VulkanTexture {
+  VkImage image = VK_NULL_HANDLE;
+  VkImageView view = VK_NULL_HANDLE;
+  Format format = Format::Undefined;
+  bool owned = false;
 };
 
 class VulkanDevice final : public IDevice {
@@ -41,6 +47,7 @@ public:
 
   TextureHandle CreateTexture(const TextureDesc &desc) override;
   void DestroyTexture(TextureHandle handle) override;
+  const VulkanTexture &GetTexture(TextureHandle handle) const;
 
   SamplerHandle CreateSampler(const SamplerDesc &desc) override;
   void DestroySampler(SamplerHandle handle) override;
@@ -63,6 +70,10 @@ public:
 
   void WaitIdle() override;
   void CollectGarbage() override;
+
+public:
+  void TransitionCurrentSwapchainImageForRendering();
+  void TransitionCurrentSwapchainImageForPresent();
 
 private:
   void CreateInstance(const DeviceDesc &desc);
@@ -109,5 +120,9 @@ private:
 
   u32 nextPipelineHandle_ = 1;
   std::unordered_map<u32, VulkanPipeline> pipelines_;
+
+  u32 nextTextureHandle_ = 1;
+  std::unordered_map<u32, VulkanTexture> textures_;
+  std::vector<TextureHandle> swapchainTextureHandles_;
 };
 } // namespace Velos::RHI

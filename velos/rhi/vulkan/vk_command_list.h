@@ -4,8 +4,12 @@
 #include "vk_common.h"
 
 namespace Velos::RHI {
+
+class VulkanDevice;
+
 class VulkanCommandList final : public ICommandList {
 public:
+  VulkanCommandList(VulkanDevice &device, VkCommandBuffer commandBuffer);
   explicit VulkanCommandList(VkCommandBuffer commandBuffer);
   ~VulkanCommandList() override = default;
 
@@ -44,6 +48,7 @@ public:
   VkCommandBuffer GetVkCommandBuffer() const { return commandBuffer_; }
 
 private:
+  VulkanDevice &device_;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
 };
 } // namespace Velos::RHI

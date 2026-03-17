@@ -24,7 +24,7 @@ struct DepthAttachmentDesc {
 struct RenderingInfo {
   Rect2D renderArea{};
   const ColorAttachmentDesc *colorAttachments = nullptr;
-  u32 colorAttachmentCound = 0;
+  u32 colorAttachmentCount = 0;
   const DepthAttachmentDesc *depthAttachment = nullptr;
 };
 
