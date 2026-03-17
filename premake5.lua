@@ -121,66 +121,72 @@ project "Velos"
 
 	filter {}
 
-project "Example_Triangle"
-	location "build/Example_Triangle"
-	kind "ConsoleApp"
-	language "C++"
-	cppdialect "C++23"
-	staticruntime "off"
+local exampleDirs = os.matchdirs("examples/*")
 
-	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+for _, dir in ipairs(exampleDirs) do
+	local exampleName = path.getname(dir)
+	local projectName = "Example_" .. exampleName
+	local runProjectName = "Run_" .. exampleName
 
-	files
-	{
-		"examples/triangle/**.h",
-		"examples/triangle/**.hpp",
-		"examples/triangle/**.cpp"
-	}
+	project(projectName)
+		location("build/" .. projectName)
+		kind "ConsoleApp"
+		language "C++"
+		cppdialect "C++23"
+		staticruntime "off"
 
-	includedirs
-	{
-		"velos",
-		"examples/triangle",
-		"%{IncludeDir.GLFW}",
-		"%{IncludeDir.GLM}",
-		"%{IncludeDir.VOLK}",
-		"%{IncludeDir.VMA}",
-		"%{IncludeDir.STB}"
-	}
+		targetdir("bin/" .. outputdir .. "/%{prj.name}")
+		objdir("bin-int/" .. outputdir .. "/%{prj.name}")
 
-	links
-	{
-		"Velos"
-	}
-
-	filter "system:windows"
-		systemversion "latest"
-
-	filter "system:linux"
-		links
+		files
 		{
-			"glfw",
-			"vulkan",
-			"shaderc_shared",
-			"dl",
-			"pthread",
-			"X11",
-			"Xrandr",
-			"Xi",
-			"Xxf86vm",
-			"Xinerama",
-			"Xcursor"
+			dir .. "/**.h",
+			dir .. "/**.hpp",
+			dir .. "/**.cpp",
+			dir .. "/**.c"
 		}
 
-	filter "configurations:Debug"
-		defines { "VL_DEBUG" }
-		runtime "Debug"
-		symbols "On"
+		includedirs
+		{
+			"velos",
+			dir,
+			"%{IncludeDir.GLFW}",
+			"%{IncludeDir.GLM}",
+			"%{IncludeDir.VOLK}",
+			"%{IncludeDir.VMA}",
+			"%{IncludeDir.STB}"
+		}
 
-	filter "configurations:Release"
-		defines { "VL_RELEASE" }
-		runtime "Release"
-		optimize "Speed"
+		links
+		{
+			"Velos"
+		}
 
-	filter {}
+		filter "system:linux"
+			links
+			{
+				"glfw",
+				"vulkan",
+				"shaderc_shared",
+				"dl",
+				"pthread",
+				"X11",
+				"Xrandr",
+				"Xi",
+				"Xxf86vm",
+				"Xinerama",
+				"Xcursor"
+			}
+
+		filter "configurations:Debug"
+			defines { "VL_DEBUG" }
+			runtime "Debug"
+			symbols "On"
+
+		filter "configurations:Release"
+			defines { "VL_RELEASE" }
+			runtime "Release"
+			optimize "Speed"
+
+		filter {}
+end
