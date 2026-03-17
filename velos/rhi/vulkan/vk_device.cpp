@@ -632,12 +632,23 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   dynamicState.dynamicStateCount = 2;
   dynamicState.pDynamicStates = dynamicStates;
 
+  std::vector<VkPushConstantRange> vertexPushConstantRanges = {};
+  vertexPushConstantRanges.reserve(desc.layout.pushConstants.size());
+
+  for (auto &pushConstantRange : desc.layout.pushConstants) {
+    VkPushConstantRange pcr;
+    pcr.size = pushConstantRange.size;
+    pcr.offset = pushConstantRange.offset;
+    pcr.stageFlags = ToVkShaderStage(pushConstantRange.stages);
+    vertexPushConstantRanges.push_back(pcr);
+  }
+
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineLayoutInfo.setLayoutCount = 0;
   pipelineLayoutInfo.pSetLayouts = nullptr;
-  pipelineLayoutInfo.pushConstantRangeCount = 0;
-  pipelineLayoutInfo.pPushConstantRanges = nullptr;
+  pipelineLayoutInfo.pushConstantRangeCount = vertexPushConstantRanges.size();
+  pipelineLayoutInfo.pPushConstantRanges = vertexPushConstantRanges.data();
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
   VK_CHECK(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr,

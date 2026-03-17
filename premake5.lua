@@ -20,6 +20,7 @@ workspace "Velos"
 	IncludeDir["VMA"]   = "external/vma/include"
 	IncludeDir["STB"]   = "external/stb"
 	IncludeDir["ImGui"] = "external/imgui"
+  IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
 
 project "Velos"
 	location "build/Velos"
@@ -39,7 +40,9 @@ project "Velos"
 		"velos/**.h",
 		"velos/**.hpp",
 		"velos/**.cpp",
-		"velos/**.c"
+		"velos/**.c",
+    "external/SPIRV-Reflect/spirv_reflect.h",
+    "external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -50,7 +53,8 @@ project "Velos"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.ImGui}"
+		"%{IncludeDir.ImGui}",
+    "%{IncludeDir.SPIRVReflect}"
 	}
 
 	links
@@ -154,7 +158,8 @@ for _, dir in ipairs(exampleDirs) do
 			"%{IncludeDir.GLM}",
 			"%{IncludeDir.VOLK}",
 			"%{IncludeDir.VMA}",
-			"%{IncludeDir.STB}"
+			"%{IncludeDir.STB}",
+      "%{IncludeDir.SPIRVReflect}"
 		}
 
 		links

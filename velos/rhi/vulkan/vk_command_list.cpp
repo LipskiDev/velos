@@ -145,6 +145,7 @@ void VulkanCommandList::BindPipeline(PipelineHandle pipeline) {
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     vkPipeline.pipeline);
+  boundGraphicsPipeline_ = pipeline;
 }
 
 void VulkanCommandList::BindVertexBuffer(u32, BufferHandle, u64) {
@@ -163,8 +164,18 @@ void VulkanCommandList::BindSampledTexture(u32, TextureHandle, SamplerHandle) {
   throw std::runtime_error("BindSampledTexture not implemented yet");
 }
 
-void VulkanCommandList::PushConstants(ShaderStage, u32, u32, const void *) {
-  throw std::runtime_error("PushConstants not implemented yet");
+void VulkanCommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
+                                      const void *data) {
+  if (!boundGraphicsPipeline_) {
+    throw std::runtime_error(
+        "PushConstants called without a bound graphics pipeline");
+  }
+
+  const VulkanPipeline &vkPipeline =
+      device_.GetPipeline(boundGraphicsPipeline_);
+
+  vkCmdPushConstants(commandBuffer_, vkPipeline.layout, ToVkShaderStage(stage),
+                     offset, size, data);
 }
 
 void VulkanCommandList::Draw(u32 vertexCount, u32 firstVertex) {

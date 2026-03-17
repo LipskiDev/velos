@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../rhi_command_list.h"
+#include "rhi/vulkan/vk_device.h"
 #include "vk_common.h"
 
 namespace Velos::RHI {
@@ -50,5 +51,6 @@ public:
 private:
   VulkanDevice &device_;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
+  PipelineHandle boundGraphicsPipeline_{};
 };
 } // namespace Velos::RHI

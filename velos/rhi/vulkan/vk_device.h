@@ -17,6 +17,7 @@ class VulkanCommandList;
 struct VulkanShader {
   VkShaderModule module = VK_NULL_HANDLE;
   ShaderStage stage = ShaderStage::None;
+  u32 pushConstantsSize;
 };
 
 struct VulkanPipeline {

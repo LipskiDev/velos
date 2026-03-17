@@ -43,14 +43,18 @@ inline VkShaderStageFlagBits ToVkShaderStage(ShaderStage stage) {
   switch (stage) {
   case ShaderStage::Vertex:
     return VK_SHADER_STAGE_VERTEX_BIT;
+
   case ShaderStage::Fragment:
     return VK_SHADER_STAGE_FRAGMENT_BIT;
+
   case ShaderStage::Compute:
     return VK_SHADER_STAGE_COMPUTE_BIT;
+
   default:
-    throw std::runtime_error("Unsupported shader stage");
+    throw std::runtime_error("Unsupported ShaderStage");
   }
 }
+
 inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveTopology topology) {
   switch (topology) {
   case PrimitiveTopology::TriangleList:

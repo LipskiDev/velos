@@ -2,6 +2,7 @@
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_device.h"
+#include <cmath>
 #include <core/application.h>
 #include <exception>
 #include <iostream>
@@ -86,9 +87,15 @@ int main() {
 
   std::cout << "Entering render loop\n";
 
+  float time = 0.0f;
   while (!app.GetWindow().ShouldClose()) {
 
     app.GetWindow().PollEvents();
+
+    time += 0.016f; // or real delta later
+
+    float color[4] = {(std::sin(time) * 0.5f + 0.5f),
+                      (std::cos(time) * 0.5f + 0.5f), 0.2f, 1.0f};
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
     if (!frame.success)
@@ -120,6 +127,7 @@ int main() {
 
     cmd.BeginRendering(renderingInfo);
     cmd.BindPipeline(pipeline);
+    cmd.PushConstants(ShaderStage::Fragment, 0, sizeof(color), color);
     cmd.Draw(3);
     cmd.EndRendering();
 
