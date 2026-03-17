@@ -99,7 +99,8 @@ project "Velos"
 			"Xi",
 			"Xxf86vm",
 			"Xinerama",
-			"Xcursor"
+			"Xcursor",
+      "shaderc"
 		}
 
 	filter "configurations:Debug"
@@ -150,41 +151,35 @@ project "Example_Triangle"
 
 	links
 	{
-		"Velos",
-    "glfw"
+		"Velos"
 	}
 
 	filter "system:windows"
 		systemversion "latest"
 
-  filter "system:linux"
-    links
-    {
-      "glfw",
-      "vulkan",
-      "dl",
-      "pthread",
-      "X11",
-      "Xrandr",
-      "Xi",
-      "Xxf86vm",
-      "Xinerama",
-      "Xcursor"
-    }
+	filter "system:linux"
+		links
+		{
+			"glfw",
+			"vulkan",
+			"shaderc_shared",
+			"dl",
+			"pthread",
+			"X11",
+			"Xrandr",
+			"Xi",
+			"Xxf86vm",
+			"Xinerama",
+			"Xcursor"
+		}
 
 	filter "configurations:Debug"
-		defines
-		{
-			"VL_DEBUG"
-		}
+		defines { "VL_DEBUG" }
 		runtime "Debug"
 		symbols "On"
 
 	filter "configurations:Release"
-		defines
-		{
-			"VL_RELEASE"
-		}
+		defines { "VL_RELEASE" }
 		runtime "Release"
 		optimize "Speed"
 

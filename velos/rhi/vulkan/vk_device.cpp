@@ -373,12 +373,60 @@ void VulkanDevice::DestroySampler(SamplerHandle) {
   throw std::runtime_error("DestroySampler not implemented yet");
 }
 
-ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &) {
-  throw std::runtime_error("CreateShader not implemented yet");
+ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &desc) {
+  if (!desc.bytecode) {
+    throw std::runtime_error("CreateShader called with null bytecode");
+  }
+
+  if (desc.bytecodeSize == 0) {
+    throw std::runtime_error("CreateShader called with empty bytecode");
+  }
+
+  if ((desc.bytecodeSize % 4) != 0) {
+    throw std::runtime_error(
+        "CreateShader bytecode size must be a multiple of 4");
+  }
+
+  VkShaderModuleCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  createInfo.codeSize = static_cast<size_t>(desc.bytecodeSize);
+  createInfo.pCode = static_cast<const std::uint32_t *>(desc.bytecode);
+
+  VkShaderModule shaderModule = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule),
+           "Failed to create Vulkan shader module");
+
+  const u32 handleId = nextShaderHandle_++;
+  shaders_.emplace(handleId,
+                   VulkanShader{.module = shaderModule, .stage = desc.stage});
+
+  return ShaderHandle{handleId};
 }
 
-void VulkanDevice::DestroyShader(ShaderHandle) {
-  throw std::runtime_error("DestroyShader not implemented yet");
+void VulkanDevice::DestroyShader(ShaderHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = shaders_.find(handle.id);
+  if (it == shaders_.end()) {
+    return;
+  }
+
+  if (it->second.module != VK_NULL_HANDLE) {
+    vkDestroyShaderModule(device_, it->second.module, nullptr);
+  }
+
+  shaders_.erase(it);
+}
+
+const VulkanShader &VulkanDevice::GetShader(ShaderHandle handle) const {
+  auto it = shaders_.find(handle.id);
+  if (it == shaders_.end()) {
+    throw std::runtime_error("Invalid shader handle");
+  }
+
+  return it->second;
 }
 
 PipelineHandle

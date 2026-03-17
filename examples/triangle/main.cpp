@@ -7,6 +7,8 @@
 
 #include <rhi/rhi_device.h>
 
+#include "shader/shader_compiler.h"
+
 using namespace Velos;
 
 int main() {
@@ -40,6 +42,32 @@ int main() {
   if (!vkDevice) {
     throw std::runtime_error("Device is not a VulkanDevice");
   }
+
+  auto vertSpv =
+      ShaderCompiler::CompileFile({.path = "examples/triangle/triangle.vert",
+                                   .stage = ShaderStage::Vertex,
+                                   .entryPoint = "main"});
+
+  auto fragSpv =
+      ShaderCompiler::CompileFile({.path = "examples/triangle/triangle.frag",
+                                   .stage = ShaderStage::Fragment,
+                                   .entryPoint = "main"});
+
+  ShaderHandle vertexShader =
+      device->CreateShader({.stage = ShaderStage::Vertex,
+                            .bytecode = vertSpv.spirv.data(),
+                            .bytecodeSize = static_cast<u64>(
+                                vertSpv.spirv.size() * sizeof(std::uint32_t)),
+                            .entryPoint = "main",
+                            .debugName = "Triangle Vertex Shader"});
+
+  ShaderHandle fragmentShader =
+      device->CreateShader({.stage = ShaderStage::Fragment,
+                            .bytecode = fragSpv.spirv.data(),
+                            .bytecodeSize = static_cast<u64>(
+                                fragSpv.spirv.size() * sizeof(std::uint32_t)),
+                            .entryPoint = "main",
+                            .debugName = "Triangle Fragment Shader"});
 
   std::cout << "Entering render loop\n";
 
@@ -75,6 +103,9 @@ int main() {
   std::cout << "Shutting down\n";
 
   device->WaitIdle();
+
+  device->DestroyShader(fragmentShader);
+  device->DestroyShader(vertexShader);
 
   std::cout << "Destroying Swapchain\n";
   device->DestroySwapchain(swapchain);

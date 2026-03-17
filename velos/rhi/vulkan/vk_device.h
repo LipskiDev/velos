@@ -1,16 +1,24 @@
 #pragma once
 
 #include "../rhi_device.h"
+#include "core/types.h"
 #include "rhi/rhi_handles.h"
+#include "rhi/rhi_types.h"
 #include "vk_command_list.h"
 #include "vk_swapchain.h"
 #include "volk.h"
 #include <algorithm>
 #include <memory>
+#include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
 class VulkanCommandList;
+
+struct VulkanShader {
+  VkShaderModule module = VK_NULL_HANDLE;
+  ShaderStage stage = ShaderStage::None;
+};
 
 class VulkanDevice final : public IDevice {
 public:
@@ -34,6 +42,7 @@ public:
 
   ShaderHandle CreateShader(const ShaderDesc &desc) override;
   void DestroyShader(ShaderHandle handle) override;
+  const VulkanShader &GetShader(ShaderHandle handle) const;
 
   PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
@@ -87,5 +96,9 @@ private:
   std::vector<VkSemaphore> renderFinishedSemaphores_;
   VkFence inFlightFence_;
   u32 currentBackbufferIndex_;
+
+private:
+  u32 nextShaderHandle_ = 1;
+  std::unordered_map<u32, VulkanShader> shaders_;
 };
 } // namespace Velos::RHI
