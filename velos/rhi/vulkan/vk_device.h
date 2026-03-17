@@ -20,6 +20,11 @@ struct VulkanShader {
   ShaderStage stage = ShaderStage::None;
 };
 
+struct VulkanPipeline {
+  VkPipeline pipeline = VK_NULL_HANDLE;
+  VkPipelineLayout layout = VK_NULL_HANDLE;
+};
+
 class VulkanDevice final : public IDevice {
 public:
   explicit VulkanDevice(const DeviceDesc &desc);
@@ -47,6 +52,7 @@ public:
   PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
+  const VulkanPipeline &GetPipeline(PipelineHandle handle) const;
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
   ICommandList &GetCommandList(CommandListHandle handle) override;
@@ -100,5 +106,8 @@ private:
 private:
   u32 nextShaderHandle_ = 1;
   std::unordered_map<u32, VulkanShader> shaders_;
+
+  u32 nextPipelineHandle_ = 1;
+  std::unordered_map<u32, VulkanPipeline> pipelines_;
 };
 } // namespace Velos::RHI

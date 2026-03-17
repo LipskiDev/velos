@@ -31,6 +31,18 @@ VulkanDevice::~VulkanDevice() {
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
 
+    for (auto &[id, pipeline] : pipelines_) {
+      if (pipeline.pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device_, pipeline.pipeline, nullptr);
+        pipeline.pipeline = VK_NULL_HANDLE;
+      }
+      if (pipeline.layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(device_, pipeline.layout, nullptr);
+        pipeline.layout = VK_NULL_HANDLE;
+      }
+    }
+    pipelines_.clear();
+
     DestroySwapchainSyncObjects();
 
     if (inFlightFence_ != VK_NULL_HANDLE) {
@@ -430,12 +442,189 @@ const VulkanShader &VulkanDevice::GetShader(ShaderHandle handle) const {
 }
 
 PipelineHandle
-VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &) {
-  throw std::runtime_error("CreateGraphicsPipeline not implemented yet");
+VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
+  if (!desc.vertexShader.IsValid()) {
+    throw std::runtime_error(
+        "CreateGraphicsPipeline requires a valid vertex shader");
+  }
+
+  if (!desc.fragmentShader.IsValid()) {
+    throw std::runtime_error(
+        "CreateGraphicsPipeline requires a valid fragment shader");
+  }
+
+  const VulkanShader &vs = GetShader(desc.vertexShader);
+  const VulkanShader &fs = GetShader(desc.fragmentShader);
+
+  VkPipelineShaderStageCreateInfo shaderStages[2]{};
+
+  shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+  shaderStages[0].module = vs.module;
+  shaderStages[0].pName = "main";
+
+  shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  shaderStages[1].module = fs.module;
+  shaderStages[1].pName = "main";
+
+  // No vertex buffers for the first triangle
+  VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+  vertexInputInfo.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInputInfo.vertexBindingDescriptionCount = 0;
+  vertexInputInfo.pVertexBindingDescriptions = nullptr;
+  vertexInputInfo.vertexAttributeDescriptionCount = 0;
+  vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+  inputAssembly.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssembly.topology = ToVkPrimitiveTopology(desc.topology);
+  inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+  VkPipelineViewportStateCreateInfo viewportState{};
+  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportState.viewportCount = 1;
+  viewportState.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizer{};
+  rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizer.depthClampEnable = VK_FALSE;
+  rasterizer.rasterizerDiscardEnable = VK_FALSE;
+  rasterizer.polygonMode =
+      desc.raster.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+  rasterizer.lineWidth = 1.0f;
+  rasterizer.cullMode =
+      desc.raster.cullBackFaces ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
+  rasterizer.frontFace = desc.raster.frontFaceCCW
+                             ? VK_FRONT_FACE_COUNTER_CLOCKWISE
+                             : VK_FRONT_FACE_CLOCKWISE;
+  rasterizer.depthBiasEnable = VK_FALSE;
+
+  VkPipelineMultisampleStateCreateInfo multisampling{};
+  multisampling.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampling.sampleShadingEnable = VK_FALSE;
+  multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+  colorBlendAttachment.blendEnable = desc.blend.enable ? VK_TRUE : VK_FALSE;
+  colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+  colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  colorBlendAttachment.colorWriteMask =
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+  VkPipelineColorBlendStateCreateInfo colorBlending{};
+  colorBlending.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlending.logicOpEnable = VK_FALSE;
+  colorBlending.attachmentCount = 1;
+  colorBlending.pAttachments = &colorBlendAttachment;
+
+  VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
+                                    VK_DYNAMIC_STATE_SCISSOR};
+
+  VkPipelineDynamicStateCreateInfo dynamicState{};
+  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamicState.dynamicStateCount = 2;
+  dynamicState.pDynamicStates = dynamicStates;
+
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+  pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutInfo.setLayoutCount = 0;
+  pipelineLayoutInfo.pSetLayouts = nullptr;
+  pipelineLayoutInfo.pushConstantRangeCount = 0;
+  pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+  VK_CHECK(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr,
+                                  &pipelineLayout),
+           "Failed to create Vulkan pipeline layout");
+
+  VkFormat colorFormat = ToVkFormat(desc.colorFormat);
+  if (colorFormat == VK_FORMAT_UNDEFINED) {
+    vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+    throw std::runtime_error(
+        "CreateGraphicsPipeline received unsupported color format");
+  }
+
+  VkPipelineRenderingCreateInfo renderingInfo{};
+  renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+  renderingInfo.colorAttachmentCount = 1;
+  renderingInfo.pColorAttachmentFormats = &colorFormat;
+  renderingInfo.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+  renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+  VkGraphicsPipelineCreateInfo pipelineInfo{};
+  pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipelineInfo.pNext = &renderingInfo;
+  pipelineInfo.stageCount = 2;
+  pipelineInfo.pStages = shaderStages;
+  pipelineInfo.pVertexInputState = &vertexInputInfo;
+  pipelineInfo.pInputAssemblyState = &inputAssembly;
+  pipelineInfo.pViewportState = &viewportState;
+  pipelineInfo.pRasterizationState = &rasterizer;
+  pipelineInfo.pMultisampleState = &multisampling;
+  pipelineInfo.pDepthStencilState = nullptr;
+  pipelineInfo.pColorBlendState = &colorBlending;
+  pipelineInfo.pDynamicState = &dynamicState;
+  pipelineInfo.layout = pipelineLayout;
+  pipelineInfo.renderPass = VK_NULL_HANDLE;
+  pipelineInfo.subpass = 0;
+  pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+  VkPipeline pipeline = VK_NULL_HANDLE;
+  VkResult result = vkCreateGraphicsPipelines(
+      device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+
+  if (result != VK_SUCCESS) {
+    vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+    throw std::runtime_error("Failed to create Vulkan graphics pipeline");
+  }
+
+  const u32 handleId = nextPipelineHandle_++;
+  pipelines_.emplace(
+      handleId, VulkanPipeline{.pipeline = pipeline, .layout = pipelineLayout});
+
+  return PipelineHandle{handleId};
 }
 
-void VulkanDevice::DestroyPipeline(PipelineHandle) {
-  throw std::runtime_error("DestroyPipeline not implemented yet");
+void VulkanDevice::DestroyPipeline(PipelineHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = pipelines_.find(handle.id);
+  if (it == pipelines_.end()) {
+    return;
+  }
+
+  if (it->second.pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, it->second.pipeline, nullptr);
+    it->second.pipeline = VK_NULL_HANDLE;
+  }
+
+  if (it->second.layout != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, it->second.layout, nullptr);
+    it->second.layout = VK_NULL_HANDLE;
+  }
+
+  pipelines_.erase(it);
+}
+
+const VulkanPipeline &VulkanDevice::GetPipeline(PipelineHandle handle) const {
+  auto it = pipelines_.find(handle.id);
+  if (it == pipelines_.end()) {
+    throw std::runtime_error("Invalid shader handle");
+  }
+
+  return it->second;
 }
 
 FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {

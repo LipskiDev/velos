@@ -1,5 +1,6 @@
 #include "core/window.h"
 #include "rhi/rhi_command_list.h"
+#include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_device.h"
 #include <core/application.h>
 #include <exception>
@@ -68,6 +69,14 @@ int main() {
                                 fragSpv.spirv.size() * sizeof(std::uint32_t)),
                             .entryPoint = "main",
                             .debugName = "Triangle Fragment Shader"});
+
+  PipelineHandle pipeline = device->CreateGraphicsPipeline({
+      .vertexShader = vertexShader,
+      .fragmentShader = fragmentShader,
+      .topology = PrimitiveTopology::TriangleList,
+      .colorFormat = Format::RGBA8_UNORM,
+      .debugName = "Triangle Pipeline",
+  });
 
   std::cout << "Entering render loop\n";
 
