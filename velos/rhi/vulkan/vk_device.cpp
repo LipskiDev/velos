@@ -506,8 +506,9 @@ ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &desc) {
            "Failed to create Vulkan shader module");
 
   const u32 handleId = nextShaderHandle_++;
-  shaders_.emplace(handleId,
-                   VulkanShader{.module = shaderModule, .stage = desc.stage});
+  shaders_.emplace(handleId, VulkanShader{.module = shaderModule,
+                                          .stage = desc.stage,
+                                          .reflection = desc.reflection});
 
   return ShaderHandle{handleId};
 }
@@ -633,13 +634,22 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   dynamicState.pDynamicStates = dynamicStates;
 
   std::vector<VkPushConstantRange> vertexPushConstantRanges = {};
-  vertexPushConstantRanges.reserve(desc.layout.pushConstants.size());
+  vertexPushConstantRanges.reserve(vs.reflection.pushConstants.size() +
+                                   fs.reflection.pushConstants.size());
 
-  for (auto &pushConstantRange : desc.layout.pushConstants) {
+  for (auto &pushConstantRange : vs.reflection.pushConstants) {
     VkPushConstantRange pcr;
     pcr.size = pushConstantRange.size;
     pcr.offset = pushConstantRange.offset;
-    pcr.stageFlags = ToVkShaderStage(pushConstantRange.stages);
+    pcr.stageFlags = ToVkShaderStage(ShaderStage::Vertex);
+    vertexPushConstantRanges.push_back(pcr);
+  }
+
+  for (auto &pushConstantRange : fs.reflection.pushConstants) {
+    VkPushConstantRange pcr;
+    pcr.size = pushConstantRange.size;
+    pcr.offset = pushConstantRange.offset;
+    pcr.stageFlags = ToVkShaderStage(ShaderStage::Fragment);
     vertexPushConstantRanges.push_back(pcr);
   }
 

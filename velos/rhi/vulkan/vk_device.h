@@ -4,6 +4,7 @@
 #include "core/types.h"
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_types.h"
+#include "shader/shader_compiler.h"
 #include "vk_command_list.h"
 #include "vk_swapchain.h"
 #include "volk.h"
@@ -17,7 +18,7 @@ class VulkanCommandList;
 struct VulkanShader {
   VkShaderModule module = VK_NULL_HANDLE;
   ShaderStage stage = ShaderStage::None;
-  u32 pushConstantsSize;
+  ShaderReflectionData reflection;
 };
 
 struct VulkanPipeline {

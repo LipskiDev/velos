@@ -61,6 +61,7 @@ int main() {
                             .bytecodeSize = static_cast<u64>(
                                 vertSpv.spirv.size() * sizeof(std::uint32_t)),
                             .entryPoint = "main",
+                            .reflection = vertSpv.reflection,
                             .debugName = "Triangle Vertex Shader"});
 
   ShaderHandle fragmentShader =
@@ -69,6 +70,7 @@ int main() {
                             .bytecodeSize = static_cast<u64>(
                                 fragSpv.spirv.size() * sizeof(std::uint32_t)),
                             .entryPoint = "main",
+                            .reflection = fragSpv.reflection,
                             .debugName = "Triangle Fragment Shader"});
 
   PipelineHandle pipeline = device->CreateGraphicsPipeline({

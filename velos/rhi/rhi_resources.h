@@ -3,6 +3,7 @@
 #include "../core/types.h"
 #include "rhi_handles.h"
 #include "rhi_types.h"
+#include "shader/shader_compiler.h"
 
 namespace Velos::RHI {
 struct BufferDesc {
@@ -30,6 +31,7 @@ struct ShaderDesc {
   const void *bytecode = nullptr;
   u64 bytecodeSize = 0;
   const char *entryPoint = "main";
+  ShaderReflectionData reflection;
   const char *debugName = nullptr;
 };
 
