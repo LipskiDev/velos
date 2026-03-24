@@ -33,6 +33,13 @@ enum class Format {
   D24_UNORM_S8_UINT,
 };
 
+enum class VertexFormat {
+  Float32,
+  Float32x2,
+  Float32x3,
+  Float32x4,
+};
+
 enum class PrimitiveTopology {
   TriangleList,
   TriangleStrip,

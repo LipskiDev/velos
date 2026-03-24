@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include "../core/types.h"
 #include "rhi_handles.h"
@@ -15,14 +16,14 @@ enum class VertexInputRate {
 struct VertexAttributeDesc {
   u32 location = 0;
   u32 binding = 0;
-  Format format = Format::Undefined;
+  VertexFormat format = VertexFormat::Float32;
   u32 offset = 0;
 };
 
-struct VertexBindingDesc {
-  u32 binding = 0;
+struct VertexBufferLayoutDesc {
   u32 stride = 0;
   VertexInputRate inputRate = VertexInputRate::PerVertex;
+  std::vector<VertexAttributeDesc> attributes;
 };
 
 struct PushConstantRangeDesc {
@@ -71,8 +72,7 @@ struct GraphicsPipelineDesc {
   ShaderHandle vertexShader{};
   ShaderHandle fragmentShader{};
 
-  std::span<const VertexBindingDesc> vertexBindings;
-  std::span<const VertexAttributeDesc> vertexAttributes;
+  std::vector<VertexBufferLayoutDesc> vertexLayouts;
 
   PipelineLayoutDesc layout{};
 

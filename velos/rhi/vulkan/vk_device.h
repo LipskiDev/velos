@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
+#include <vk_mem_alloc.h>
+
 namespace Velos::RHI {
 class VulkanCommandList;
 
@@ -33,6 +35,14 @@ struct VulkanTexture {
   bool owned = false;
 };
 
+struct VulkanBuffer {
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  u64 size = 0;
+  BufferUsage usage = BufferUsage::None;
+  MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
+};
+
 class VulkanDevice final : public IDevice {
 public:
   explicit VulkanDevice(const DeviceDesc &desc);
@@ -46,6 +56,7 @@ public:
 
   BufferHandle CreateBuffer(const BufferDesc &desc) override;
   void DestroyBuffer(BufferHandle handle) override;
+  const VulkanBuffer &GetBuffer(BufferHandle handle) const;
 
   TextureHandle CreateTexture(const TextureDesc &desc) override;
   void DestroyTexture(TextureHandle handle) override;
@@ -72,6 +83,9 @@ public:
 
   void WaitIdle() override;
   void CollectGarbage() override;
+
+private:
+  u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) const;
 
 public:
   void TransitionCurrentSwapchainImageForRendering();
@@ -126,5 +140,8 @@ private:
   u32 nextTextureHandle_ = 1;
   std::unordered_map<u32, VulkanTexture> textures_;
   std::vector<TextureHandle> swapchainTextureHandles_;
+
+  u32 nextBufferHandle_ = 1;
+  std::unordered_map<u32, VulkanBuffer> buffers_;
 };
 } // namespace Velos::RHI

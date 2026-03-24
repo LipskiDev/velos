@@ -148,8 +148,29 @@ void VulkanCommandList::BindPipeline(PipelineHandle pipeline) {
   boundGraphicsPipeline_ = pipeline;
 }
 
-void VulkanCommandList::BindVertexBuffer(u32, BufferHandle, u64) {
-  throw std::runtime_error("BindVertexBuffer not implemented yet");
+void VulkanCommandList::BindVertexBuffer(u32 firstSlot,
+                                         BufferHandle bufferHandle,
+                                         u64 offset) {
+
+  const VulkanBuffer &buffer = device_.GetBuffer(bufferHandle);
+
+  if (buffer.buffer == VK_NULL_HANDLE) {
+    throw std::runtime_error("BindVertexBuffer: invalid Vulkan buffer");
+  }
+
+  if (!HasFlag(buffer.usage, BufferUsage::Vertex)) {
+    throw std::runtime_error(
+        "BindVertexBuffer: buffer was not created with BufferUsage::Vertex");
+  }
+
+  if (offset >= buffer.size) {
+    throw std::runtime_error("BindVertexBuffer: offset is out of bounds");
+  }
+
+  VkBuffer vkBuffer = buffer.buffer;
+  VkDeviceSize vkOffset = static_cast<VkDeviceSize>(offset);
+
+  vkCmdBindVertexBuffers(commandBuffer_, firstSlot, 1, &vkBuffer, &vkOffset);
 }
 
 void VulkanCommandList::BindIndexBuffer(BufferHandle, IndexType, u64) {

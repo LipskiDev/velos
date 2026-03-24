@@ -1,7 +1,10 @@
 #pragma once
 
+#include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_types.h"
 #include <volk.h>
+
+#include <vk_mem_alloc.h>
 
 #include <stdexcept>
 #include <string>
@@ -39,6 +42,21 @@ inline VkFormat ToVkFormat(Format format) {
   }
 }
 
+inline VkFormat ToVkVertexFormat(VertexFormat format) {
+  switch (format) {
+  case VertexFormat::Float32:
+    return VK_FORMAT_R32_SFLOAT;
+  case VertexFormat::Float32x2:
+    return VK_FORMAT_R32G32_SFLOAT;
+  case VertexFormat::Float32x3:
+    return VK_FORMAT_R32G32B32_SFLOAT;
+  case VertexFormat::Float32x4:
+    return VK_FORMAT_R32G32B32A32_SFLOAT;
+  default:
+    throw std::runtime_error("Unsupported VertexFormat");
+  }
+}
+
 inline VkShaderStageFlagBits ToVkShaderStage(ShaderStage stage) {
   switch (stage) {
   case ShaderStage::Vertex:
@@ -66,5 +84,86 @@ inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveTopology topology) {
   default:
     throw std::runtime_error("Unsupported primitive topology");
   }
+}
+
+inline VkBufferUsageFlags ToVkBufferUsageFlags(BufferUsage usage) {
+  VkBufferUsageFlags flags = 0;
+
+  if (HasFlag(usage, BufferUsage::Vertex)) {
+    flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  }
+  if (HasFlag(usage, BufferUsage::Index)) {
+    flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+  }
+  if (HasFlag(usage, BufferUsage::Uniform)) {
+    flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  }
+  if (HasFlag(usage, BufferUsage::Storage)) {
+    flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  }
+  if (HasFlag(usage, BufferUsage::TransferSrc)) {
+    flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  }
+  if (HasFlag(usage, BufferUsage::TransferDst)) {
+    flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  }
+
+  return flags;
+}
+
+inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryUsage usage) {
+  VmaAllocationCreateInfo allocInfo{};
+
+  switch (usage) {
+  case MemoryUsage::GPUOnly:
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    break;
+
+  case MemoryUsage::CPUToGPU:
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                      VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    break;
+
+  case MemoryUsage::GPUToCPU:
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                      VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    break;
+
+  default:
+    throw std::runtime_error("Unsupported MemoryUsage");
+  }
+
+  return allocInfo;
+}
+
+inline VkMemoryPropertyFlags ToVkMemoryPropertyFlags(MemoryUsage usage) {
+  switch (usage) {
+  case MemoryUsage::GPUOnly:
+    return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+  case MemoryUsage::CPUToGPU:
+    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+  case MemoryUsage::GPUToCPU:
+    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+           VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+  }
+
+  throw std::runtime_error("Unsupported MemoryUsage");
+}
+
+inline VkVertexInputRate ToVkInputRate(VertexInputRate rate) {
+  switch (rate) {
+  case VertexInputRate::PerVertex:
+    return VK_VERTEX_INPUT_RATE_VERTEX;
+  case VertexInputRate::PerInstance:
+    return VK_VERTEX_INPUT_RATE_INSTANCE;
+  }
+
+  throw std::runtime_error("Unsupported VertexInputRate");
 }
 } // namespace Velos::RHI

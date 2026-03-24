@@ -278,6 +278,23 @@ void VulkanDevice::CollectGarbage() {
   // no-op
 }
 
+u32 VulkanDevice::FindMemoryType(u32 typeFilter,
+                                 VkMemoryPropertyFlags properties) const {
+  VkPhysicalDeviceMemoryProperties memProperties{};
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
+
+  for (u32 i = 0; i < memProperties.memoryTypeCount; ++i) {
+    const bool typeSupported = (typeFilter & (1u << i)) != 0;
+    const bool propertyMatch =
+        (memProperties.memoryTypes[i].propertyFlags & properties) == properties;
+
+    if (typeSupported && propertyMatch)
+      return i;
+  }
+
+  throw std::runtime_error("Failed to find suitable memory");
+}
+
 void VulkanDevice::TransitionCurrentSwapchainImageForRendering() {
   if (!swapchain_) {
     throw std::runtime_error("No swapchain available");
@@ -449,12 +466,126 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle, u32, u32) {
   throw std::runtime_error("ResizeSwapchain not implemented yet");
 }
 
-BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &) {
-  throw std::runtime_error("CreateBuffer not implemented yet");
+BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
+
+  if (desc.size == 0) {
+    throw std::runtime_error(
+        "CreateBuffer: buffer size must be greater than 0");
+  }
+
+  if (desc.usage == BufferUsage::None) {
+    throw std::runtime_error("CreateBuffer: buffer usage must not be None");
+  }
+
+  VkBufferCreateInfo bufferInfo{};
+  bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferInfo.size = desc.size;
+  bufferInfo.usage = ToVkBufferUsageFlags(desc.usage);
+  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+  VulkanBuffer buffer{};
+  buffer.size = desc.size;
+  buffer.usage = desc.usage;
+  buffer.memoryUsage = desc.memoryUsage;
+
+  VkResult result =
+      vkCreateBuffer(device_, &bufferInfo, nullptr, &buffer.buffer);
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("CreateBuffer: vkCreateBuffer failed");
+  }
+
+  VkMemoryRequirements memRequirements{};
+  vkGetBufferMemoryRequirements(device_, buffer.buffer, &memRequirements);
+
+  VkMemoryAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex =
+      FindMemoryType(memRequirements.memoryTypeBits,
+                     ToVkMemoryPropertyFlags(desc.memoryUsage));
+
+  result = vkAllocateMemory(device_, &allocInfo, nullptr, &buffer.memory);
+
+  if (result != VK_SUCCESS) {
+    vkDestroyBuffer(device_, buffer.buffer, nullptr);
+    throw std::runtime_error("CreateBuffer: vkAllocateMemory failed");
+  }
+
+  result = vkBindBufferMemory(device_, buffer.buffer, buffer.memory, 0);
+
+  if (result != VK_SUCCESS) {
+    vkFreeMemory(device_, buffer.memory, nullptr);
+    vkDestroyBuffer(device_, buffer.buffer, nullptr);
+    throw std::runtime_error("CreateBuffer: vkBindBufferMemory failed");
+  }
+
+  if (desc.initialData != nullptr) {
+    if (desc.memoryUsage == MemoryUsage::GPUOnly) {
+      vkFreeMemory(device_, buffer.memory, nullptr);
+      vkDestroyBuffer(device_, buffer.buffer, nullptr);
+      throw std::runtime_error("CreateBuffer: initialData for GPUOnly buffers "
+                               "requires staging upload path");
+    }
+
+    void *mappedData = nullptr;
+    result = vkMapMemory(device_, buffer.memory, 0, desc.size, 0, &mappedData);
+
+    if (result != VK_SUCCESS || mappedData == nullptr) {
+      vkFreeMemory(device_, buffer.memory, nullptr);
+      vkDestroyBuffer(device_, buffer.buffer, nullptr);
+      throw std::runtime_error("CreateBuffer: vkMapMemory failed");
+    }
+
+    memcpy(mappedData, desc.initialData, static_cast<size_t>(desc.size));
+
+    if ((ToVkMemoryPropertyFlags(desc.memoryUsage) &
+         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+      VkMappedMemoryRange range{};
+      range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+      range.memory = buffer.memory;
+      range.offset = 0;
+      range.size = desc.size;
+      vkFlushMappedMemoryRanges(device_, 1, &range);
+    }
+
+    vkUnmapMemory(device_, buffer.memory);
+  }
+
+  const u32 handleId = nextBufferHandle_++;
+  buffers_.emplace(handleId, buffer);
+
+  return BufferHandle{handleId};
 }
 
-void VulkanDevice::DestroyBuffer(BufferHandle) {
-  throw std::runtime_error("DestroyBuffer not implemented yet");
+void VulkanDevice::DestroyBuffer(BufferHandle handle) {
+  auto it = buffers_.find(handle.id);
+  if (it == buffers_.end()) {
+    return;
+  }
+
+  VulkanBuffer buffer = it->second;
+
+  if (buffer.buffer != VK_NULL_HANDLE) {
+    vkDestroyBuffer(device_, buffer.buffer, nullptr);
+    buffer.buffer = VK_NULL_HANDLE;
+  }
+
+  if (buffer.memory != VK_NULL_HANDLE) {
+    vkFreeMemory(device_, buffer.memory, nullptr);
+    buffer.memory = VK_NULL_HANDLE;
+  }
+
+  buffers_.erase(it);
+}
+
+const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
+  auto it = buffers_.find(handle.id);
+
+  if (it == buffers_.end()) {
+    throw std::runtime_error("Invalid texture handle");
+  }
+
+  return it->second;
 }
 
 TextureHandle VulkanDevice::CreateTexture(const TextureDesc &) {
@@ -566,14 +697,47 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   shaderStages[1].module = fs.module;
   shaderStages[1].pName = "main";
 
-  // No vertex buffers for the first triangle
+  std::vector<VkVertexInputBindingDescription> bindings;
+  bindings.reserve(desc.vertexLayouts.size());
+
+  for (u32 i = 0; i < desc.vertexLayouts.size(); ++i) {
+    const auto &layout = desc.vertexLayouts[i];
+
+    VkVertexInputBindingDescription binding{};
+    binding.binding = i;
+    binding.stride = layout.stride;
+    binding.inputRate = ToVkInputRate(layout.inputRate);
+
+    bindings.push_back(binding);
+  }
+
+  std::vector<VkVertexInputAttributeDescription> attributes;
+
+  for (u32 bindingIndex = 0; bindingIndex < desc.vertexLayouts.size();
+       ++bindingIndex) {
+
+    const auto &layout = desc.vertexLayouts[bindingIndex];
+
+    for (const auto &attr : layout.attributes) {
+      VkVertexInputAttributeDescription vkAttr{};
+      vkAttr.location = attr.location;
+      vkAttr.binding = bindingIndex;
+      vkAttr.format = ToVkVertexFormat(attr.format);
+      vkAttr.offset = attr.offset;
+
+      attributes.push_back(vkAttr);
+    }
+  }
+
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
   vertexInputInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInputInfo.vertexBindingDescriptionCount = 0;
-  vertexInputInfo.pVertexBindingDescriptions = nullptr;
-  vertexInputInfo.vertexAttributeDescriptionCount = 0;
-  vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+  vertexInputInfo.vertexBindingDescriptionCount =
+      static_cast<u32>(bindings.size());
+  vertexInputInfo.pVertexBindingDescriptions = bindings.data();
+  vertexInputInfo.vertexAttributeDescriptionCount =
+      static_cast<u32>(attributes.size());
+  vertexInputInfo.pVertexAttributeDescriptions = attributes.data();
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
   inputAssembly.sType =

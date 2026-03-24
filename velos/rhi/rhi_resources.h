@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/types.h"
+#include "rhi/rhi_pipeline.h"
 #include "rhi_handles.h"
 #include "rhi_types.h"
 #include "shader/shader_compiler.h"
@@ -10,6 +11,7 @@ struct BufferDesc {
   u64 size = 0;
   BufferUsage usage = BufferUsage::None;
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
+  const void *initialData = nullptr;
   const char *debugName = nullptr;
 };
 
@@ -50,5 +52,4 @@ struct TextureUploadDesc {
   u32 height = 0;
   u32 mipLevel = 0;
 };
-
 }; // namespace Velos::RHI
