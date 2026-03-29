@@ -21,10 +21,9 @@ public:
   void SetScissor(const Rect2D &scissor) override;
 
   void Barrier(const BufferBarrier &barrier) override;
-  void Barrier(const TextureBarrier &barrier) override;
+  void Barrier(const ImageBarrier &barrier) override;
 
   void UpdateBuffer(const BufferUpdateDesc &update) override;
-  void UploadTexture(const TextureUploadDesc &upload) override;
 
   void BeginRendering(const RenderingInfo &renderingInfo) override;
   void EndRendering() override;
@@ -36,8 +35,6 @@ public:
 
   void BindUniformBuffer(u32 binding, BufferHandle buffer, u64 offset,
                          u64 size) override;
-  void BindSampledTexture(u32 binding, TextureHandle texture,
-                          SamplerHandle sampler) override;
 
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;

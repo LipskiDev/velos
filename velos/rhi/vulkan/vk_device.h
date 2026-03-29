@@ -57,6 +57,8 @@ struct VulkanImageView {
   ImageHandle image;
   Format format = Format::Undefined;
   ImageAspect aspect = ImageAspect::Color;
+
+  bool owned = true;
 };
 
 struct VulkanBuffer {
@@ -81,10 +83,6 @@ public:
   BufferHandle CreateBuffer(const BufferDesc &desc) override;
   void DestroyBuffer(BufferHandle handle) override;
   const VulkanBuffer &GetBuffer(BufferHandle handle) const;
-
-  TextureHandle CreateTexture(const TextureDesc &desc) override;
-  void DestroyTexture(TextureHandle handle) override;
-  const VulkanTexture &GetTexture(TextureHandle handle) const;
 
   ImageHandle CreateImage(const ImageDesc &desc) override;
   void DestroyImage(ImageHandle handle) override;
@@ -157,6 +155,8 @@ private:
 
   std::unique_ptr<VulkanCommandList> commandList_;
   std::unique_ptr<VulkanSwapchain> swapchain_;
+  std::vector<ImageHandle> swapchainImageHandles_;
+  std::vector<ImageViewHandle> swapchainImageViewHandles_;
 
   VkSemaphore imageAvailableSemaphore_;
   std::vector<VkSemaphore> renderFinishedSemaphores_;
@@ -169,10 +169,6 @@ private:
 
   u32 nextPipelineHandle_ = 1;
   std::unordered_map<u32, VulkanPipeline> pipelines_;
-
-  u32 nextTextureHandle_ = 1;
-  std::unordered_map<u32, VulkanTexture> textures_;
-  std::vector<TextureHandle> swapchainTextureHandles_;
 
   u32 nextBufferHandle_ = 1;
   std::unordered_map<u32, VulkanBuffer> buffers_;

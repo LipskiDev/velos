@@ -194,13 +194,13 @@ void VulkanSwapchain::CreateSwapchain(const SwapchainDesc &desc) {
 }
 
 void VulkanSwapchain::CreateImageViews() {
-  images_.resize(rawImages_.size());
-  for (size_t i = 0; i < rawImages_.size(); ++i) {
-    images_[i].image = rawImages_[i];
+  images_.clear();
+  images_.reserve(rawImages_.size());
 
+  for (VkImage rawImage : rawImages_) {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = rawImages_[i];
+    viewInfo.image = rawImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format_;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -209,8 +209,15 @@ void VulkanSwapchain::CreateImageViews() {
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    VK_CHECK(vkCreateImageView(device_, &viewInfo, nullptr, &images_[i].view),
+    VkImageView view = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateImageView(device_, &viewInfo, nullptr, &view),
              "Failed to create swapchain image view");
+
+    VulkanSwapchainImage swapImage{};
+    swapImage.image = rawImage;
+    swapImage.view = view;
+
+    images_.push_back(swapImage);
   }
 }
 
@@ -221,6 +228,7 @@ void VulkanSwapchain::DestroySwapchainResources() {
       image.view = VK_NULL_HANDLE;
     }
   }
+
   images_.clear();
   rawImages_.clear();
 

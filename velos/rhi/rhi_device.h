@@ -32,7 +32,7 @@ struct SwapchainDesc {
 
 struct FrameBeginResult {
   CommandListHandle commandList{};
-  TextureHandle backbuffer{};
+  ImageViewHandle backbuffer{};
   u32 backbufferIndex = 0;
   bool success = false;
 };
@@ -50,9 +50,6 @@ public:
 
   virtual BufferHandle CreateBuffer(const BufferDesc &desc) = 0;
   virtual void DestroyBuffer(BufferHandle handle) = 0;
-
-  virtual TextureHandle CreateTexture(const TextureDesc &desc) = 0;
-  virtual void DestroyTexture(TextureHandle handle) = 0;
 
   virtual ImageHandle CreateImage(const ImageDesc &desc) = 0;
   virtual void DestroyImage(ImageHandle image) = 0;

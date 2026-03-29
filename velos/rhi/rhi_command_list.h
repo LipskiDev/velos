@@ -8,7 +8,7 @@
 namespace Velos::RHI {
 
 struct ColorAttachmentDesc {
-  TextureHandle view{};
+  ImageViewHandle view{};
   LoadOp loadOp = LoadOp::Clear;
   StoreOp storeOp = StoreOp::Store;
   ClearColor clearValue{};
@@ -35,21 +35,17 @@ struct BufferBarrier {
   ResourceState newState = ResourceState::Common;
 };
 
-struct TextureBarrier {
-  TextureHandle texture{};
-  ResourceState oldState = ResourceState::Undefined;
-  ResourceState newState = ResourceState::Common;
+struct ImageBarrier {
+  ImageHandle image;
+  ImageLayout oldLayout = ImageLayout::Undefined;
+  ImageLayout newLayout = ImageLayout::Undefined;
+  ImageAspect aspect = ImageAspect::Color;
 };
 
 struct BufferBinding {
   BufferHandle buffer{};
   u64 offset = 0;
   u64 size = 0;
-};
-
-struct TextureBinding {
-  TextureHandle texture{};
-  SamplerHandle sampler{};
 };
 
 class ICommandList {
@@ -63,10 +59,9 @@ public:
   virtual void SetScissor(const Rect2D &scissor) = 0;
 
   virtual void Barrier(const BufferBarrier &barrier) = 0;
-  virtual void Barrier(const TextureBarrier &barrier) = 0;
+  virtual void Barrier(const ImageBarrier &barrier) = 0;
 
   virtual void UpdateBuffer(const BufferUpdateDesc &update) = 0;
-  virtual void UploadTexture(const TextureUploadDesc &upload) = 0;
 
   virtual void BeginRendering(const RenderingInfo &renderingInfo) = 0;
   virtual void EndRendering() = 0;
@@ -79,8 +74,6 @@ public:
 
   virtual void BindUniformBuffer(u32 binding, BufferHandle buffer, u64 offset,
                                  u64 size) = 0;
-  virtual void BindSampledTexture(u32 binding, TextureHandle texture,
-                                  SamplerHandle sampler) = 0;
 
   virtual void PushConstants(ShaderStage stages, u32 offset, u32 size,
                              const void *data) = 0;

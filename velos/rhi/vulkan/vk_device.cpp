@@ -43,10 +43,15 @@ VulkanDevice::~VulkanDevice() {
     }
     pipelines_.clear();
 
-    for (TextureHandle handle : swapchainTextureHandles_) {
-      textures_.erase(handle.id);
+    for (ImageViewHandle handle : swapchainImageViewHandles_) {
+      DestroyImageView(handle);
     }
-    swapchainTextureHandles_.clear();
+    swapchainImageViewHandles_.clear();
+
+    for (ImageHandle handle : swapchainImageHandles_) {
+      DestroyImage(handle);
+    }
+    swapchainImageHandles_.clear();
 
     DestroySwapchainSyncObjects();
     swapchain_.reset();
@@ -386,21 +391,43 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
   swapchain_ = std::make_unique<VulkanSwapchain>(
       instance_, physicalDevice_, device_, presentQueueFamily_, desc);
 
-  swapchainTextureHandles_.clear();
+  swapchainImageHandles_.clear();
+  swapchainImageViewHandles_.clear();
+
   for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
-    const VulkanSwapchainImage &image = swapchain_->GetImage(i);
+    const VulkanSwapchainImage &swapImage = swapchain_->GetImage(i);
 
-    const u32 handleId = nextTextureHandle_++;
-    textures_.emplace(
-        handleId,
-        VulkanTexture{
-            .image = image.image,
-            .view = image.view,
-            .format =
-                Format::BGRA8_UNORM, // or derive properly from swapchain format
-            .owned = false});
+    VulkanImage wrappedImage{};
+    wrappedImage.image = swapImage.image;
+    wrappedImage.memory = VK_NULL_HANDLE;
+    wrappedImage.format =
+        Format::BGRA8_UNORM; // later: derive from swapchain_->GetFormat()
+    wrappedImage.usage = ImageUsage::ColorAttachment;
+    wrappedImage.layout = ImageLayout::Undefined;
+    wrappedImage.width = swapchain_->GetWidth();
+    wrappedImage.height = swapchain_->GetHeight();
+    wrappedImage.depth = 1;
+    wrappedImage.mipLevels = 1;
+    wrappedImage.arrayLayers = 1;
+    wrappedImage.owned = false;
 
-    swapchainTextureHandles_.push_back(TextureHandle{handleId});
+    const u32 imageHandleId = nextImageHandle_++;
+    images_.emplace(imageHandleId, wrappedImage);
+
+    ImageHandle imageHandle{imageHandleId};
+    swapchainImageHandles_.push_back(imageHandle);
+
+    VulkanImageView vkView{};
+    vkView.view = swapImage.view;
+    vkView.image = imageHandle;
+    vkView.format = wrappedImage.format;
+    vkView.aspect = ImageAspect::Color;
+    vkView.owned = false;
+
+    const u32 viewHandleId = nextImageViewHandle_++;
+    imageViews_.emplace(viewHandleId, vkView);
+
+    swapchainImageViewHandles_.push_back(ImageViewHandle{viewHandleId});
   }
 
   CreateSwapchainSyncObjects();
@@ -485,6 +512,17 @@ void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
   }
 
   DestroySwapchainSyncObjects();
+
+  for (ImageViewHandle view : swapchainImageViewHandles_) {
+    DestroyImageView(view);
+  }
+  swapchainImageViewHandles_.clear();
+
+  for (ImageHandle image : swapchainImageHandles_) {
+    DestroyImage(image);
+  }
+  swapchainImageHandles_.clear();
+
   swapchain_.reset();
 }
 
@@ -608,23 +646,6 @@ const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
   auto it = buffers_.find(handle.id);
 
   if (it == buffers_.end()) {
-    throw std::runtime_error("Invalid texture handle");
-  }
-
-  return it->second;
-}
-
-TextureHandle VulkanDevice::CreateTexture(const TextureDesc &) {
-  throw std::runtime_error("CreateTexture not implemented yet");
-}
-
-void VulkanDevice::DestroyTexture(TextureHandle) {
-  throw std::runtime_error("DestroyTexture not implemented yet");
-}
-
-const VulkanTexture &VulkanDevice::GetTexture(TextureHandle handle) const {
-  auto it = textures_.find(handle.id);
-  if (it == textures_.end()) {
     throw std::runtime_error("Invalid texture handle");
   }
 
@@ -825,10 +846,10 @@ void VulkanDevice::DestroyImageView(ImageViewHandle handle) {
 
   VulkanImageView &view = it->second;
 
-  if (view.view != VK_NULL_HANDLE) {
+  if (view.view != VK_NULL_HANDLE && view.owned) {
     vkDestroyImageView(device_, view.view, nullptr);
-    view.view = VK_NULL_HANDLE;
   }
+  view.view = VK_NULL_HANDLE;
 
   imageViews_.erase(it);
 }
@@ -1181,7 +1202,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     return FrameBeginResult({
         .commandList = CommandListHandle{},
-        .backbuffer = TextureHandle{},
+        .backbuffer = ImageViewHandle{},
         .backbufferIndex = 0,
         .success = false,
     });
@@ -1191,7 +1212,8 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
     currentBackbufferIndex_ = imageIndex;
 
     return FrameBeginResult{.commandList = CommandListHandle{1},
-                            .backbuffer = swapchainTextureHandles_[imageIndex],
+                            .backbuffer =
+                                swapchainImageViewHandles_[imageIndex],
                             .backbufferIndex = imageIndex,
                             .success = true};
   }
@@ -1201,7 +1223,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   currentBackbufferIndex_ = imageIndex;
 
   return FrameBeginResult{.commandList = CommandListHandle{1},
-                          .backbuffer = swapchainTextureHandles_[imageIndex],
+                          .backbuffer = swapchainImageViewHandles_[imageIndex],
                           .backbufferIndex = imageIndex,
                           .success = true};
 }

@@ -15,7 +15,6 @@ template <typename Tag> struct Handle {
 };
 
 struct BufferTag {};
-struct TextureTag {};
 struct ImageTag {};
 struct ImageViewTag {};
 struct SamplerTag {};
@@ -25,7 +24,6 @@ struct CommandListTag {};
 struct SwapchainTag {};
 
 using BufferHandle = Handle<BufferTag>;
-using TextureHandle = Handle<TextureTag>;
 using SamplerHandle = Handle<SamplerTag>;
 using ShaderHandle = Handle<ShaderTag>;
 using PipelineHandle = Handle<PipelineTag>;

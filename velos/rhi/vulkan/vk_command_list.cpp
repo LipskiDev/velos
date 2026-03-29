@@ -56,16 +56,12 @@ void VulkanCommandList::Barrier(const BufferBarrier &) {
   throw std::runtime_error("Buffer barrier not implemented yet");
 }
 
-void VulkanCommandList::Barrier(const TextureBarrier &) {
-  throw std::runtime_error("Texture barrier not implemented yet");
+void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
+  throw std::runtime_error("Image barrier not implemented yet");
 }
 
 void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &) {
   throw std::runtime_error("UpdateBuffer not implemented yet");
-}
-
-void VulkanCommandList::UploadTexture(const TextureUploadDesc &) {
-  throw std::runtime_error("UploadTexture not implemented yet");
 }
 
 void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
@@ -82,7 +78,7 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
   const ColorAttachmentDesc &colorAttachment =
       renderingInfo.colorAttachments[0];
-  const VulkanTexture &colorView = device_.GetTexture(colorAttachment.view);
+  const VulkanImageView &colorView = device_.GetImageView(colorAttachment.view);
 
   VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   switch (colorAttachment.loadOp) {
@@ -223,10 +219,6 @@ void VulkanCommandList::BindIndexBuffer(BufferHandle, IndexType, u64) {
 
 void VulkanCommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
   throw std::runtime_error("BindUniformBuffer not implemented yet");
-}
-
-void VulkanCommandList::BindSampledTexture(u32, TextureHandle, SamplerHandle) {
-  throw std::runtime_error("BindSampledTexture not implemented yet");
 }
 
 void VulkanCommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
