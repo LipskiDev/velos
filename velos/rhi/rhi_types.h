@@ -78,6 +78,32 @@ enum class TextureUsage : u32 {
   Storage = 1 << 5,
 };
 
+enum class ImageUsage : u32 {
+  None = 0,
+  TransferSrc = 1 << 0,
+  TransferDst = 1 << 1,
+  Sampled = 1 << 2,
+  ColorAttachment = 1 << 3,
+  DepthStencil = 1 << 4,
+};
+
+enum class ImageLayout {
+  Undefined,
+  ColorAttachment,
+  DepthAttachment,
+  ShaderReadOnly,
+  TransferSrc,
+  TransferDst,
+  Present,
+};
+
+enum class ImageAspect : u32 {
+  None = 0,
+  Color = 1 << 0,
+  Depth = 1 << 1,
+  Stencil = 1 << 2,
+};
+
 enum class MemoryUsage {
   GPUOnly,
   CPUToGPU,

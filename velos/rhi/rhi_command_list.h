@@ -8,17 +8,18 @@
 namespace Velos::RHI {
 
 struct ColorAttachmentDesc {
-  TextureHandle texture{};
+  TextureHandle view{};
   LoadOp loadOp = LoadOp::Clear;
   StoreOp storeOp = StoreOp::Store;
   ClearColor clearValue{};
 };
 
 struct DepthAttachmentDesc {
-  TextureHandle texture{};
+  ImageViewHandle view;
   LoadOp loadOp = LoadOp::Clear;
   StoreOp storeOp = StoreOp::Store;
-  ClearDepthStencil clearValue{};
+  float clearDepth = 1.0f;
+  u32 clearStencil = 0;
 };
 
 struct RenderingInfo {

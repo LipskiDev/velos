@@ -24,6 +24,33 @@ struct TextureDesc {
   const char *debugName = nullptr;
 };
 
+struct ImageDesc {
+  u32 width = 1;
+  u32 height = 1;
+  u32 depth = 1;
+
+  u32 mipLevels = 1;
+  u32 arrayLayers = 1;
+
+  Format format = Format::Undefined;
+  ImageUsage usage = ImageUsage::None;
+
+  const char *debugName = nullptr;
+};
+
+struct ImageViewDesc {
+  ImageHandle image;
+  Format format = Format::Undefined;
+  ImageAspect aspect = ImageAspect::Color;
+
+  u32 baseMipLevel = 0;
+  u32 mipLevelCount = 1;
+  u32 baseArrayLayer = 0;
+  u32 arrayLayerCount = 1;
+
+  const char *debugName = nullptr;
+};
+
 struct SamplerDesc {
   const char *debugName = nullptr;
 };

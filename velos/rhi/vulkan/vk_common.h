@@ -166,4 +166,114 @@ inline VkVertexInputRate ToVkInputRate(VertexInputRate rate) {
 
   throw std::runtime_error("Unsupported VertexInputRate");
 }
+
+inline VkImageUsageFlags ToVkImageUsage(ImageUsage usage) {
+  VkImageUsageFlags flags = 0;
+
+  if ((usage & ImageUsage::TransferSrc) == ImageUsage::TransferSrc) {
+    flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  }
+
+  if ((usage & ImageUsage::TransferDst) == ImageUsage::TransferDst) {
+    flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  }
+
+  if ((usage & ImageUsage::Sampled) == ImageUsage::Sampled) {
+    flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+  }
+
+  if ((usage & ImageUsage::ColorAttachment) == ImageUsage::ColorAttachment) {
+    flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  }
+
+  if ((usage & ImageUsage::DepthStencil) == ImageUsage::DepthStencil) {
+    flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  }
+
+  return flags;
+}
+
+inline VkImageAspectFlags ToVkImageAspect(ImageAspect aspect) {
+  VkImageAspectFlags flags = 0;
+
+  if ((aspect & ImageAspect::Color) == ImageAspect::Color) {
+    flags |= VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  if ((aspect & ImageAspect::Depth) == ImageAspect::Depth) {
+    flags |= VK_IMAGE_ASPECT_DEPTH_BIT;
+  }
+
+  if ((aspect & ImageAspect::Stencil) == ImageAspect::Stencil) {
+    flags |= VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
+
+  return flags;
+}
+
+inline VkImageLayout ToVkImageLayout(ImageLayout layout) {
+  switch (layout) {
+  case ImageLayout::Undefined:
+    return VK_IMAGE_LAYOUT_UNDEFINED;
+
+  case ImageLayout::ColorAttachment:
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  case ImageLayout::DepthAttachment:
+    return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+  case ImageLayout::ShaderReadOnly:
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  case ImageLayout::TransferSrc:
+    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+  case ImageLayout::TransferDst:
+    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+  case ImageLayout::Present:
+    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  }
+
+  throw std::runtime_error("Unsupported ImageLayout");
+}
+
+inline bool IsDepthFormat(Format format) {
+  switch (format) {
+  case Format::D32_FLOAT:
+  case Format::D24_UNORM_S8_UINT:
+    return true;
+
+  default:
+    return false;
+  }
+}
+
+inline bool HasStencilAspect(Format format) {
+  switch (format) {
+  case Format::D24_UNORM_S8_UINT:
+    return true;
+
+  default:
+    return false;
+  }
+}
+
+inline ImageAspect DefaultImageAspectFromFormat(Format format) {
+  switch (format) {
+  case Format::RGBA8_UNORM:
+  case Format::BGRA8_UNORM:
+    return ImageAspect::Color;
+
+  case Format::D32_FLOAT:
+    return ImageAspect::Depth;
+
+  case Format::D24_UNORM_S8_UINT:
+    return ImageAspect::Depth | ImageAspect::Stencil;
+
+  case Format::Undefined:
+  default:
+    return ImageAspect::None;
+  }
+}
 } // namespace Velos::RHI

@@ -35,6 +35,30 @@ struct VulkanTexture {
   bool owned = false;
 };
 
+struct VulkanImage {
+  VkImage image = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+
+  Format format = Format::Undefined;
+  ImageUsage usage = ImageUsage::None;
+  ImageLayout layout = ImageLayout::Undefined;
+
+  u32 width = 0;
+  u32 height = 0;
+  u32 depth = 1;
+  u32 mipLevels = 1;
+  u32 arrayLayers = 1;
+
+  bool owned = true;
+};
+
+struct VulkanImageView {
+  VkImageView view = VK_NULL_HANDLE;
+  ImageHandle image;
+  Format format = Format::Undefined;
+  ImageAspect aspect = ImageAspect::Color;
+};
+
 struct VulkanBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -61,6 +85,14 @@ public:
   TextureHandle CreateTexture(const TextureDesc &desc) override;
   void DestroyTexture(TextureHandle handle) override;
   const VulkanTexture &GetTexture(TextureHandle handle) const;
+
+  ImageHandle CreateImage(const ImageDesc &desc) override;
+  void DestroyImage(ImageHandle handle) override;
+  const VulkanImage &GetImage(ImageHandle handle) const;
+
+  ImageViewHandle CreateImageView(const ImageViewDesc &desc) override;
+  void DestroyImageView(ImageViewHandle view) override;
+  const VulkanImageView &GetImageView(ImageViewHandle handle) const;
 
   SamplerHandle CreateSampler(const SamplerDesc &desc) override;
   void DestroySampler(SamplerHandle handle) override;
@@ -90,6 +122,7 @@ private:
 public:
   void TransitionCurrentSwapchainImageForRendering();
   void TransitionCurrentSwapchainImageForPresent();
+  void TransitionImageToDepthAttachment(ImageHandle handle);
 
 private:
   void CreateInstance(const DeviceDesc &desc);
@@ -143,5 +176,11 @@ private:
 
   u32 nextBufferHandle_ = 1;
   std::unordered_map<u32, VulkanBuffer> buffers_;
+
+  u32 nextImageHandle_ = 1;
+  std::unordered_map<u32, VulkanImage> images_;
+
+  u32 nextImageViewHandle_ = 1;
+  std::unordered_map<u32, VulkanImageView> imageViews_;
 };
 } // namespace Velos::RHI

@@ -54,6 +54,12 @@ public:
   virtual TextureHandle CreateTexture(const TextureDesc &desc) = 0;
   virtual void DestroyTexture(TextureHandle handle) = 0;
 
+  virtual ImageHandle CreateImage(const ImageDesc &desc) = 0;
+  virtual void DestroyImage(ImageHandle image) = 0;
+
+  virtual ImageViewHandle CreateImageView(const ImageViewDesc &desc) = 0;
+  virtual void DestroyImageView(ImageViewHandle view) = 0;
+
   virtual SamplerHandle CreateSampler(const SamplerDesc &desc) = 0;
   virtual void DestroySampler(SamplerHandle handle) = 0;
 

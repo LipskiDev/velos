@@ -4,6 +4,7 @@
 #include "rhi/vulkan/vk_device.h"
 
 #include <stdexcept>
+#include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
 
@@ -44,7 +45,7 @@ void VulkanCommandList::SetViewport(const Viewport &viewport) {
 void VulkanCommandList::SetScissor(const Rect2D &scissor) {
   VkRect2D vkScissor{};
   vkScissor.offset.x = scissor.offset.x;
-  vkScissor.offset.x = scissor.offset.x;
+  vkScissor.offset.y = scissor.offset.y;
   vkScissor.extent.width = scissor.extent.width;
   vkScissor.extent.height = scissor.extent.height;
 
@@ -81,8 +82,7 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
   const ColorAttachmentDesc &colorAttachment =
       renderingInfo.colorAttachments[0];
-  const VulkanTexture &colorTexture =
-      device_.GetTexture(colorAttachment.texture);
+  const VulkanTexture &colorView = device_.GetTexture(colorAttachment.view);
 
   VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   switch (colorAttachment.loadOp) {
@@ -115,11 +115,54 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
   VkRenderingAttachmentInfo colorAttachmentInfo{};
   colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-  colorAttachmentInfo.imageView = colorTexture.view;
+  colorAttachmentInfo.imageView = colorView.view;
   colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   colorAttachmentInfo.loadOp = loadOp;
   colorAttachmentInfo.storeOp = storeOp;
   colorAttachmentInfo.clearValue = clearValue;
+
+  VkRenderingAttachmentInfo depthAttachmentInfo{};
+  bool hasDepthAttachment = renderingInfo.depthAttachment != nullptr;
+
+  if (hasDepthAttachment) {
+    const DepthAttachmentDesc &depthAttachment = *renderingInfo.depthAttachment;
+    const VulkanImageView &depthView =
+        device_.GetImageView(depthAttachment.view);
+
+    VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    switch (depthAttachment.loadOp) {
+    case LoadOp::Load:
+      depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      break;
+    case LoadOp::Clear:
+      depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      break;
+    case LoadOp::DontCare:
+      depthLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      break;
+    }
+
+    VkAttachmentStoreOp depthStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    switch (depthAttachment.storeOp) {
+    case StoreOp::Store:
+      depthStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+      break;
+    case StoreOp::DontCare:
+      depthStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      break;
+    }
+
+    VkClearValue depthClearValue{};
+    depthClearValue.depthStencil.depth = depthAttachment.clearDepth;
+    depthClearValue.depthStencil.stencil = depthAttachment.clearStencil;
+
+    depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthAttachmentInfo.imageView = depthView.view;
+    depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depthAttachmentInfo.loadOp = depthLoadOp;
+    depthAttachmentInfo.storeOp = depthStoreOp;
+    depthAttachmentInfo.clearValue = depthClearValue;
+  }
 
   VkRenderingInfo vkRenderingInfo{};
   vkRenderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -132,7 +175,8 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   vkRenderingInfo.layerCount = 1;
   vkRenderingInfo.colorAttachmentCount = 1;
   vkRenderingInfo.pColorAttachments = &colorAttachmentInfo;
-  vkRenderingInfo.pDepthAttachment = nullptr;
+  vkRenderingInfo.pDepthAttachment =
+      hasDepthAttachment ? &depthAttachmentInfo : nullptr;
   vkRenderingInfo.pStencilAttachment = nullptr;
 
   vkCmdBeginRendering(commandBuffer_, &vkRenderingInfo);

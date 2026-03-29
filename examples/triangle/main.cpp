@@ -104,7 +104,7 @@ int main() {
       continue;
 
     ICommandList &cmd = device->GetCommandList(frame.commandList);
-    ColorAttachmentDesc colorAttachment{.texture = frame.backbuffer,
+    ColorAttachmentDesc colorAttachment{.view = {frame.backbufferIndex},
                                         .loadOp = LoadOp::Clear,
                                         .storeOp = StoreOp::Store,
                                         .clearValue = {0.1f, 0.1f, 0.2f, 1.0f}};

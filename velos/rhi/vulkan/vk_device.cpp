@@ -352,6 +352,32 @@ void VulkanDevice::TransitionCurrentSwapchainImageForPresent() {
                        nullptr, 1, &barrier);
 }
 
+void VulkanDevice::TransitionImageToDepthAttachment(ImageHandle imageHandle) {
+  const VulkanImage &img = GetImage(imageHandle);
+
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+
+  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+  barrier.srcAccessMask = 0;
+  barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+  barrier.image = img.image;
+
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+
+  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0,
+                       nullptr, 0, nullptr, 1, &barrier);
+}
+
 SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
   if (swapchain_) {
     throw std::runtime_error("Only one swapchain is supported for now");
@@ -605,6 +631,218 @@ const VulkanTexture &VulkanDevice::GetTexture(TextureHandle handle) const {
   return it->second;
 }
 
+ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
+
+  if (desc.width == 0 || desc.height == 0 || desc.depth == 0) {
+    throw std::runtime_error(
+        "CreateImage: image dimensions must be greater than 0");
+  }
+
+  if (desc.format == Format::Undefined) {
+    throw std::runtime_error("CreateImage: format must not be Undefined");
+  }
+
+  if (desc.usage == ImageUsage::None) {
+    throw std::runtime_error("CreateImage: usage must not be None");
+  }
+
+  VkImageCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  createInfo.imageType = VK_IMAGE_TYPE_2D;
+  createInfo.format = ToVkFormat(desc.format);
+  createInfo.extent = {desc.width, desc.height, desc.depth};
+  createInfo.mipLevels = desc.mipLevels;
+  createInfo.arrayLayers = desc.arrayLayers;
+  createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+  createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+  createInfo.usage = ToVkImageUsage(desc.usage);
+  createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VkImage image = VK_NULL_HANDLE;
+  VkResult result = vkCreateImage(device_, &createInfo, nullptr, &image);
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("CreateImage: vkCreateImage failed");
+  }
+
+  VkMemoryRequirements memRequirements{};
+  vkGetImageMemoryRequirements(device_, image, &memRequirements);
+
+  VkMemoryAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocInfo.allocationSize = memRequirements.size;
+  allocInfo.memoryTypeIndex = FindMemoryType(
+      memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  result = vkAllocateMemory(device_, &allocInfo, nullptr, &memory);
+  if (result != VK_SUCCESS) {
+    vkDestroyImage(device_, image, nullptr);
+    throw std::runtime_error("CreateImage: vkAllocateMemory failed");
+  }
+
+  result = vkBindImageMemory(device_, image, memory, 0);
+  if (result != VK_SUCCESS) {
+    vkFreeMemory(device_, memory, nullptr);
+    vkDestroyImage(device_, image, nullptr);
+    throw std::runtime_error("CreateImage: vkBindImageMemory failed");
+  }
+
+  VulkanImage vkImage{};
+  vkImage.image = image;
+  vkImage.memory = memory;
+  vkImage.format = desc.format;
+  vkImage.usage = desc.usage;
+  vkImage.layout = ImageLayout::Undefined;
+  vkImage.width = desc.width;
+  vkImage.height = desc.height;
+  vkImage.depth = desc.depth;
+  vkImage.mipLevels = desc.mipLevels;
+  vkImage.arrayLayers = desc.arrayLayers;
+  vkImage.owned = true;
+
+  const u32 handleId = nextImageHandle_++;
+  images_.emplace(handleId, vkImage);
+
+  return ImageHandle{handleId};
+}
+void VulkanDevice::DestroyImage(ImageHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = images_.find(handle.id);
+  if (it == images_.end()) {
+    return;
+  }
+
+  VulkanImage &image = it->second;
+
+  if (image.image != VK_NULL_HANDLE && image.owned) {
+    vkDestroyImage(device_, image.image, nullptr);
+    image.image = VK_NULL_HANDLE;
+  }
+
+  if (image.memory != VK_NULL_HANDLE) {
+    vkFreeMemory(device_, image.memory, nullptr);
+    image.memory = VK_NULL_HANDLE;
+  }
+
+  images_.erase(it);
+}
+
+const VulkanImage &VulkanDevice::GetImage(ImageHandle handle) const {
+
+  auto it = images_.find(handle.id);
+  if (it == images_.end()) {
+    throw std::runtime_error("Invalid image handle");
+  }
+
+  return it->second;
+}
+
+ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
+  if (!desc.image.IsValid()) {
+    throw std::runtime_error("CreateImageView: invalid image handle");
+  }
+
+  const VulkanImage &vkImage = GetImage(desc.image);
+
+  if (vkImage.image == VK_NULL_HANDLE) {
+    throw std::runtime_error("CreateImageView: source image is null");
+  }
+
+  Format viewFormat =
+      desc.format == Format::Undefined ? vkImage.format : desc.format;
+  ImageAspect aspect = desc.aspect == ImageAspect::None
+                           ? DefaultImageAspectFromFormat(viewFormat)
+                           : desc.aspect;
+
+  if (aspect == ImageAspect::None) {
+    throw std::runtime_error(
+        "CreateImageView: could not determine image aspect");
+  }
+
+  if (desc.mipLevelCount == 0) {
+    throw std::runtime_error(
+        "CreateImageView: mipLevelCount must be greater than 0");
+  }
+
+  if (desc.arrayLayerCount == 0) {
+    throw std::runtime_error(
+        "CreateImageView: arrayLayerCount must be greater than 0");
+  }
+
+  if (desc.baseMipLevel + desc.mipLevelCount > vkImage.mipLevels) {
+    throw std::runtime_error("CreateImageView: mip range out of bounds");
+  }
+
+  if (desc.baseArrayLayer + desc.arrayLayerCount > vkImage.arrayLayers) {
+    throw std::runtime_error(
+        "CreateImageView: array layer range out of bounds");
+  }
+
+  VkImageViewCreateInfo viewInfo{};
+  viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  viewInfo.image = vkImage.image;
+  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  viewInfo.format = ToVkFormat(viewFormat);
+  viewInfo.subresourceRange.aspectMask = ToVkImageAspect(aspect);
+  viewInfo.subresourceRange.baseMipLevel = desc.baseMipLevel;
+  viewInfo.subresourceRange.levelCount = desc.mipLevelCount;
+  viewInfo.subresourceRange.baseArrayLayer = desc.baseArrayLayer;
+  viewInfo.subresourceRange.layerCount = desc.arrayLayerCount;
+
+  VkImageView view = VK_NULL_HANDLE;
+  VkResult result = vkCreateImageView(device_, &viewInfo, nullptr, &view);
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("CreateImageView: vkCreateImageView failed");
+  }
+
+  VulkanImageView vkView{};
+  vkView.view = view;
+  vkView.image = desc.image;
+  vkView.format = viewFormat;
+  vkView.aspect = aspect;
+
+  u32 handleId = nextImageViewHandle_++;
+
+  imageViews_.emplace(handleId, vkView);
+
+  return ImageViewHandle{handleId};
+}
+
+void VulkanDevice::DestroyImageView(ImageViewHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = imageViews_.find(handle.id);
+
+  if (it == imageViews_.end()) {
+    return;
+  }
+
+  VulkanImageView &view = it->second;
+
+  if (view.view != VK_NULL_HANDLE) {
+    vkDestroyImageView(device_, view.view, nullptr);
+    view.view = VK_NULL_HANDLE;
+  }
+
+  imageViews_.erase(it);
+}
+
+const VulkanImageView &
+VulkanDevice::GetImageView(ImageViewHandle handle) const {
+  auto it = imageViews_.find(handle.id);
+  if (it == imageViews_.end()) {
+    throw std::runtime_error("Invalid image view handle");
+  }
+
+  return it->second;
+}
+
 SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &) {
   throw std::runtime_error("CreateSampler not implemented yet");
 }
@@ -836,11 +1074,22 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
         "CreateGraphicsPipeline received unsupported color format");
   }
 
+  VkPipelineDepthStencilStateCreateInfo depthStencil{};
+  depthStencil.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencil.depthTestEnable =
+      desc.depth.depthTestEnable ? VK_TRUE : VK_FALSE;
+  depthStencil.depthWriteEnable =
+      desc.depth.depthWriteEnable ? VK_TRUE : VK_FALSE;
+  depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+  depthStencil.depthBoundsTestEnable = VK_FALSE;
+  depthStencil.stencilTestEnable = VK_FALSE;
+
   VkPipelineRenderingCreateInfo renderingInfo{};
   renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   renderingInfo.colorAttachmentCount = 1;
   renderingInfo.pColorAttachmentFormats = &colorFormat;
-  renderingInfo.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
+  renderingInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
   renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
   VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -853,7 +1102,7 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   pipelineInfo.pViewportState = &viewportState;
   pipelineInfo.pRasterizationState = &rasterizer;
   pipelineInfo.pMultisampleState = &multisampling;
-  pipelineInfo.pDepthStencilState = nullptr;
+  pipelineInfo.pDepthStencilState = &depthStencil;
   pipelineInfo.pColorBlendState = &colorBlending;
   pipelineInfo.pDynamicState = &dynamicState;
   pipelineInfo.layout = pipelineLayout;

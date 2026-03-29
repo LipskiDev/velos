@@ -154,11 +154,31 @@ int main() {
                      },
                      {
                          .location = 1,
-                         .format = VertexFormat::Float32x2,
+                         .format = VertexFormat::Float32x3,
                          .offset = static_cast<u32>(offsetof(Vertex, color)),
                      }
 
       }};
+
+  ImageHandle depthImage = device->CreateImage({
+      .width = static_cast<u32>(app.GetWindow().GetWidth()),
+      .height = static_cast<u32>(app.GetWindow().GetHeight()),
+      .depth = 1,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .format = Format::D32_FLOAT,
+      .usage = ImageUsage::DepthStencil,
+      .debugName = "Main Depth Image",
+  });
+
+  ImageViewHandle depthView = device->CreateImageView({
+      .image = depthImage,
+      .format = Format::D32_FLOAT,
+      .aspect = ImageAspect::Depth,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+  });
 
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = vertexShader;
@@ -169,7 +189,19 @@ int main() {
   pipelineDesc.raster.frontFaceCCW = true;
   pipelineDesc.raster.wireframe = false;
   pipelineDesc.colorFormat = Format::BGRA8_UNORM;
+  pipelineDesc.depth = {
+      .depthTestEnable = true,
+      .depthWriteEnable = true,
+      .depthFormat = Format::D32_FLOAT,
+  };
   pipelineDesc.debugName = "Cube Pipeline";
+
+  DepthAttachmentDesc depthAttachment{};
+  depthAttachment.view = depthView;
+  depthAttachment.loadOp = LoadOp::Clear;
+  depthAttachment.storeOp = StoreOp::Store;
+  depthAttachment.clearDepth = 1.0f;
+  depthAttachment.clearStencil = 0;
 
   PipelineHandle pipeline = device->CreateGraphicsPipeline(pipelineDesc);
 
@@ -189,7 +221,7 @@ int main() {
     ICommandList &cmd = device->GetCommandList(frame.commandList);
 
     ColorAttachmentDesc colorAttachment{};
-    colorAttachment.texture = frame.backbuffer;
+    colorAttachment.view = frame.backbuffer;
     colorAttachment.loadOp = LoadOp::Clear;
     colorAttachment.storeOp = StoreOp::Store;
     colorAttachment.clearValue = {0.08f, 0.08f, 0.12f, 1.0f};
@@ -198,7 +230,7 @@ int main() {
     renderingInfo.renderArea = {{0, 0}, {1280, 720}};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.depthAttachment = nullptr;
+    renderingInfo.depthAttachment = &depthAttachment;
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::rotate(model, time, glm::vec3(0.4f, 1.0f, 0.2f));
@@ -225,6 +257,7 @@ int main() {
     cmd.SetScissor({.offset = {0, 0}, .extent = {1280, 720}});
 
     vkDevice->TransitionCurrentSwapchainImageForRendering();
+    vkDevice->TransitionImageToDepthAttachment(depthImage);
 
     cmd.BeginRendering(renderingInfo);
     cmd.BindPipeline(pipeline);
@@ -248,6 +281,10 @@ int main() {
   device->DestroyBuffer(vertexBuffer);
   device->DestroyShader(fragmentShader);
   device->DestroyShader(vertexShader);
+
+  device->DestroyImageView(depthView);
+  device->DestroyImage(depthImage);
+
   device->DestroySwapchain(swapchain);
   DestroyDevice(device);
 
