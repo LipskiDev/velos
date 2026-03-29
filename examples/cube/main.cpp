@@ -3,7 +3,6 @@
 #include "rhi/rhi_device.h"
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_types.h"
-#include "rhi/vulkan/vk_device.h"
 #include "shader/shader_compiler.h"
 
 #include <core/application.h>
@@ -52,11 +51,6 @@ int main() {
       .vsync = true,
       .debugName = "Main Swapchain",
   });
-
-  VulkanDevice *vkDevice = dynamic_cast<VulkanDevice *>(device);
-  if (!vkDevice) {
-    throw std::runtime_error("Device is not a VulkanDevice");
-  }
 
   std::vector<Vertex> vertices = {
       // Front (+Z)
@@ -109,40 +103,45 @@ int main() {
   };
 
   std::cout << "Creating vertex buffer\n";
-  BufferDesc bufferDesc{.size =
-                            static_cast<u64>(vertices.size() * sizeof(Vertex)),
-                        .usage = BufferUsage::Vertex,
-                        .memoryUsage = MemoryUsage::CPUToGPU,
-                        .initialData = vertices.data(),
-                        .debugName = "Cube Vertex Buffer"};
+  BufferHandle vertexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(vertices.size() * sizeof(Vertex)),
+      .usage = BufferUsage::Vertex,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = vertices.data(),
+      .debugName = "Cube Vertex Buffer",
+  });
 
-  BufferHandle vertexBuffer = device->CreateBuffer(bufferDesc);
+  auto vertSpv = ShaderCompiler::CompileFile({
+      .path = "examples/cube/cube.vert",
+      .stage = ShaderStage::Vertex,
+      .entryPoint = "main",
+  });
 
-  auto vertSpv = ShaderCompiler::CompileFile({.path = "examples/cube/cube.vert",
-                                              .stage = ShaderStage::Vertex,
-                                              .entryPoint = "main"});
+  auto fragSpv = ShaderCompiler::CompileFile({
+      .path = "examples/cube/cube.frag",
+      .stage = ShaderStage::Fragment,
+      .entryPoint = "main",
+  });
 
-  auto fragSpv = ShaderCompiler::CompileFile({.path = "examples/cube/cube.frag",
-                                              .stage = ShaderStage::Fragment,
-                                              .entryPoint = "main"});
+  ShaderHandle vertexShader = device->CreateShader({
+      .stage = ShaderStage::Vertex,
+      .bytecode = vertSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<u64>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = vertSpv.reflection,
+      .debugName = "Cube Vertex Shader",
+  });
 
-  ShaderHandle vertexShader =
-      device->CreateShader({.stage = ShaderStage::Vertex,
-                            .bytecode = vertSpv.spirv.data(),
-                            .bytecodeSize = static_cast<u64>(
-                                vertSpv.spirv.size() * sizeof(std::uint32_t)),
-                            .entryPoint = "main",
-                            .reflection = vertSpv.reflection,
-                            .debugName = "Cube Vertex Shader"});
-
-  ShaderHandle fragmentShader =
-      device->CreateShader({.stage = ShaderStage::Fragment,
-                            .bytecode = fragSpv.spirv.data(),
-                            .bytecodeSize = static_cast<u64>(
-                                fragSpv.spirv.size() * sizeof(std::uint32_t)),
-                            .entryPoint = "main",
-                            .reflection = fragSpv.reflection,
-                            .debugName = "Cube Fragment Shader"});
+  ShaderHandle fragmentShader = device->CreateShader({
+      .stage = ShaderStage::Fragment,
+      .bytecode = fragSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<u64>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = fragSpv.reflection,
+      .debugName = "Cube Fragment Shader",
+  });
 
   VertexBufferLayoutDesc vertexLayout{
       .stride = sizeof(Vertex),
@@ -156,9 +155,8 @@ int main() {
                          .location = 1,
                          .format = VertexFormat::Float32x3,
                          .offset = static_cast<u32>(offsetof(Vertex, color)),
-                     }
-
-      }};
+                     }},
+  };
 
   ImageHandle depthImage = device->CreateImage({
       .width = static_cast<u32>(app.GetWindow().GetWidth()),
@@ -178,6 +176,8 @@ int main() {
       .baseMipLevel = 0,
       .mipLevelCount = 1,
       .baseArrayLayer = 0,
+      .arrayLayerCount = 1,
+      .debugName = "Main Depth View",
   });
 
   GraphicsPipelineDesc pipelineDesc{};
@@ -196,6 +196,8 @@ int main() {
   };
   pipelineDesc.debugName = "Cube Pipeline";
 
+  PipelineHandle pipeline = device->CreateGraphicsPipeline(pipelineDesc);
+
   DepthAttachmentDesc depthAttachment{};
   depthAttachment.view = depthView;
   depthAttachment.loadOp = LoadOp::Clear;
@@ -203,14 +205,11 @@ int main() {
   depthAttachment.clearDepth = 1.0f;
   depthAttachment.clearStencil = 0;
 
-  PipelineHandle pipeline = device->CreateGraphicsPipeline(pipelineDesc);
-
   std::cout << "Entering render loop\n";
 
   float time = 0.0f;
   while (!app.GetWindow().ShouldClose()) {
     app.GetWindow().PollEvents();
-
     time += 0.016f;
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
@@ -247,17 +246,33 @@ int main() {
 
     cmd.Begin();
 
-    cmd.SetViewport({.x = 0.0f,
-                     .y = 0.0f,
-                     .width = 1280.0f,
-                     .height = 720.0f,
-                     .minDepth = 0.0f,
-                     .maxDepth = 1.0f});
+    cmd.SetViewport({
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = 1280.0f,
+        .height = 720.0f,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    });
 
-    cmd.SetScissor({.offset = {0, 0}, .extent = {1280, 720}});
+    cmd.SetScissor({
+        .offset = {0, 0},
+        .extent = {1280, 720},
+    });
 
-    vkDevice->TransitionCurrentSwapchainImageForRendering();
-    vkDevice->TransitionImageToDepthAttachment(depthImage);
+    cmd.Barrier({
+        .image = frame.backbufferImage,
+        .oldLayout = ImageLayout::Undefined,
+        .newLayout = ImageLayout::ColorAttachment,
+        .aspect = ImageAspect::Color,
+    });
+
+    cmd.Barrier({
+        .image = depthImage,
+        .oldLayout = ImageLayout::Undefined,
+        .newLayout = ImageLayout::DepthAttachment,
+        .aspect = ImageAspect::Depth,
+    });
 
     cmd.BeginRendering(renderingInfo);
     cmd.BindPipeline(pipeline);
@@ -266,7 +281,12 @@ int main() {
     cmd.Draw(static_cast<u32>(vertices.size()));
     cmd.EndRendering();
 
-    vkDevice->TransitionCurrentSwapchainImageForPresent();
+    cmd.Barrier({
+        .image = frame.backbufferImage,
+        .oldLayout = ImageLayout::ColorAttachment,
+        .newLayout = ImageLayout::Present,
+        .aspect = ImageAspect::Color,
+    });
 
     cmd.End();
 
@@ -281,10 +301,8 @@ int main() {
   device->DestroyBuffer(vertexBuffer);
   device->DestroyShader(fragmentShader);
   device->DestroyShader(vertexShader);
-
   device->DestroyImageView(depthView);
   device->DestroyImage(depthImage);
-
   device->DestroySwapchain(swapchain);
   DestroyDevice(device);
 

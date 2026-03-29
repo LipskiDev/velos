@@ -57,7 +57,81 @@ void VulkanCommandList::Barrier(const BufferBarrier &) {
 }
 
 void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
-  throw std::runtime_error("Image barrier not implemented yet");
+  if (!barrier.image.IsValid()) {
+    throw std::runtime_error("Image barrier requires a valid image handle");
+  }
+
+  const VulkanImage &srcImage = device_.GetImage(barrier.image);
+  VulkanImage &image = const_cast<VulkanImage &>(srcImage);
+
+  VkPipelineStageFlags srcStageMask = 0;
+  VkPipelineStageFlags dstStageMask = 0;
+  VkAccessFlags srcAccessMask = 0;
+  VkAccessFlags dstAccessMask = 0;
+
+  const ImageLayout oldLayout = barrier.oldLayout;
+  const ImageLayout newLayout = barrier.newLayout;
+
+  if (oldLayout == newLayout) {
+    return;
+  }
+
+  // Determine stage/access masks for supported transitions
+  if (oldLayout == ImageLayout::Undefined &&
+      newLayout == ImageLayout::ColorAttachment) {
+    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    srcAccessMask = 0;
+    dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  } else if (oldLayout == ImageLayout::ColorAttachment &&
+             newLayout == ImageLayout::Present) {
+    srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dstAccessMask = 0;
+  } else if (oldLayout == ImageLayout::Undefined &&
+             newLayout == ImageLayout::DepthAttachment) {
+    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    srcAccessMask = 0;
+    dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  } else if (oldLayout == ImageLayout::Undefined &&
+             newLayout == ImageLayout::TransferDst) {
+    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    srcAccessMask = 0;
+    dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  } else if (oldLayout == ImageLayout::TransferDst &&
+             newLayout == ImageLayout::ShaderReadOnly) {
+    srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  } else {
+    throw std::runtime_error("Unsupported image barrier transition");
+  }
+
+  VkImageMemoryBarrier vkBarrier{};
+  vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  vkBarrier.srcAccessMask = srcAccessMask;
+  vkBarrier.dstAccessMask = dstAccessMask;
+  vkBarrier.oldLayout = ToVkImageLayout(oldLayout);
+  vkBarrier.newLayout = ToVkImageLayout(newLayout);
+  vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  vkBarrier.image = image.image;
+  vkBarrier.subresourceRange.aspectMask = ToVkImageAspect(barrier.aspect);
+  vkBarrier.subresourceRange.baseMipLevel = 0;
+  vkBarrier.subresourceRange.levelCount = image.mipLevels;
+  vkBarrier.subresourceRange.baseArrayLayer = 0;
+  vkBarrier.subresourceRange.layerCount = image.arrayLayers;
+
+  vkCmdPipelineBarrier(commandBuffer_, srcStageMask, dstStageMask, 0, 0,
+                       nullptr, 0, nullptr, 1, &vkBarrier);
+
+  image.layout = newLayout;
 }
 
 void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &) {

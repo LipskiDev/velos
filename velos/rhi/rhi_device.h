@@ -33,6 +33,7 @@ struct SwapchainDesc {
 struct FrameBeginResult {
   CommandListHandle commandList{};
   ImageViewHandle backbuffer{};
+  ImageHandle backbufferImage{};
   u32 backbufferIndex = 0;
   bool success = false;
 };

@@ -1203,6 +1203,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
     return FrameBeginResult({
         .commandList = CommandListHandle{},
         .backbuffer = ImageViewHandle{},
+        .backbufferImage = ImageHandle{},
         .backbufferIndex = 0,
         .success = false,
     });
@@ -1211,11 +1212,12 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   if (result == VK_SUBOPTIMAL_KHR) {
     currentBackbufferIndex_ = imageIndex;
 
-    return FrameBeginResult{.commandList = CommandListHandle{1},
-                            .backbuffer =
-                                swapchainImageViewHandles_[imageIndex],
-                            .backbufferIndex = imageIndex,
-                            .success = true};
+    return FrameBeginResult{
+        .commandList = CommandListHandle{1},
+        .backbuffer = swapchainImageViewHandles_[imageIndex],
+        .backbufferImage = swapchainImageHandles_[imageIndex],
+        .backbufferIndex = imageIndex,
+        .success = true};
   }
 
   VK_CHECK(result, "Failed to acquire next swapchain image");
@@ -1224,6 +1226,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
 
   return FrameBeginResult{.commandList = CommandListHandle{1},
                           .backbuffer = swapchainImageViewHandles_[imageIndex],
+                          .backbufferImage = swapchainImageHandles_[imageIndex],
                           .backbufferIndex = imageIndex,
                           .success = true};
 }
