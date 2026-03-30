@@ -1,6 +1,7 @@
 #include "vk_device.h"
 #include "../rhi_device.h"
 #include "rhi/rhi_handles.h"
+#include "rhi/rhi_resources.h"
 #include "rhi/vulkan/vk_common.h"
 #include <cstdint>
 #include <iostream>
@@ -864,12 +865,60 @@ VulkanDevice::GetImageView(ImageViewHandle handle) const {
   return it->second;
 }
 
-SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &) {
-  throw std::runtime_error("CreateSampler not implemented yet");
+SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &desc) {
+  VkSamplerCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  createInfo.magFilter = ToVkFilter(desc.magFilter);
+  createInfo.minFilter = ToVkFilter(desc.minFilter);
+  createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  createInfo.addressModeU = ToVkSamplerAddressMode(desc.addressU);
+  createInfo.addressModeV = ToVkSamplerAddressMode(desc.addressV);
+  createInfo.addressModeW = ToVkSamplerAddressMode(desc.addressW);
+  createInfo.mipLodBias = 0.0f;
+  createInfo.anisotropyEnable = desc.enableAnisotropy ? VK_TRUE : VK_FALSE;
+  createInfo.maxAnisotropy = desc.enableAnisotropy ? desc.maxAnisotropy : 1.0f;
+  createInfo.compareEnable = VK_FALSE;
+  createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+  createInfo.minLod = 0.0f;
+  createInfo.maxLod = 0.0f;
+  createInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+  createInfo.unnormalizedCoordinates = VK_FALSE;
+
+  VkSampler sampler = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateSampler(device_, &createInfo, nullptr, &sampler),
+           "vkCreateSampler: failed to create VkSampler");
+
+  const u32 handleId = nextSamplerHandle_++;
+  samplers_.emplace(handleId, VulkanSampler{.sampler = sampler});
+
+  return SamplerHandle{handleId};
 }
 
-void VulkanDevice::DestroySampler(SamplerHandle) {
-  throw std::runtime_error("DestroySampler not implemented yet");
+void VulkanDevice::DestroySampler(SamplerHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = samplers_.find(handle.id);
+  if (it == samplers_.end()) {
+    return;
+  }
+
+  if (it->second.sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(device_, it->second.sampler, nullptr);
+    it->second.sampler = VK_NULL_HANDLE;
+  }
+
+  samplers_.erase(it);
+}
+
+const VulkanSampler &VulkanDevice::GetSampler(SamplerHandle handle) const {
+  auto it = samplers_.find(handle.id);
+  if (it == samplers_.end()) {
+    throw std::runtime_error("Invalid sampler handle");
+  }
+
+  return it->second;
 }
 
 ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &desc) {
@@ -1076,10 +1125,21 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
     vertexPushConstantRanges.push_back(pcr);
   }
 
+  std::vector<VkDescriptorSetLayout> vkSetLayouts;
+  vkSetLayouts.reserve(desc.layout.descriptorSetLayoutCount);
+
+  for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
+    DescriptorSetLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
+    const VulkanDescriptorSetLayout &vkLayout =
+        descriptorSetLayouts_[handle.id];
+    vkSetLayouts.push_back(vkLayout.layout);
+  }
+
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount = 0;
-  pipelineLayoutInfo.pSetLayouts = nullptr;
+  pipelineLayoutInfo.setLayoutCount = static_cast<u32>(vkSetLayouts.size());
+  pipelineLayoutInfo.pSetLayouts =
+      vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = vertexPushConstantRanges.size();
   pipelineLayoutInfo.pPushConstantRanges = vertexPushConstantRanges.data();
 
@@ -1177,6 +1237,239 @@ const VulkanPipeline &VulkanDevice::GetPipeline(PipelineHandle handle) const {
   }
 
   return it->second;
+}
+
+DescriptorSetLayoutHandle
+VulkanDevice::CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) {
+  std::vector<VkDescriptorSetLayoutBinding> vkBindings;
+  vkBindings.reserve(desc.bindingCount);
+
+  for (u32 i = 0; i < desc.bindingCount; ++i) {
+    const DescriptorBindingDesc &binding = desc.bindings[i];
+
+    VkDescriptorSetLayoutBinding vkBinding{};
+    vkBinding.binding = binding.binding;
+    vkBinding.descriptorType = ToVkDescriptorType(binding.type);
+    vkBinding.descriptorCount = binding.count;
+    vkBinding.stageFlags = ToVkShaderStageFlags(binding.visibility);
+    vkBinding.pImmutableSamplers = nullptr;
+
+    vkBindings.push_back(vkBinding);
+  }
+
+  VkDescriptorSetLayoutCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  createInfo.bindingCount = static_cast<u32>(vkBindings.size());
+  createInfo.pBindings = vkBindings.data();
+
+  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+  VK_CHECK(
+      vkCreateDescriptorSetLayout(device_, &createInfo, nullptr, &layout),
+      "vkCreateDescriptorSetLayout: failed to create Descriptor Set Layout");
+
+  const u32 handleId = nextDescriptorSetLayoutHandle_++;
+
+  descriptorSetLayouts_.emplace(handleId,
+                                VulkanDescriptorSetLayout{.layout = layout});
+
+  return DescriptorSetLayoutHandle{handleId};
+}
+
+void VulkanDevice::DestroyDescriptorSetLayout(
+    DescriptorSetLayoutHandle handle) {
+  if (!handle.IsValid()) {
+    return;
+  }
+
+  auto it = descriptorSetLayouts_.find(handle.id);
+  if (it == descriptorSetLayouts_.end()) {
+    return;
+  }
+
+  if (it->second.layout != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, it->second.layout, nullptr);
+    it->second.layout = VK_NULL_HANDLE;
+  }
+
+  descriptorSetLayouts_.erase(it);
+}
+
+const VulkanDescriptorSetLayout &
+VulkanDevice::GetDescriptorSetLayout(DescriptorSetLayoutHandle handle) const {
+  auto it = descriptorSetLayouts_.find(handle.id);
+  if (it == descriptorSetLayouts_.end()) {
+    throw std::runtime_error("Invalid shader handle");
+  }
+
+  return it->second;
+}
+
+DescriptorPoolHandle
+VulkanDevice::CreateDescriptorPool(const DescriptorPoolDesc &desc) {
+  std::vector<VkDescriptorPoolSize> vkPoolSizes;
+  vkPoolSizes.reserve(desc.poolSizeCount);
+
+  for (u32 i = 0; i < desc.poolSizeCount; ++i) {
+    const DescriptorPoolSize &size = desc.poolSizes[i];
+
+    VkDescriptorPoolSize vkSize{};
+    vkSize.type = ToVkDescriptorType(size.type);
+    vkSize.descriptorCount = size.count;
+    vkPoolSizes.push_back(vkSize);
+  }
+
+  VkDescriptorPoolCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  createInfo.poolSizeCount = static_cast<u32>(vkPoolSizes.size());
+  createInfo.pPoolSizes = vkPoolSizes.data();
+  createInfo.maxSets = desc.maxSets;
+  createInfo.flags = 0;
+
+  VkDescriptorPool pool = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateDescriptorPool(device_, &createInfo, nullptr, &pool),
+           "vkCreateDescriptorPool: failed to create Descriptor Pool");
+  const u32 handleId = nextDescriptorPoolHandle_;
+
+  descriptorPools_.emplace(handleId, VulkanDescriptorPool{.pool = pool});
+
+  return DescriptorPoolHandle{handleId};
+}
+
+void VulkanDevice::DestroyDescriptorPool(DescriptorPoolHandle handle) {
+  if (!handle) {
+    return;
+  }
+
+  auto it = descriptorPools_.find(handle.id);
+  if (it == descriptorPools_.end()) {
+    return;
+  }
+
+  if (it->second.pool != VK_NULL_HANDLE) {
+    vkDestroyDescriptorPool(device_, it->second.pool, nullptr);
+    it->second.pool = VK_NULL_HANDLE;
+  }
+
+  descriptorPools_.erase(it);
+}
+
+const VulkanDescriptorPool &
+VulkanDevice::GetDescriptorPool(DescriptorPoolHandle handle) const {
+  auto it = descriptorPools_.find(handle.id);
+  if (it == descriptorPools_.end()) {
+    throw std::runtime_error("Invalid shader handle");
+  }
+
+  return it->second;
+}
+
+DescriptorSetHandle
+VulkanDevice::AllocateDescriptorSet(DescriptorPoolHandle poolHandle,
+                                    DescriptorSetLayoutHandle layoutHandle,
+                                    const char *debugName) {
+  VulkanDescriptorPool &vkPool = descriptorPools_[poolHandle.id];
+  VulkanDescriptorSetLayout &vkLayout = descriptorSetLayouts_[layoutHandle.id];
+
+  VkDescriptorSetAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocInfo.descriptorPool = vkPool.pool;
+  allocInfo.descriptorSetCount = 1;
+  allocInfo.pSetLayouts = &vkLayout.layout;
+
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  VK_CHECK(vkAllocateDescriptorSets(device_, &allocInfo, &set),
+           "vkAllocateDescriptorSets: failed to allocate Descriptor Sets");
+
+  u32 handleId = nextDescriptorSetHandle_++;
+  descriptorSets_.emplace(handleId, VulkanDescriptorSet{
+                                        .set = set,
+                                        .layout = layoutHandle,
+                                        .pool = poolHandle,
+                                    });
+
+  return DescriptorSetHandle{handleId};
+}
+
+void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
+  if (!desc.dstSet) {
+    throw std::runtime_error(
+        "UpdateDescriptorSet: invalid destination descriptor set");
+  }
+
+  VulkanDescriptorSet &vkSet = descriptorSets_[desc.dstSet.id];
+
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = vkSet.set;
+  write.dstBinding = desc.binding;
+  write.dstArrayElement = desc.arrayElement;
+  write.descriptorCount = desc.descriptorCount;
+  write.descriptorType = ToVkDescriptorType(desc.type);
+
+  VkDescriptorBufferInfo vkBufferInfo{};
+  VkDescriptorImageInfo vkImageInfo{};
+
+  switch (desc.type) {
+  case DescriptorType::UniformBuffer: {
+    if (desc.bufferInfo == nullptr) {
+      throw std::runtime_error(
+          "UpdateDescriptorSet: bufferInfo is null for UniformBuffer");
+    }
+
+    const DescriptorBufferInfo &bufferInfo = *desc.bufferInfo;
+    const VulkanBuffer &vkBuffer = GetBuffer(bufferInfo.buffer);
+
+    vkBufferInfo.buffer = vkBuffer.buffer;
+    vkBufferInfo.offset = bufferInfo.offset;
+    vkBufferInfo.range = bufferInfo.range;
+
+    write.pBufferInfo = &vkBufferInfo;
+    break;
+  }
+
+  case DescriptorType::CombinedImageSampler: {
+    if (desc.imageInfo == nullptr) {
+      throw std::runtime_error(
+          "UpdateDescriptorSet: imageInfo is null for CombinedImageSampler");
+    }
+
+    const DescriptorImageInfo &imageInfo = *desc.imageInfo;
+    const VulkanSampler &vkSampler = GetSampler(imageInfo.sampler);
+    const VulkanImageView &vkImageView = GetImageView(imageInfo.imageView);
+
+    vkImageInfo.sampler = vkSampler.sampler;
+    vkImageInfo.imageView = vkImageView.view;
+    vkImageInfo.imageLayout = ToVkImageLayout(imageInfo.imageLayout);
+
+    write.pImageInfo = &vkImageInfo;
+    break;
+  }
+
+  default:
+    throw std::runtime_error(
+        "UpdateDescriptorSet: unsupported descriptor type");
+  }
+
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+}
+
+const VulkanDescriptorSet &
+VulkanDevice::GetDescriptorSet(DescriptorSetHandle handle) const {
+  auto it = descriptorSets_.find(handle.id);
+  if (it == descriptorSets_.end()) {
+    throw std::runtime_error("Invalid shader handle");
+  }
+
+  return it->second;
+}
+
+ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle) const {
+  if (!imageHandle.IsValid()) {
+    throw std::runtime_error("GetImageLayout: invalid image handle");
+  }
+
+  const VulkanImage &image = GetImage(imageHandle);
+  return image.layout;
 }
 
 FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {

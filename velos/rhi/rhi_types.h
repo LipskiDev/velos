@@ -135,14 +135,41 @@ enum class ResourceState {
   Present,
 };
 
+enum class Filter {
+  Nearest,
+  Linear,
+};
+
+enum class SamplerAddressMode {
+  Repeat,
+  ClampToEdge,
+};
+
+enum class DescriptorType {
+  UniformBuffer,
+  CombinedImageSampler,
+};
+
 struct Extent2D {
   u32 width = 0;
   u32 height = 0;
 };
 
+struct Extent3D {
+  u32 width = 0;
+  u32 height = 0;
+  u32 depth = 0;
+};
+
 struct Offset2D {
   i32 x = 0;
   i32 y = 0;
+};
+
+struct Offset3D {
+  i32 x = 0;
+  i32 y = 0;
+  i32 z = 0;
 };
 
 struct Rect2D {
@@ -169,6 +196,11 @@ struct ClearColor {
 struct ClearDepthStencil {
   float depth = 1.0f;
   u32 stencil = 0;
+};
+
+struct DescriptorPoolSize {
+  DescriptorType type = DescriptorType::UniformBuffer;
+  u32 count = 0;
 };
 
 } // namespace Velos::RHI

@@ -75,8 +75,14 @@ public:
   virtual void BindUniformBuffer(u32 binding, BufferHandle buffer, u64 offset,
                                  u64 size) = 0;
 
+  virtual void BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
+                                 DescriptorSetHandle descriptorSet) = 0;
+
   virtual void PushConstants(ShaderStage stages, u32 offset, u32 size,
                              const void *data) = 0;
+
+  virtual void CopyBufferToImage(BufferHandle src, ImageHandle dst,
+                                 const BufferImageCopyRegion &region) = 0;
 
   virtual void Draw(u32 vertexCount, u32 firstVertex = 0) = 0;
   virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0,

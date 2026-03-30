@@ -1,5 +1,6 @@
 #include "rhi/vulkan/vk_command_list.h"
 #include "rhi/rhi_command_list.h"
+#include "rhi/rhi_device.h"
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_device.h"
 
@@ -109,6 +110,12 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
     dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  } else if (oldLayout == ImageLayout::Present &&
+             newLayout == ImageLayout::ColorAttachment) {
+    srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    srcAccessMask = 0;
+    dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   } else {
     throw std::runtime_error("Unsupported image barrier transition");
   }
@@ -308,6 +315,47 @@ void VulkanCommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
   vkCmdPushConstants(commandBuffer_, vkPipeline.layout, ToVkShaderStage(stage),
                      offset, size, data);
 }
+
+void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
+                                          DescriptorSetHandle descriptorSet) {
+  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+  const VulkanDescriptorSet &vkDescriptorSet =
+      device_.GetDescriptorSet(descriptorSet);
+
+  VkDescriptorSet set = vkDescriptorSet.set;
+
+  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          vkPipeline.layout, setIndex, 1, &set, 0, nullptr);
+}
+
+void VulkanCommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
+                                          const BufferImageCopyRegion &region) {
+  const VulkanBuffer &vkBuffer = device_.GetBuffer(src);
+  const VulkanImage &vkImage = device_.GetImage(dst);
+
+  VkBufferImageCopy vkRegion{};
+  vkRegion.bufferOffset = region.bufferOffset;
+  vkRegion.bufferRowLength = region.bufferRowLength;
+  vkRegion.bufferImageHeight = region.bufferImageHeight;
+
+  vkRegion.imageSubresource.aspectMask = ToVkImageAspect(region.aspect);
+  vkRegion.imageSubresource.mipLevel = region.mipLevel;
+  vkRegion.imageSubresource.baseArrayLayer = region.baseArrayLayer;
+  vkRegion.imageSubresource.layerCount = region.layerCount;
+
+  vkRegion.imageOffset = {static_cast<int32_t>(region.imageOffset.x),
+                          static_cast<int32_t>(region.imageOffset.y),
+                          static_cast<int32_t>(region.imageOffset.z)};
+
+  vkRegion.imageExtent = {
+      region.imageExtent.width,
+      region.imageExtent.height,
+      region.imageExtent.depth,
+  };
+
+  vkCmdCopyBufferToImage(commandBuffer_, vkBuffer.buffer, vkImage.image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &vkRegion);
+};
 
 void VulkanCommandList::Draw(u32 vertexCount, u32 firstVertex) {
   vkCmdDraw(commandBuffer_, vertexCount, 1, firstVertex, 0);

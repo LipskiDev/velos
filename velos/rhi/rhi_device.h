@@ -20,16 +20,6 @@ struct DeviceDesc {
   const char *applicationName = "Velos";
 };
 
-struct SwapchainDesc {
-  void *windowHandle = nullptr;
-  u32 width = 0;
-  u32 height = 0;
-  Format format = Format::BGRA8_UNORM;
-  u32 bufferCount = 2;
-  bool vsync = true;
-  const char *debugName = nullptr;
-};
-
 struct FrameBeginResult {
   CommandListHandle commandList{};
   ImageViewHandle backbuffer{};
@@ -67,6 +57,22 @@ public:
   virtual PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) = 0;
   virtual void DestroyPipeline(PipelineHandle handle) = 0;
+
+  virtual DescriptorSetLayoutHandle
+  CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) = 0;
+  virtual void DestroyDescriptorSetLayout(DescriptorSetLayoutHandle handle) = 0;
+
+  virtual DescriptorPoolHandle
+  CreateDescriptorPool(const DescriptorPoolDesc &desc) = 0;
+  virtual void DestroyDescriptorPool(DescriptorPoolHandle handle) = 0;
+  virtual DescriptorSetHandle
+  AllocateDescriptorSet(DescriptorPoolHandle pool,
+                        DescriptorSetLayoutHandle layout,
+                        const char *debugName = nullptr) = 0;
+
+  virtual void UpdateDescriptorSet(const WriteDescriptorDesc &desc) = 0;
+
+  virtual ImageLayout GetImageLayout(ImageHandle image) const = 0;
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;
   virtual ICommandList &GetCommandList(CommandListHandle handle) = 0;

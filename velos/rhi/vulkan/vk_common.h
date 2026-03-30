@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
 inline void VK_CHECK(VkResult result, const char *message) {
@@ -275,5 +276,54 @@ inline ImageAspect DefaultImageAspectFromFormat(Format format) {
   default:
     return ImageAspect::None;
   }
+}
+
+inline VkFilter ToVkFilter(Filter filter) {
+  switch (filter) {
+  case Filter::Nearest:
+    return VK_FILTER_NEAREST;
+  case Filter::Linear:
+    return VK_FILTER_LINEAR;
+  default:
+    return VK_FILTER_LINEAR;
+  }
+}
+
+inline VkSamplerAddressMode ToVkSamplerAddressMode(SamplerAddressMode mode) {
+  switch (mode) {
+  case SamplerAddressMode::Repeat:
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  case SamplerAddressMode::ClampToEdge:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  default:
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  }
+}
+
+inline VkDescriptorType ToVkDescriptorType(DescriptorType type) {
+  switch (type) {
+  case DescriptorType::UniformBuffer:
+    return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  case DescriptorType::CombinedImageSampler:
+    return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  default:
+    return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+  }
+}
+
+inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stage) {
+  VkShaderStageFlags flags = 0;
+
+  if ((stage & ShaderStage::Vertex) == ShaderStage::Vertex) {
+    flags |= VK_SHADER_STAGE_VERTEX_BIT;
+  }
+  if ((stage & ShaderStage::Fragment) == ShaderStage::Fragment) {
+    flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+  }
+  if ((stage & ShaderStage::Compute) == ShaderStage::Compute) {
+    flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+  }
+
+  return flags;
 }
 } // namespace Velos::RHI

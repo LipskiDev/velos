@@ -29,6 +29,16 @@ struct ImageDesc {
   const char *debugName = nullptr;
 };
 
+struct SwapchainDesc {
+  void *windowHandle = nullptr;
+  u32 width = 0;
+  u32 height = 0;
+  Format format = Format::BGRA8_UNORM;
+  u32 bufferCount = 2;
+  bool vsync = true;
+  const char *debugName = nullptr;
+};
+
 struct ImageViewDesc {
   ImageHandle image;
   Format format = Format::Undefined;
@@ -43,6 +53,14 @@ struct ImageViewDesc {
 };
 
 struct SamplerDesc {
+  Filter minFilter = Filter::Linear;
+  Filter magFilter = Filter::Linear;
+  SamplerAddressMode addressU = SamplerAddressMode::Repeat;
+  SamplerAddressMode addressV = SamplerAddressMode::Repeat;
+  SamplerAddressMode addressW = SamplerAddressMode::Repeat;
+  bool enableAnisotropy = false;
+  float maxAnisotropy = 1.0f;
+
   const char *debugName = nullptr;
 };
 
@@ -60,5 +78,64 @@ struct BufferUpdateDesc {
   u64 offset = 0;
   const void *data = nullptr;
   u64 size = 0;
+};
+
+struct BufferImageCopyRegion {
+  u64 bufferOffset = 0;
+
+  u32 bufferRowLength = 0;
+  u32 bufferImageHeight = 0;
+
+  u32 mipLevel = 0;
+  u32 baseArrayLayer = 0;
+  u32 layerCount = 1;
+
+  Offset3D imageOffset = {0, 0, 0};
+  Extent3D imageExtent = {1, 1, 1};
+
+  ImageAspect aspect = ImageAspect::Color;
+};
+
+struct DescriptorBindingDesc {
+  u32 binding = 0;
+  DescriptorType type = DescriptorType::UniformBuffer;
+  u32 count = 1;
+  ShaderStage visibility = ShaderStage::Vertex;
+};
+
+struct DescriptorSetLayoutDesc {
+  const DescriptorBindingDesc *bindings = nullptr;
+  u32 bindingCount = 0;
+  const char *debugName = nullptr;
+};
+
+struct DescriptorPoolDesc {
+  const DescriptorPoolSize *poolSizes = nullptr;
+  u32 poolSizeCount = 0;
+  u32 maxSets = 0;
+  const char *debugName = nullptr;
+};
+
+struct DescriptorBufferInfo {
+  BufferHandle buffer;
+  u64 offset = 0;
+  u64 range = 0;
+};
+
+struct DescriptorImageInfo {
+  SamplerHandle sampler;
+  ImageViewHandle imageView;
+  ImageLayout imageLayout = ImageLayout::ShaderReadOnly;
+};
+
+struct WriteDescriptorDesc {
+  DescriptorSetHandle dstSet;
+  u32 binding = 0;
+  u32 arrayElement = 0;
+  DescriptorType type = DescriptorType::UniformBuffer;
+
+  const DescriptorBufferInfo *bufferInfo = nullptr;
+  const DescriptorImageInfo *imageInfo = nullptr;
+  u32 descriptorCount = 1;
 };
 }; // namespace Velos::RHI

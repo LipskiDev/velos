@@ -3,6 +3,7 @@
 #include "../rhi_device.h"
 #include "core/types.h"
 #include "rhi/rhi_handles.h"
+#include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 #include "shader/shader_compiler.h"
 #include "vk_command_list.h"
@@ -69,6 +70,24 @@ struct VulkanBuffer {
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
 };
 
+struct VulkanSampler {
+  VkSampler sampler = VK_NULL_HANDLE;
+};
+
+struct VulkanDescriptorSetLayout {
+  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+};
+
+struct VulkanDescriptorPool {
+  VkDescriptorPool pool = VK_NULL_HANDLE;
+};
+
+struct VulkanDescriptorSet {
+  VkDescriptorSet set = VK_NULL_HANDLE;
+  DescriptorSetLayoutHandle layout;
+  DescriptorPoolHandle pool;
+};
+
 class VulkanDevice final : public IDevice {
 public:
   explicit VulkanDevice(const DeviceDesc &desc);
@@ -94,6 +113,7 @@ public:
 
   SamplerHandle CreateSampler(const SamplerDesc &desc) override;
   void DestroySampler(SamplerHandle handle) override;
+  const VulkanSampler &GetSampler(SamplerHandle handle) const;
 
   ShaderHandle CreateShader(const ShaderDesc &desc) override;
   void DestroyShader(ShaderHandle handle) override;
@@ -103,6 +123,27 @@ public:
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
   const VulkanPipeline &GetPipeline(PipelineHandle handle) const;
+
+  DescriptorSetLayoutHandle
+  CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) override;
+  void DestroyDescriptorSetLayout(DescriptorSetLayoutHandle handle) override;
+  const VulkanDescriptorSetLayout &
+  GetDescriptorSetLayout(DescriptorSetLayoutHandle handle) const;
+
+  DescriptorPoolHandle
+  CreateDescriptorPool(const DescriptorPoolDesc &desc) override;
+  void DestroyDescriptorPool(DescriptorPoolHandle handle) override;
+  const VulkanDescriptorPool &
+  GetDescriptorPool(DescriptorPoolHandle handle) const;
+  DescriptorSetHandle
+  AllocateDescriptorSet(DescriptorPoolHandle poolHandle,
+                        DescriptorSetLayoutHandle layoutHandle,
+                        const char *debugName) override;
+
+  void UpdateDescriptorSet(const WriteDescriptorDesc &desc) override;
+  const VulkanDescriptorSet &GetDescriptorSet(DescriptorSetHandle handle) const;
+
+  ImageLayout GetImageLayout(ImageHandle image) const override;
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
   ICommandList &GetCommandList(CommandListHandle handle) override;
@@ -178,5 +219,17 @@ private:
 
   u32 nextImageViewHandle_ = 1;
   std::unordered_map<u32, VulkanImageView> imageViews_;
+
+  u32 nextSamplerHandle_ = 1;
+  std::unordered_map<u32, VulkanSampler> samplers_;
+
+  u32 nextDescriptorSetLayoutHandle_ = 1;
+  std::unordered_map<u32, VulkanDescriptorSetLayout> descriptorSetLayouts_;
+
+  u32 nextDescriptorPoolHandle_ = 1;
+  std::unordered_map<u32, VulkanDescriptorPool> descriptorPools_;
+
+  u32 nextDescriptorSetHandle_ = 1;
+  std::unordered_map<u32, VulkanDescriptorSet> descriptorSets_;
 };
 } // namespace Velos::RHI

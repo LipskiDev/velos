@@ -32,24 +32,9 @@ struct PushConstantRangeDesc {
   u32 size = 0;
 };
 
-enum class DescriptorType {
-  UniformBuffer,
-  StorageBuffer,
-  SampledTexture,
-  Sampler,
-  StorageTexture,
-};
-
-struct BindingDesc {
-  u32 binding = 0;
-  DescriptorType type = DescriptorType::UniformBuffer;
-  u32 count = 1;
-  ShaderStage stages = ShaderStage::None;
-};
-
 struct PipelineLayoutDesc {
-  std::span<const BindingDesc> bindings;
-  std::span<const PushConstantRangeDesc> pushConstants;
+  const DescriptorSetLayoutHandle *descriptorSetLayouts = nullptr;
+  u32 descriptorSetLayoutCount = 0;
 };
 
 struct RasterStateDesc {
