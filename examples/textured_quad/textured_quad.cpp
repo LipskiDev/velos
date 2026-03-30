@@ -32,7 +32,7 @@ int main() {
   Application app({
       .width = 1280,
       .height = 720,
-      .title = "Velos Textured Quad Indexed",
+      .title = "Velos Textured Quad",
       .resizable = false,
   });
 
@@ -40,7 +40,7 @@ int main() {
   IDevice *device = CreateDevice({
       .backend = BackendAPI::Vulkan,
       .enableValidation = true,
-      .applicationName = "Velos Textured Quad Indexed",
+      .applicationName = "Velos Textured Quad",
   });
 
   std::cout << "Creating swapchain\n";
@@ -83,7 +83,7 @@ int main() {
       .debugName = "Quad Index Buffer",
   });
 
-  std::cout << "Loading texture with stb_image\n";
+  std::cout << "Loading transparent texture with stb_image\n";
   stbi_set_flip_vertically_on_load(1);
 
   int texWidth = 0;
@@ -94,7 +94,8 @@ int main() {
                 &texChannels, STBI_rgb_alpha);
 
   if (!pixels) {
-    throw std::runtime_error("Failed to load texture.png with stb_image");
+    throw std::runtime_error(
+        "Failed to load transparent_test.png with stb_image");
   }
 
   const u64 imageSize =
@@ -156,7 +157,7 @@ int main() {
   DescriptorSetLayoutHandle setLayout = device->CreateDescriptorSetLayout({
       .bindings = bindings,
       .bindingCount = 1,
-      .debugName = "Textured Quad Set Layout",
+      .debugName = "Blending Test Set Layout",
   });
 
   std::cout << "Creating descriptor pool\n";
@@ -171,12 +172,12 @@ int main() {
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
-      .debugName = "Textured Quad Descriptor Pool",
+      .debugName = "Blending Test Descriptor Pool",
   });
 
   std::cout << "Allocating descriptor set\n";
   DescriptorSetHandle descriptorSet = device->AllocateDescriptorSet(
-      descriptorPool, setLayout, "Textured Quad Set");
+      descriptorPool, setLayout, "Blending Test Set");
 
   std::cout << "Updating descriptor set\n";
   DescriptorImageInfo imageInfo{};
@@ -213,7 +214,7 @@ int main() {
           static_cast<u64>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
       .entryPoint = "main",
       .reflection = vertSpv.reflection,
-      .debugName = "Textured Quad Vertex Shader",
+      .debugName = "Blending Test Vertex Shader",
   });
 
   ShaderHandle fragmentShader = device->CreateShader({
@@ -223,7 +224,7 @@ int main() {
           static_cast<u64>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
       .entryPoint = "main",
       .reflection = fragSpv.reflection,
-      .debugName = "Textured Quad Fragment Shader",
+      .debugName = "Blending Test Fragment Shader",
   });
 
   VertexBufferLayoutDesc vertexLayout{
@@ -253,8 +254,17 @@ int main() {
   pipelineDesc.raster.cullBackFaces = false;
   pipelineDesc.raster.frontFaceCCW = true;
   pipelineDesc.raster.wireframe = false;
+  pipelineDesc.blend = {
+      .enable = true,
+      .srcColor = BlendFactor::SrcAlpha,
+      .dstColor = BlendFactor::OneMinusSrcAlpha,
+      .colorOp = BlendOp::Add,
+      .srcAlpha = BlendFactor::One,
+      .dstAlpha = BlendFactor::OneMinusSrcAlpha,
+      .alphaOp = BlendOp::Add,
+  };
   pipelineDesc.colorFormat = Format::BGRA8_UNORM;
-  pipelineDesc.debugName = "Textured Quad Pipeline";
+  pipelineDesc.debugName = "Blending Test Pipeline";
 
   std::cout << "Creating pipeline\n";
   PipelineHandle pipeline = device->CreateGraphicsPipeline(pipelineDesc);
@@ -341,7 +351,7 @@ int main() {
     colorAttachment.view = frame.backbuffer;
     colorAttachment.loadOp = LoadOp::Clear;
     colorAttachment.storeOp = StoreOp::Store;
-    colorAttachment.clearValue = {0.08f, 0.08f, 0.12f, 1.0f};
+    colorAttachment.clearValue = {0.1f, 0.2f, 0.35f, 1.0f};
 
     RenderingInfo renderingInfo{};
     renderingInfo.renderArea = {{0, 0}, {1280, 720}};
