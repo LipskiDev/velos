@@ -51,6 +51,14 @@ struct DepthStateDesc {
 
 struct BlendStateDesc {
   bool enable = false;
+
+  BlendFactor srcColor = BlendFactor::SrcAlpha;
+  BlendFactor dstColor = BlendFactor::OneMinusSrcAlpha;
+  BlendOp colorOp = BlendOp::Add;
+
+  BlendFactor srcAlpha = BlendFactor::One;
+  BlendFactor dstAlpha = BlendFactor::OneMinusSrcAlpha;
+  BlendOp alphaOp = BlendOp::Add;
 };
 
 struct GraphicsPipelineDesc {

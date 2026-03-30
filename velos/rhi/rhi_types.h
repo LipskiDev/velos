@@ -150,6 +150,37 @@ enum class DescriptorType {
   CombinedImageSampler,
 };
 
+enum class BlendFactor {
+  Zero,
+  One,
+
+  SrcColor,
+  OneMinusSrcColor,
+
+  DstColor,
+  OneMinusDstColor,
+
+  SrcAlpha,
+  OneMinusSrcAlpha,
+
+  DstAlpha,
+  OneMinusDstAlpha,
+
+  ConstantColor,
+  OneMinusConstantColor,
+
+  ConstantAlpha,
+  OneMinusConstantAlpha,
+};
+
+enum class BlendOp {
+  Add,
+  Subtract,
+  ReverseSubtract,
+  Min,
+  Max,
+};
+
 struct Extent2D {
   u32 width = 0;
   u32 height = 0;

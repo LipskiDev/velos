@@ -1080,12 +1080,28 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   VkPipelineColorBlendAttachmentState colorBlendAttachment{};
   colorBlendAttachment.blendEnable = desc.blend.enable ? VK_TRUE : VK_FALSE;
-  colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-  colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-  colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-  colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+  if (desc.blend.enable) {
+    colorBlendAttachment.srcColorBlendFactor =
+        ToVkBlendFactor(desc.blend.srcColor);
+    colorBlendAttachment.dstColorBlendFactor =
+        ToVkBlendFactor(desc.blend.dstColor);
+    colorBlendAttachment.colorBlendOp = ToVkBlendOp(desc.blend.colorOp);
+
+    colorBlendAttachment.srcAlphaBlendFactor =
+        ToVkBlendFactor(desc.blend.srcAlpha);
+    colorBlendAttachment.dstAlphaBlendFactor =
+        ToVkBlendFactor(desc.blend.dstAlpha);
+    colorBlendAttachment.alphaBlendOp = ToVkBlendOp(desc.blend.alphaOp);
+  } else {
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  }
   colorBlendAttachment.colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1170,7 +1186,8 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   renderingInfo.colorAttachmentCount = 1;
   renderingInfo.pColorAttachmentFormats = &colorFormat;
-  renderingInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+  renderingInfo.depthAttachmentFormat =
+      desc.depth.depthTestEnable ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
   renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
   VkGraphicsPipelineCreateInfo pipelineInfo{};

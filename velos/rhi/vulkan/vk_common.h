@@ -337,4 +337,64 @@ inline VkIndexType ToVkIndexType(IndexType type) {
     throw std::runtime_error("Unsupported IndexType");
   }
 }
+
+inline VkBlendFactor ToVkBlendFactor(BlendFactor factor) {
+  switch (factor) {
+  case BlendFactor::Zero:
+    return VK_BLEND_FACTOR_ZERO;
+  case BlendFactor::One:
+    return VK_BLEND_FACTOR_ONE;
+
+  case BlendFactor::SrcColor:
+    return VK_BLEND_FACTOR_SRC_COLOR;
+  case BlendFactor::OneMinusSrcColor:
+    return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+
+  case BlendFactor::DstColor:
+    return VK_BLEND_FACTOR_DST_COLOR;
+  case BlendFactor::OneMinusDstColor:
+    return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+
+  case BlendFactor::SrcAlpha:
+    return VK_BLEND_FACTOR_SRC_ALPHA;
+  case BlendFactor::OneMinusSrcAlpha:
+    return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
+  case BlendFactor::DstAlpha:
+    return VK_BLEND_FACTOR_DST_ALPHA;
+  case BlendFactor::OneMinusDstAlpha:
+    return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+
+  case BlendFactor::ConstantColor:
+    return VK_BLEND_FACTOR_CONSTANT_COLOR;
+  case BlendFactor::OneMinusConstantColor:
+    return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+
+  case BlendFactor::ConstantAlpha:
+    return VK_BLEND_FACTOR_CONSTANT_ALPHA;
+  case BlendFactor::OneMinusConstantAlpha:
+    return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+
+  default:
+    throw std::runtime_error("Unsupported BlendFactor");
+  }
+}
+
+inline VkBlendOp ToVkBlendOp(BlendOp op) {
+  switch (op) {
+  case BlendOp::Add:
+    return VK_BLEND_OP_ADD;
+  case BlendOp::Subtract:
+    return VK_BLEND_OP_SUBTRACT;
+  case BlendOp::ReverseSubtract:
+    return VK_BLEND_OP_REVERSE_SUBTRACT;
+  case BlendOp::Min:
+    return VK_BLEND_OP_MIN;
+  case BlendOp::Max:
+    return VK_BLEND_OP_MAX;
+
+  default:
+    throw std::runtime_error("Unsupported BlendOp");
+  }
+}
 } // namespace Velos::RHI
