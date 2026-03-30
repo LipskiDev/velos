@@ -32,7 +32,7 @@ int main() {
   Application app({
       .width = 1280,
       .height = 720,
-      .title = "Velos Textured Quad",
+      .title = "Velos Textured Quad Indexed",
       .resizable = false,
   });
 
@@ -40,7 +40,7 @@ int main() {
   IDevice *device = CreateDevice({
       .backend = BackendAPI::Vulkan,
       .enableValidation = true,
-      .applicationName = "Velos Textured Quad",
+      .applicationName = "Velos Textured Quad Indexed",
   });
 
   std::cout << "Creating swapchain\n";
@@ -55,11 +55,14 @@ int main() {
   });
 
   std::vector<Vertex> vertices = {
-      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f}},
-      {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
+      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}}, // 0
+      {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f}},  // 1
+      {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},   // 2
+      {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}},  // 3
+  };
 
-      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}}, {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
-      {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}},
+  std::vector<std::uint16_t> indices = {
+      0, 1, 2, 0, 2, 3,
   };
 
   std::cout << "Creating vertex buffer\n";
@@ -69,6 +72,15 @@ int main() {
       .memoryUsage = MemoryUsage::CPUToGPU,
       .initialData = vertices.data(),
       .debugName = "Quad Vertex Buffer",
+  });
+
+  std::cout << "Creating index buffer\n";
+  BufferHandle indexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(indices.size() * sizeof(std::uint16_t)),
+      .usage = BufferUsage::Index,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = indices.data(),
+      .debugName = "Quad Index Buffer",
   });
 
   std::cout << "Loading texture with stb_image\n";
@@ -347,8 +359,9 @@ int main() {
     cmd.BindPipeline(pipeline);
     cmd.BindDescriptorSet(pipeline, 0, descriptorSet);
     cmd.BindVertexBuffer(0, vertexBuffer, 0);
+    cmd.BindIndexBuffer(indexBuffer, IndexType::U16, 0);
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(glm::mat4), &mvp);
-    cmd.Draw(static_cast<u32>(vertices.size()));
+    cmd.DrawIndexed(static_cast<u32>(indices.size()));
     cmd.EndRendering();
 
     cmd.Barrier({
@@ -376,6 +389,7 @@ int main() {
   device->DestroyImageView(textureView);
   device->DestroyImage(textureImage);
   device->DestroyBuffer(stagingBuffer);
+  device->DestroyBuffer(indexBuffer);
   device->DestroyBuffer(vertexBuffer);
   device->DestroySwapchain(swapchain);
   DestroyDevice(device);

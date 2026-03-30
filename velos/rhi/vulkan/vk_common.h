@@ -326,4 +326,15 @@ inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stage) {
 
   return flags;
 }
+
+inline VkIndexType ToVkIndexType(IndexType type) {
+  switch (type) {
+  case IndexType::U16:
+    return VK_INDEX_TYPE_UINT16;
+  case IndexType::U32:
+    return VK_INDEX_TYPE_UINT32;
+  default:
+    throw std::runtime_error("Unsupported IndexType");
+  }
+}
 } // namespace Velos::RHI

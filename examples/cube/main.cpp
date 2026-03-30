@@ -30,7 +30,7 @@ int main() {
   Application app({
       .width = 1280,
       .height = 720,
-      .title = "Velos Cube",
+      .title = "Velos Cube Indexed",
       .resizable = false,
   });
 
@@ -38,7 +38,7 @@ int main() {
   IDevice *device = CreateDevice({
       .backend = BackendAPI::Vulkan,
       .enableValidation = true,
-      .applicationName = "Velos Cube",
+      .applicationName = "Velos Cube Indexed",
   });
 
   std::cout << "Creating swapchain\n";
@@ -53,53 +53,72 @@ int main() {
   });
 
   std::vector<Vertex> vertices = {
-      // Front (+Z)
+      // 0: front-bottom-left
       {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+      // 1: front-bottom-right
       {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+      // 2: front-top-right
       {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-      {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
-      {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+      // 3: front-top-left
       {{-0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
+      // 4: back-bottom-left
+      {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
+      // 5: back-bottom-right
+      {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}},
+      // 6: back-top-right
+      {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+      // 7: back-top-left
+      {{-0.5f, 0.5f, -0.5f}, {0.3f, 0.3f, 1.0f}},
+  };
+
+  std::vector<std::uint16_t> indices = {
+      // Front (+Z)
+      0,
+      1,
+      2,
+      0,
+      2,
+      3,
 
       // Back (-Z)
-      {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
-      {{-0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}},
-      {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-      {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
-      {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-      {{0.5f, 0.5f, -0.5f}, {0.3f, 0.3f, 1.0f}},
+      5,
+      4,
+      7,
+      5,
+      7,
+      6,
 
       // Left (-X)
-      {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.4f, 0.4f}},
-      {{-0.5f, -0.5f, 0.5f}, {0.4f, 1.0f, 0.4f}},
-      {{-0.5f, 0.5f, 0.5f}, {0.4f, 0.4f, 1.0f}},
-      {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.4f, 0.4f}},
-      {{-0.5f, 0.5f, 0.5f}, {0.4f, 0.4f, 1.0f}},
-      {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.4f}},
+      4,
+      0,
+      3,
+      4,
+      3,
+      7,
 
       // Right (+X)
-      {{0.5f, -0.5f, 0.5f}, {1.0f, 0.5f, 0.0f}},
-      {{0.5f, -0.5f, -0.5f}, {0.0f, 0.8f, 1.0f}},
-      {{0.5f, 0.5f, -0.5f}, {0.8f, 0.0f, 1.0f}},
-      {{0.5f, -0.5f, 0.5f}, {1.0f, 0.5f, 0.0f}},
-      {{0.5f, 0.5f, -0.5f}, {0.8f, 0.0f, 1.0f}},
-      {{0.5f, 0.5f, 0.5f}, {0.0f, 1.0f, 0.5f}},
+      1,
+      5,
+      6,
+      1,
+      6,
+      2,
 
       // Top (+Y)
-      {{-0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.5f}},
-      {{0.5f, 0.5f, 0.5f}, {0.0f, 0.5f, 1.0f}},
-      {{0.5f, 0.5f, -0.5f}, {0.5f, 1.0f, 0.0f}},
-      {{-0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.5f}},
-      {{0.5f, 0.5f, -0.5f}, {0.5f, 1.0f, 0.0f}},
-      {{-0.5f, 0.5f, -0.5f}, {1.0f, 0.8f, 0.2f}},
+      3,
+      2,
+      6,
+      3,
+      6,
+      7,
 
       // Bottom (-Y)
-      {{-0.5f, -0.5f, -0.5f}, {0.7f, 0.2f, 0.2f}},
-      {{0.5f, -0.5f, -0.5f}, {0.2f, 0.7f, 0.2f}},
-      {{0.5f, -0.5f, 0.5f}, {0.2f, 0.2f, 0.7f}},
-      {{-0.5f, -0.5f, -0.5f}, {0.7f, 0.2f, 0.2f}},
-      {{0.5f, -0.5f, 0.5f}, {0.2f, 0.2f, 0.7f}},
-      {{-0.5f, -0.5f, 0.5f}, {0.7f, 0.7f, 0.2f}},
+      4,
+      5,
+      1,
+      4,
+      1,
+      0,
   };
 
   std::cout << "Creating vertex buffer\n";
@@ -109,6 +128,15 @@ int main() {
       .memoryUsage = MemoryUsage::CPUToGPU,
       .initialData = vertices.data(),
       .debugName = "Cube Vertex Buffer",
+  });
+
+  std::cout << "Creating index buffer\n";
+  BufferHandle indexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(indices.size() * sizeof(std::uint16_t)),
+      .usage = BufferUsage::Index,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = indices.data(),
+      .debugName = "Cube Index Buffer",
   });
 
   auto vertSpv = ShaderCompiler::CompileFile({
@@ -277,8 +305,9 @@ int main() {
     cmd.BeginRendering(renderingInfo);
     cmd.BindPipeline(pipeline);
     cmd.BindVertexBuffer(0, vertexBuffer, 0);
+    cmd.BindIndexBuffer(indexBuffer, IndexType::U16, 0);
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(glm::mat4), &mvp);
-    cmd.Draw(static_cast<u32>(vertices.size()));
+    cmd.DrawIndexed(static_cast<u32>(indices.size()));
     cmd.EndRendering();
 
     cmd.Barrier({
@@ -298,6 +327,7 @@ int main() {
   device->WaitIdle();
 
   device->DestroyPipeline(pipeline);
+  device->DestroyBuffer(indexBuffer);
   device->DestroyBuffer(vertexBuffer);
   device->DestroyShader(fragmentShader);
   device->DestroyShader(vertexShader);

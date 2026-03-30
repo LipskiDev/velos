@@ -294,8 +294,17 @@ void VulkanCommandList::BindVertexBuffer(u32 firstSlot,
   vkCmdBindVertexBuffers(commandBuffer_, firstSlot, 1, &vkBuffer, &vkOffset);
 }
 
-void VulkanCommandList::BindIndexBuffer(BufferHandle, IndexType, u64) {
-  throw std::runtime_error("BindIndexBuffer not implemented yet");
+void VulkanCommandList::BindIndexBuffer(BufferHandle buffer,
+                                        IndexType indexType, u64 offset) {
+  if (!buffer.IsValid()) {
+    throw std::runtime_error("BindIndexBuffer: requires a valid buffer handle");
+  }
+
+  const VulkanBuffer &vkBuffer = device_.GetBuffer(buffer);
+
+  vkCmdBindIndexBuffer(commandBuffer_, vkBuffer.buffer,
+                       static_cast<VkDeviceSize>(offset),
+                       ToVkIndexType(indexType));
 }
 
 void VulkanCommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
@@ -361,8 +370,9 @@ void VulkanCommandList::Draw(u32 vertexCount, u32 firstVertex) {
   vkCmdDraw(commandBuffer_, vertexCount, 1, firstVertex, 0);
 }
 
-void VulkanCommandList::DrawIndexed(u32, u32, i32) {
-  throw std::runtime_error("DrawIndexed not implemented yet");
+void VulkanCommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
+                                    i32 vertexOffset) {
+  vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
 } // namespace Velos::RHI
