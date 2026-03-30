@@ -2,6 +2,7 @@
 #include "../rhi_device.h"
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_resources.h"
+#include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_common.h"
 #include <cstdint>
 #include <iostream>
@@ -143,15 +144,15 @@ void VulkanDevice::PickPhysicalDevice() {
 
   physicalDevice_ = devices[0];
 
-  VkPhysicalDeviceProperties props{};
-  vkGetPhysicalDeviceProperties(physicalDevice_, &props);
+  vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties_);
 
-  std::cout << "[VulkanDevice] Selected GPU: " << props.deviceName << "\n";
+  std::cout << "[VulkanDevice] Selected GPU: "
+            << physicalDeviceProperties_.deviceName << "\n";
 
   std::cout << "[VulkanDevice] API version: "
-            << VK_VERSION_MAJOR(props.apiVersion) << "."
-            << VK_VERSION_MINOR(props.apiVersion) << "."
-            << VK_VERSION_PATCH(props.apiVersion) << '\n';
+            << VK_VERSION_MAJOR(physicalDeviceProperties_.apiVersion) << "."
+            << VK_VERSION_MINOR(physicalDeviceProperties_.apiVersion) << "."
+            << VK_VERSION_PATCH(physicalDeviceProperties_.apiVersion) << '\n';
 }
 
 void VulkanDevice::CreateLogicalDevice() {
@@ -826,6 +827,7 @@ ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
   vkView.image = desc.image;
   vkView.format = viewFormat;
   vkView.aspect = aspect;
+  vkView.owned = true;
 
   u32 handleId = nextImageViewHandle_++;
 
@@ -1345,7 +1347,7 @@ VulkanDevice::CreateDescriptorPool(const DescriptorPoolDesc &desc) {
   VkDescriptorPool pool = VK_NULL_HANDLE;
   VK_CHECK(vkCreateDescriptorPool(device_, &createInfo, nullptr, &pool),
            "vkCreateDescriptorPool: failed to create Descriptor Pool");
-  const u32 handleId = nextDescriptorPoolHandle_;
+  const u32 handleId = nextDescriptorPoolHandle_++;
 
   descriptorPools_.emplace(handleId, VulkanDescriptorPool{.pool = pool});
 
@@ -1533,6 +1535,8 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   VK_CHECK(result, "Failed to acquire next swapchain image");
 
   currentBackbufferIndex_ = imageIndex;
+  auto &img = images_.at(swapchainImageHandles_[imageIndex].id);
+  img.layout = ImageLayout::Undefined;
 
   return FrameBeginResult{.commandList = CommandListHandle{1},
                           .backbuffer = swapchainImageViewHandles_[imageIndex],
@@ -1551,6 +1555,25 @@ ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {
   }
 
   return *commandList_;
+}
+
+void VulkanDevice::Submit(CommandListHandle commandList) {
+  if (!commandList.IsValid()) {
+    throw std::runtime_error("Submit called with invalid command list handle");
+  }
+
+  VK_CHECK(vkWaitForFences(device_, 1, &inFlightFence_, VK_TRUE, UINT64_MAX),
+           "Failed to wait for in-flight fence");
+  VK_CHECK(vkResetFences(device_, 1, &inFlightFence_),
+           "Failed to reset in-flight fence");
+
+  VkSubmitInfo submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandBuffer_;
+
+  VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFence_),
+           "Failed to submit Vulkan command buffer");
 }
 
 void VulkanDevice::SubmitAndPresent(CommandListHandle commandList,

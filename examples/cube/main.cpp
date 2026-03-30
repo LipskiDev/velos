@@ -290,14 +290,12 @@ int main() {
 
     cmd.Barrier({
         .image = frame.backbufferImage,
-        .oldLayout = ImageLayout::Undefined,
         .newLayout = ImageLayout::ColorAttachment,
         .aspect = ImageAspect::Color,
     });
 
     cmd.Barrier({
         .image = depthImage,
-        .oldLayout = ImageLayout::Undefined,
         .newLayout = ImageLayout::DepthAttachment,
         .aspect = ImageAspect::Depth,
     });
@@ -312,7 +310,6 @@ int main() {
 
     cmd.Barrier({
         .image = frame.backbufferImage,
-        .oldLayout = ImageLayout::ColorAttachment,
         .newLayout = ImageLayout::Present,
         .aspect = ImageAspect::Color,
     });

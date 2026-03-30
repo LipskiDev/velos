@@ -147,6 +147,7 @@ public:
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
   ICommandList &GetCommandList(CommandListHandle handle) override;
+  void Submit(CommandListHandle commandList) override;
   void SubmitAndPresent(CommandListHandle commandList,
                         SwapchainHandle swapchain) override;
 
@@ -179,11 +180,17 @@ public:
   VkDevice GetVkDevice() const { return device_; }
   VkQueue GetGraphicsQueue() const { return graphicsQueue_; }
   u32 GetGraphicsQueueFamily() const { return graphicsQueueFamily_; }
+  const VkPhysicalDeviceProperties &GetPhysicalDeviceProperties() const {
+    return physicalDeviceProperties_;
+  }
+  VkCommandBuffer GetCommandBuffer() const { return commandBuffer_; }
 
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
+
+  VkPhysicalDeviceProperties physicalDeviceProperties_{};
 
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;

@@ -4,6 +4,7 @@
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_device.h"
 
+#include <iostream>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
@@ -19,7 +20,7 @@ void VulkanCommandList::Begin() {
 
   VkCommandBufferBeginInfo beginInfo{};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = 0;
+  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   beginInfo.pInheritanceInfo = nullptr;
 
   VK_CHECK(vkBeginCommandBuffer(commandBuffer_, &beginInfo),
@@ -70,7 +71,7 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
   VkAccessFlags srcAccessMask = 0;
   VkAccessFlags dstAccessMask = 0;
 
-  const ImageLayout oldLayout = barrier.oldLayout;
+  const ImageLayout oldLayout = image.layout;
   const ImageLayout newLayout = barrier.newLayout;
 
   if (oldLayout == newLayout) {
@@ -135,14 +136,49 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.subresourceRange.baseArrayLayer = 0;
   vkBarrier.subresourceRange.layerCount = image.arrayLayers;
 
-  vkCmdPipelineBarrier(commandBuffer_, srcStageMask, dstStageMask, 0, 0,
-                       nullptr, 0, nullptr, 1, &vkBarrier);
+  vkCmdPipelineBarrier(device_.GetCommandBuffer(), srcStageMask, dstStageMask,
+                       0, 0, nullptr, 0, nullptr, 1, &vkBarrier);
 
   image.layout = newLayout;
 }
 
-void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &) {
-  throw std::runtime_error("UpdateBuffer not implemented yet");
+void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
+  const VulkanBuffer &dst = device_.GetBuffer(update.buffer);
+
+  void *mapped = nullptr;
+  VkResult result = vkMapMemory(device_.GetVkDevice(), dst.memory, 0,
+                                VK_WHOLE_SIZE, 0, &mapped);
+  if (result != VK_SUCCESS || mapped == nullptr) {
+    throw std::runtime_error(
+        "VulkanCommandList::UpdateBuffer: vkMapMemory failed");
+  }
+
+  memcpy(static_cast<std::byte *>(mapped) + update.offset, update.data,
+         static_cast<size_t>(update.size));
+
+  if (true) {
+    const VkDeviceSize atomSize =
+        device_.GetPhysicalDeviceProperties().limits.nonCoherentAtomSize;
+
+    const VkDeviceSize alignedOffset = update.offset & ~(atomSize - 1);
+    const VkDeviceSize end = update.offset + update.size;
+    const VkDeviceSize alignedEnd = (end + atomSize - 1) & ~(atomSize - 1);
+
+    VkMappedMemoryRange range{};
+    range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    range.memory = dst.memory;
+    range.offset = alignedOffset;
+    range.size = alignedEnd - alignedOffset;
+
+    result = vkFlushMappedMemoryRanges(device_.GetVkDevice(), 1, &range);
+    if (result != VK_SUCCESS) {
+      vkUnmapMemory(device_.GetVkDevice(), dst.memory);
+      throw std::runtime_error(
+          "VulkanCommandList::UpdateBuffer: vkFlushMappedMemoryRanges failed");
+    }
+  }
+
+  vkUnmapMemory(device_.GetVkDevice(), dst.memory);
 }
 
 void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
@@ -332,6 +368,13 @@ void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
       device_.GetDescriptorSet(descriptorSet);
 
   VkDescriptorSet set = vkDescriptorSet.set;
+
+  // std::cout << "[BindDescriptorSet]\n";
+  // std::cout << "  pipeline handle: " << pipeline.id << "\n";
+  // std::cout << "  descriptor set handle: " << descriptorSet.id << "\n";
+  // std::cout << "  VkPipelineLayout: " << vkPipeline.layout << "\n";
+  // std::cout << "  VkDescriptorSet: " << set << "\n";
+  // std::cout << "  set index: " << setIndex << "\n";
 
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           vkPipeline.layout, setIndex, 1, &set, 0, nullptr);

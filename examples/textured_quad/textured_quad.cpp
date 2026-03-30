@@ -307,7 +307,6 @@ int main() {
 
       cmd.Barrier({
           .image = textureImage,
-          .oldLayout = ImageLayout::Undefined,
           .newLayout = ImageLayout::TransferDst,
           .aspect = ImageAspect::Color,
       });
@@ -316,7 +315,6 @@ int main() {
 
       cmd.Barrier({
           .image = textureImage,
-          .oldLayout = ImageLayout::TransferDst,
           .newLayout = ImageLayout::ShaderReadOnly,
           .aspect = ImageAspect::Color,
       });
@@ -328,7 +326,6 @@ int main() {
 
     cmd.Barrier({
         .image = frame.backbufferImage,
-        .oldLayout = currentLayout,
         .newLayout = ImageLayout::ColorAttachment,
         .aspect = ImageAspect::Color,
     });
@@ -376,7 +373,6 @@ int main() {
 
     cmd.Barrier({
         .image = frame.backbufferImage,
-        .oldLayout = ImageLayout::ColorAttachment,
         .newLayout = ImageLayout::Present,
         .aspect = ImageAspect::Color,
     });

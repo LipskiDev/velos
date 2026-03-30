@@ -38,6 +38,7 @@ enum class VertexFormat {
   Float32x2,
   Float32x3,
   Float32x4,
+  UNorm8x4,
 };
 
 enum class PrimitiveTopology {

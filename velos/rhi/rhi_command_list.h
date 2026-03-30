@@ -37,7 +37,6 @@ struct BufferBarrier {
 
 struct ImageBarrier {
   ImageHandle image;
-  ImageLayout oldLayout = ImageLayout::Undefined;
   ImageLayout newLayout = ImageLayout::Undefined;
   ImageAspect aspect = ImageAspect::Color;
 };

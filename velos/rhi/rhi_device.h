@@ -76,6 +76,7 @@ public:
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;
   virtual ICommandList &GetCommandList(CommandListHandle handle) = 0;
+  virtual void Submit(CommandListHandle commandList) = 0;
   virtual void SubmitAndPresent(CommandListHandle commandList,
                                 SwapchainHandle swapchain) = 0;
 

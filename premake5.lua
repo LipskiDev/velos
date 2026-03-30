@@ -8,19 +8,19 @@ workspace "Velos"
 		"Release"
 	}
 
-  multiprocessorcompile "On"
+	multiprocessorcompile "On"
 
 	outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 	IncludeDir = {}
 	IncludeDir["Velos"] = "velos"
-	IncludeDir["GLFW"]  = "external/glfw/include"
-	IncludeDir["GLM"]   = "external/glm"
-	IncludeDir["VOLK"]  = "external/volk"
-	IncludeDir["VMA"]   = "external/vma/include"
-	IncludeDir["STB"]   = "external/stb"
+	IncludeDir["GLFW"] = "external/glfw/include"
+	IncludeDir["GLM"] = "external/glm"
+	IncludeDir["VOLK"] = "external/volk"
+	IncludeDir["VMA"] = "external/vma/include"
+	IncludeDir["STB"] = "external/stb"
 	IncludeDir["ImGui"] = "external/imgui"
-  IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
+	IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
 
 project "Velos"
 	location "build/Velos"
@@ -41,8 +41,8 @@ project "Velos"
 		"velos/**.hpp",
 		"velos/**.cpp",
 		"velos/**.c",
-    "external/SPIRV-Reflect/spirv_reflect.h",
-    "external/SPIRV-Reflect/spirv_reflect.c"
+		"external/SPIRV-Reflect/spirv_reflect.h",
+		"external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -53,8 +53,7 @@ project "Velos"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.ImGui}",
-    "%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}"
 	}
 
 	links
@@ -104,7 +103,7 @@ project "Velos"
 			"Xxf86vm",
 			"Xinerama",
 			"Xcursor",
-      "shaderc"
+			"shaderc"
 		}
 
 	filter "configurations:Debug"
@@ -125,12 +124,100 @@ project "Velos"
 
 	filter {}
 
+project "imgui"
+	location "build/imgui"
+	kind "StaticLib"
+	language "C++"
+	cppdialect "C++23"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"external/imgui/imgui.cpp",
+		"external/imgui/imgui_draw.cpp",
+		"external/imgui/imgui_tables.cpp",
+		"external/imgui/imgui_widgets.cpp",
+		"external/imgui/imgui_demo.cpp"
+	}
+
+	includedirs
+	{
+		"%{IncludeDir.ImGui}"
+	}
+
+	filter "system:linux"
+		pic "On"
+
+	filter "configurations:Debug"
+		runtime "Debug"
+		symbols "On"
+
+	filter "configurations:Release"
+		runtime "Release"
+		optimize "Speed"
+
+	filter {}
+
+project "VelosImGui"
+	location "build/VelosImGui"
+	kind "StaticLib"
+	language "C++"
+	cppdialect "C++23"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"tools/imgui/**.h",
+		"tools/imgui/**.hpp",
+		"tools/imgui/**.cpp",
+		"tools/imgui/**.c"
+	}
+
+	includedirs
+	{
+		"velos",
+		"tools/imgui",
+		"%{IncludeDir.ImGui}",
+		"%{IncludeDir.GLFW}",
+		"%{IncludeDir.GLM}",
+		"%{IncludeDir.VOLK}",
+		"%{IncludeDir.VMA}",
+		"%{IncludeDir.STB}",
+		"%{IncludeDir.SPIRVReflect}"
+	}
+
+	links
+	{
+		"Velos",
+		"imgui"
+	}
+
+	filter "system:linux"
+		pic "On"
+
+	filter "configurations:Debug"
+		defines { "VL_DEBUG" }
+		runtime "Debug"
+		symbols "On"
+
+	filter "configurations:Release"
+		defines { "VL_RELEASE" }
+		runtime "Release"
+		optimize "Speed"
+
+	filter {}
+
 local exampleDirs = os.matchdirs("examples/*")
 
 for _, dir in ipairs(exampleDirs) do
 	local exampleName = path.getname(dir)
 	local projectName = "Example_" .. exampleName
-	local runProjectName = "Run_" .. exampleName
 
 	project(projectName)
 		location("build/" .. projectName)
@@ -159,12 +246,16 @@ for _, dir in ipairs(exampleDirs) do
 			"%{IncludeDir.VOLK}",
 			"%{IncludeDir.VMA}",
 			"%{IncludeDir.STB}",
-      "%{IncludeDir.SPIRVReflect}"
+			"%{IncludeDir.SPIRVReflect}",
+			"%{IncludeDir.ImGui}",
+			"tools/imgui"
 		}
 
 		links
 		{
-			"Velos"
+			"VelosImGui",
+			"Velos",
+			"imgui"
 		}
 
 		filter "system:linux"

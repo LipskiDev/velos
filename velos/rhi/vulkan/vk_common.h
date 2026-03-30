@@ -53,6 +53,8 @@ inline VkFormat ToVkVertexFormat(VertexFormat format) {
     return VK_FORMAT_R32G32B32_SFLOAT;
   case VertexFormat::Float32x4:
     return VK_FORMAT_R32G32B32A32_SFLOAT;
+  case VertexFormat::UNorm8x4:
+    return VK_FORMAT_R8G8B8A8_UNORM;
   default:
     throw std::runtime_error("Unsupported VertexFormat");
   }
