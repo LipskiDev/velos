@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/input_system.h"
 #include "core/window.h"
 #include <string>
 
@@ -9,7 +10,8 @@ namespace Velos {
 
 class GlfwWindow final : public Window {
 public:
-  GlfwWindow(int width, int height, const std::string &title, bool resizable);
+  GlfwWindow(int width, int height, const std::string &title, bool resizable,
+             InputSystem *input);
   ~GlfwWindow() override;
 
   void PollEvents() override;
@@ -17,14 +19,24 @@ public:
 
   int GetWidth() const override;
   int GetHeight() const override;
+
+  int GetFramebufferWidth() const override;
+  int GetFramebufferHeight() const override;
+
   const std::string &GetTitle() const override;
 
   void *GetNativeHandle() const override;
 
+public:
+  InputSystem *input_ = nullptr;
+
 private:
   GLFWwindow *window_ = nullptr;
-  int width_ = 0;
-  int height_ = 0;
+
+  int windowWidth_ = 0;
+  int windowHeight_ = 0;
+  int framebufferWidth_ = 0;
+  int framebufferHeight_ = 0;
   std::string title_;
 };
 

@@ -17,6 +17,10 @@ public:
 
   virtual int GetWidth() const = 0;
   virtual int GetHeight() const = 0;
+
+  virtual int GetFramebufferWidth() const = 0;
+  virtual int GetFramebufferHeight() const = 0;
+
   virtual const std::string &GetTitle() const = 0;
 
   virtual void *GetNativeHandle() const = 0;

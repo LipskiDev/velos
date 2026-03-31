@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/input_system.h"
 #include <memory>
 #include <string>
 
@@ -31,8 +32,12 @@ public:
   Window &GetWindow();
   const Window &GetWindow() const;
 
+  InputSystem &GetInput();
+  const InputSystem &GetInput() const;
+
 private:
   std::unique_ptr<Window> window_;
+  InputSystem input_;
   bool running_ = true;
 };
 

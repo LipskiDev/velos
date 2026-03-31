@@ -15,7 +15,8 @@ public:
                   VRHI::Format colorFormat, VRHI::Format depthFormat);
   void Shutdown();
 
-  void NewFrame(float deltaSeconds, int fbWidth, int fbHeight);
+  void NewFrame(float deltaSeconds, int windowWidth, int windowHeight,
+                int framebufferWidth, int framebufferHeight);
   void Render(VRHI::ICommandList &cmd, ImDrawData *drawData);
 
   void OnResize(int fbWidth, int fbHeight);

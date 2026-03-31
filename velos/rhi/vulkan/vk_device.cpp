@@ -109,11 +109,26 @@ void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
         "GLFW did not return required Vulkan instance extensions");
   }
 
+  std::cout << "GLFW Vulkan instance extensions:\n";
+  for (uint32_t i = 0; i < glfwExtensionCount; ++i) {
+    std::cout << "  " << glfwExtensions[i] << "\n";
+  }
+
   std::vector<const char *> extensions(glfwExtensions,
                                        glfwExtensions + glfwExtensionCount);
 
   if (desc.enableValidation) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  }
+
+  std::cout << "Enabled Vulkan layers:\n";
+  for (const char *layer : layers) {
+    std::cout << "  " << layer << "\n";
+  }
+
+  std::cout << "Enabled Vulkan instance extensions:\n";
+  for (const char *ext : extensions) {
+    std::cout << "  " << ext << "\n";
   }
 
   VkInstanceCreateInfo createInfo{};
@@ -125,22 +140,28 @@ void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
   createInfo.ppEnabledExtensionNames =
       extensions.empty() ? nullptr : extensions.data();
 
-  VK_CHECK(vkCreateInstance(&createInfo, nullptr, &instance_),
-           "Failed to create Vulkan instance");
+  VkResult result = vkCreateInstance(&createInfo, nullptr, &instance_);
+  std::cout << "vkCreateInstance result = " << result << "\n";
+  VK_CHECK(result, "Failed to create Vulkan instance");
 }
 
 void VulkanDevice::PickPhysicalDevice() {
   u32 deviceCount = 0;
-  VK_CHECK(vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr),
-           "Failed to enumerate physical devices");
+  VkResult result =
+      vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
+  std::cout << "vkEnumeratePhysicalDevices(count) result = " << result
+            << ", deviceCount = " << deviceCount << "\n";
+  VK_CHECK(result, "Failed to enumerate physical devices");
 
   if (deviceCount == 0) {
     throw std::runtime_error("No Vulkan physical devices found");
   }
 
   std::vector<VkPhysicalDevice> devices(deviceCount);
-  VK_CHECK(vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data()),
-           "Failed to enumerate physical devices");
+  result = vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data());
+  std::cout << "vkEnumeratePhysicalDevices(fill) result = " << result
+            << ", deviceCount = " << deviceCount << "\n";
+  VK_CHECK(result, "Failed to enumerate physical devices");
 
   physicalDevice_ = devices[0];
 

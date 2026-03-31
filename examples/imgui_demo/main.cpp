@@ -1,5 +1,8 @@
 #include "core/application.h"
+#include "core/input_system.h"
 #include "core/window.h"
+
+#include "imgui_input_bridge.h"
 #include "imgui_renderer.h"
 
 #include "rhi/rhi_command_list.h"
@@ -32,8 +35,8 @@ int main() {
 
     SwapchainHandle swapchain = device->CreateSwapchain({
         .windowHandle = app.GetWindow().GetNativeHandle(),
-        .width = static_cast<u32>(app.GetWindow().GetWidth()),
-        .height = static_cast<u32>(app.GetWindow().GetHeight()),
+        .width = static_cast<u32>(app.GetWindow().GetFramebufferWidth()),
+        .height = static_cast<u32>(app.GetWindow().GetFramebufferHeight()),
         .format = Format::BGRA8_UNORM,
         .bufferCount = 2,
         .debugName = "Main Swapchain",
@@ -55,26 +58,37 @@ int main() {
     using Clock = std::chrono::high_resolution_clock;
     auto lastTime = Clock::now();
 
+    bool showDemoWindow = true;
+
     while (!app.GetWindow().ShouldClose()) {
+      InputSystem &input = app.GetInput();
+
+      input.BeginFrame();
       app.GetWindow().PollEvents();
 
       auto now = Clock::now();
       float deltaTime = std::chrono::duration<float>(now - lastTime).count();
       lastTime = now;
 
+      ImGuiInputBridge::Apply(input);
       imguiRenderer.NewFrame(deltaTime, app.GetWindow().GetWidth(),
-                             app.GetWindow().GetHeight());
+                             app.GetWindow().GetHeight(),
+                             app.GetWindow().GetFramebufferWidth(),
+                             app.GetWindow().GetFramebufferHeight());
 
-      bool showDemoWindow = true;
       ImGui::ShowDemoWindow(&showDemoWindow);
 
       ImGui::Begin("Velos");
       ImGui::Text("Custom Dear ImGui renderer on top of Velos");
       ImGui::Text("Backend: Vulkan");
       ImGui::Separator();
-      ImGui::Text("Framebuffer: %d x %d", app.GetWindow().GetWidth(),
+      ImGui::Text("Window: %d x %d", app.GetWindow().GetWidth(),
                   app.GetWindow().GetHeight());
+
+      ImGui::Text("Framebuffer: %d x %d", app.GetWindow().GetFramebufferWidth(),
+                  app.GetWindow().GetFramebufferHeight());
       ImGui::Text("Delta Time: %.4f", deltaTime);
+      ImGui::Text("Mouse: %.1f, %.1f", input.GetMouseX(), input.GetMouseY());
       ImGui::End();
 
       ImGui::Render();
@@ -105,12 +119,12 @@ int main() {
           .a = 1.0f,
       };
 
+      u32 fbWidth = static_cast<u32>(app.GetWindow().GetFramebufferWidth());
+      u32 fbHeight = static_cast<u32>(app.GetWindow().GetFramebufferHeight());
+
       Rect2D renderArea{};
       renderArea.offset = {0, 0};
-      renderArea.extent = {
-          static_cast<u32>(1280),
-          static_cast<u32>(720),
-      };
+      renderArea.extent = {fbWidth, fbHeight};
 
       RenderingInfo renderingInfo{};
       renderingInfo.renderArea = renderArea;
@@ -123,17 +137,17 @@ int main() {
       cmd.SetViewport({
           .x = 0.0f,
           .y = 0.0f,
-          .width = (float)app.GetWindow().GetWidth(),
-          .height = (float)app.GetWindow().GetHeight(),
+          .width = static_cast<float>(fbWidth),
+          .height = static_cast<float>(fbHeight),
           .minDepth = 0.0f,
           .maxDepth = 1.0f,
       });
 
       cmd.SetScissor({
           .offset = {0, 0},
-          .extent = {(u32)app.GetWindow().GetWidth(),
-                     (u32)app.GetWindow().GetHeight()},
+          .extent = {fbWidth, fbHeight},
       });
+
       imguiRenderer.Render(cmd, ImGui::GetDrawData());
 
       cmd.EndRendering();

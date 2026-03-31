@@ -303,13 +303,23 @@ void ImGuiRenderer::Shutdown() {
   device_ = nullptr;
 }
 
-void ImGuiRenderer::NewFrame(float deltaSeconds, int fbWidth, int fbHeight) {
+void ImGuiRenderer::NewFrame(float deltaSeconds, int windowWidth,
+                             int windowHeight, int framebufferWidth,
+                             int framebufferHeight) {
   ImGuiIO &io = ImGui::GetIO();
 
   io.DeltaTime = deltaSeconds > 0.0f ? deltaSeconds : (1.0f / 60.0f);
+
   io.DisplaySize =
-      ImVec2(static_cast<float>(fbWidth), static_cast<float>(fbHeight));
-  io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+      ImVec2(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
+
+  io.DisplayFramebufferScale =
+      ImVec2(windowWidth > 0 ? static_cast<float>(framebufferWidth) /
+                                   static_cast<float>(windowWidth)
+                             : 1.0f,
+             windowHeight > 0 ? static_cast<float>(framebufferHeight) /
+                                    static_cast<float>(windowHeight)
+                              : 1.0f);
 
   ImGui::NewFrame();
 }
@@ -393,8 +403,8 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
   cmd.SetViewport(VRHI::Viewport{
       .x = 0.0f,
       .y = 0.0f,
-      .width = drawData->DisplaySize.x,
-      .height = drawData->DisplaySize.y,
+      .width = drawData->DisplaySize.x * drawData->FramebufferScale.x,
+      .height = drawData->DisplaySize.y * drawData->FramebufferScale.y,
       .minDepth = 0.0f,
       .maxDepth = 1.0f,
   });
