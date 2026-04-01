@@ -1,26 +1,16 @@
-workspace "Velos"
-	architecture "x86_64"
-	startproject "Example_triangle"
+if not outputdir then
+	error("outputdir must be defined before including external/velos/premake/embedded.lua")
+end
 
-	configurations
-	{
-		"Debug",
-		"Release"
-	}
-
-	multiprocessorcompile "On"
-
-	outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
-
-	IncludeDir = {}
-	IncludeDir["Velos"] = "velos"
-	IncludeDir["GLFW"] = "external/glfw/include"
-	IncludeDir["GLM"] = "external/glm"
-	IncludeDir["VOLK"] = "external/volk"
-	IncludeDir["VMA"] = "external/vma/include"
-	IncludeDir["STB"] = "external/stb"
-	IncludeDir["ImGui"] = "external/imgui"
-	IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
+IncludeDir = IncludeDir or {}
+IncludeDir["Velos"] = "external/velos/velos"
+IncludeDir["GLFW"] = "external/velos/external/glfw/include"
+IncludeDir["GLM"] = "external/velos/external/glm"
+IncludeDir["VOLK"] = "external/velos/external/volk"
+IncludeDir["VMA"] = "external/velos/external/vma/include"
+IncludeDir["STB"] = "external/velos/external/stb"
+IncludeDir["ImGui"] = "external/velos/external/imgui"
+IncludeDir["SPIRVReflect"] = "external/velos/external/SPIRV-Reflect"
 
 project "Velos"
 	location "build/Velos"
@@ -33,16 +23,16 @@ project "Velos"
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
 	pchheader "velos/core/vlpch.h"
-	pchsource "velos/core/vlpch.cpp"
+	pchsource "external/velos/velos/core/vlpch.cpp"
 
 	files
 	{
-		"velos/**.h",
-		"velos/**.hpp",
-		"velos/**.cpp",
-		"velos/**.c",
-		"external/SPIRV-Reflect/spirv_reflect.h",
-		"external/SPIRV-Reflect/spirv_reflect.c"
+		"external/velos/velos/**.h",
+		"external/velos/velos/**.hpp",
+		"external/velos/velos/**.cpp",
+		"external/velos/velos/**.c",
+		"external/velos/external/SPIRV-Reflect/spirv_reflect.h",
+		"external/velos/external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -136,11 +126,11 @@ project "imgui"
 
 	files
 	{
-		"external/imgui/imgui.cpp",
-		"external/imgui/imgui_draw.cpp",
-		"external/imgui/imgui_tables.cpp",
-		"external/imgui/imgui_widgets.cpp",
-		"external/imgui/imgui_demo.cpp"
+		"external/velos/external/imgui/imgui.cpp",
+		"external/velos/external/imgui/imgui_draw.cpp",
+		"external/velos/external/imgui/imgui_tables.cpp",
+		"external/velos/external/imgui/imgui_widgets.cpp",
+		"external/velos/external/imgui/imgui_demo.cpp"
 	}
 
 	includedirs
@@ -173,16 +163,16 @@ project "VelosImGui"
 
 	files
 	{
-		"tools/imgui/**.h",
-		"tools/imgui/**.hpp",
-		"tools/imgui/**.cpp",
-		"tools/imgui/**.c"
+		"external/velos/tools/imgui/**.h",
+		"external/velos/tools/imgui/**.hpp",
+		"external/velos/tools/imgui/**.cpp",
+		"external/velos/tools/imgui/**.c"
 	}
 
 	includedirs
 	{
-		"velos",
-		"tools/imgui",
+		"external/velos/velos",
+		"external/velos/tools/imgui",
 		"%{IncludeDir.ImGui}",
 		"%{IncludeDir.GLFW}",
 		"%{IncludeDir.GLM}",
@@ -212,77 +202,3 @@ project "VelosImGui"
 		optimize "Speed"
 
 	filter {}
-
-local exampleDirs = os.matchdirs("examples/*")
-
-for _, dir in ipairs(exampleDirs) do
-	local exampleName = path.getname(dir)
-	local projectName = "Example_" .. exampleName
-
-	project(projectName)
-		location("build/" .. projectName)
-		kind "ConsoleApp"
-		language "C++"
-		cppdialect "C++23"
-		staticruntime "off"
-
-		targetdir("bin/" .. outputdir .. "/%{prj.name}")
-		objdir("bin-int/" .. outputdir .. "/%{prj.name}")
-
-		files
-		{
-			dir .. "/**.h",
-			dir .. "/**.hpp",
-			dir .. "/**.cpp",
-			dir .. "/**.c"
-		}
-
-		includedirs
-		{
-			"velos",
-			dir,
-			"%{IncludeDir.GLFW}",
-			"%{IncludeDir.GLM}",
-			"%{IncludeDir.VOLK}",
-			"%{IncludeDir.VMA}",
-			"%{IncludeDir.STB}",
-			"%{IncludeDir.SPIRVReflect}",
-			"%{IncludeDir.ImGui}",
-			"tools/imgui"
-		}
-
-		links
-		{
-			"VelosImGui",
-			"Velos",
-			"imgui"
-		}
-
-		filter "system:linux"
-			links
-			{
-				"glfw",
-				"vulkan",
-				"shaderc_shared",
-				"dl",
-				"pthread",
-				"X11",
-				"Xrandr",
-				"Xi",
-				"Xxf86vm",
-				"Xinerama",
-				"Xcursor"
-			}
-
-		filter "configurations:Debug"
-			defines { "VL_DEBUG" }
-			runtime "Debug"
-			symbols "On"
-
-		filter "configurations:Release"
-			defines { "VL_RELEASE" }
-			runtime "Release"
-			optimize "Speed"
-
-		filter {}
-end
