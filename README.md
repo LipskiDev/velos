@@ -131,7 +131,7 @@ velos uses Premake for project generation.
 **Setup**
 
 ```bash
-git clone <velos-repo>
+git clone https://github.com/LipskiDev/velos
 cd velos
 ```
 
