@@ -24,7 +24,7 @@ int main() {
         .width = 1280,
         .height = 720,
         .title = "Velos ImGui Demo",
-        .resizable = false,
+        .resizable = true,
     });
 
     IDevice *device = CreateDevice({
@@ -66,15 +66,39 @@ int main() {
       input.BeginFrame();
       app.GetWindow().PollEvents();
 
+      if (app.GetWindow().WasFramebufferResized()) {
+        app.GetWindow().ResetFramebufferResizedFlag();
+
+        const u32 fbWidth =
+            static_cast<u32>(app.GetWindow().GetFramebufferWidth());
+        const u32 fbHeight =
+            static_cast<u32>(app.GetWindow().GetFramebufferHeight());
+
+        if (fbWidth > 0 && fbHeight > 0) {
+          device->WaitIdle();
+          device->ResizeSwapchain(swapchain, fbWidth, fbHeight);
+
+          imguiRenderer.Shutdown();
+          imguiRenderer.Initialize(device, swapchain, Format::BGRA8_UNORM,
+                                   Format::Undefined);
+        }
+
+        continue;
+      }
+
+      Extent2D dims = device->GetSwapchainDimensions();
+      if (dims.width == 0 || dims.height == 0) {
+        continue;
+      }
+
       auto now = Clock::now();
       float deltaTime = std::chrono::duration<float>(now - lastTime).count();
       lastTime = now;
 
       ImGuiInputBridge::Apply(input);
       imguiRenderer.NewFrame(deltaTime, app.GetWindow().GetWidth(),
-                             app.GetWindow().GetHeight(),
-                             app.GetWindow().GetFramebufferWidth(),
-                             app.GetWindow().GetFramebufferHeight());
+                             app.GetWindow().GetHeight(), dims.width,
+                             dims.height);
 
       ImGui::ShowDemoWindow(&showDemoWindow);
 
@@ -84,9 +108,7 @@ int main() {
       ImGui::Separator();
       ImGui::Text("Window: %d x %d", app.GetWindow().GetWidth(),
                   app.GetWindow().GetHeight());
-
-      ImGui::Text("Framebuffer: %d x %d", app.GetWindow().GetFramebufferWidth(),
-                  app.GetWindow().GetFramebufferHeight());
+      ImGui::Text("Framebuffer: %u x %u", dims.width, dims.height);
       ImGui::Text("Delta Time: %.4f", deltaTime);
       ImGui::Text("Mouse: %.1f, %.1f", input.GetMouseX(), input.GetMouseY());
       ImGui::End();
@@ -119,12 +141,9 @@ int main() {
           .a = 1.0f,
       };
 
-      u32 fbWidth = static_cast<u32>(app.GetWindow().GetFramebufferWidth());
-      u32 fbHeight = static_cast<u32>(app.GetWindow().GetFramebufferHeight());
-
       Rect2D renderArea{};
       renderArea.offset = {0, 0};
-      renderArea.extent = {fbWidth, fbHeight};
+      renderArea.extent = {dims.width, dims.height};
 
       RenderingInfo renderingInfo{};
       renderingInfo.renderArea = renderArea;
@@ -137,15 +156,15 @@ int main() {
       cmd.SetViewport({
           .x = 0.0f,
           .y = 0.0f,
-          .width = static_cast<float>(fbWidth),
-          .height = static_cast<float>(fbHeight),
+          .width = static_cast<float>(dims.width),
+          .height = static_cast<float>(dims.height),
           .minDepth = 0.0f,
           .maxDepth = 1.0f,
       });
 
       cmd.SetScissor({
           .offset = {0, 0},
-          .extent = {fbWidth, fbHeight},
+          .extent = {dims.width, dims.height},
       });
 
       imguiRenderer.Render(cmd, ImGui::GetDrawData());

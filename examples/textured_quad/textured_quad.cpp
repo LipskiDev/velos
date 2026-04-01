@@ -33,7 +33,7 @@ int main() {
       .width = 1280,
       .height = 720,
       .title = "Velos Textured Quad",
-      .resizable = false,
+      .resizable = true,
   });
 
   std::cout << "Creating device\n";
@@ -46,8 +46,8 @@ int main() {
   std::cout << "Creating swapchain\n";
   SwapchainHandle swapchain = device->CreateSwapchain({
       .windowHandle = app.GetWindow().GetNativeHandle(),
-      .width = static_cast<u32>(app.GetWindow().GetWidth()),
-      .height = static_cast<u32>(app.GetWindow().GetHeight()),
+      .width = static_cast<u32>(app.GetWindow().GetFramebufferWidth()),
+      .height = static_cast<u32>(app.GetWindow().GetFramebufferHeight()),
       .format = Format::RGBA8_UNORM,
       .bufferCount = 2,
       .vsync = true,
@@ -55,10 +55,10 @@ int main() {
   });
 
   std::vector<Vertex> vertices = {
-      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}}, // 0
-      {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f}},  // 1
-      {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},   // 2
-      {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}},  // 3
+      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}},
+      {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f}},
+      {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
+      {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}},
   };
 
   std::vector<std::uint16_t> indices = {
@@ -94,8 +94,7 @@ int main() {
                 &texChannels, STBI_rgb_alpha);
 
   if (!pixels) {
-    throw std::runtime_error(
-        "Failed to load transparent_test.png with stb_image");
+    throw std::runtime_error("Failed to load awesomeface.png with stb_image");
   }
 
   const u64 imageSize =
@@ -276,6 +275,28 @@ int main() {
 
   while (!app.GetWindow().ShouldClose()) {
     app.GetWindow().PollEvents();
+
+    if (app.GetWindow().WasFramebufferResized()) {
+      app.GetWindow().ResetFramebufferResizedFlag();
+
+      const u32 fbWidth =
+          static_cast<u32>(app.GetWindow().GetFramebufferWidth());
+      const u32 fbHeight =
+          static_cast<u32>(app.GetWindow().GetFramebufferHeight());
+
+      if (fbWidth > 0 && fbHeight > 0) {
+        device->WaitIdle();
+        device->ResizeSwapchain(swapchain, fbWidth, fbHeight);
+      }
+
+      continue;
+    }
+
+    Extent2D dims = device->GetSwapchainDimensions();
+    if (dims.width == 0 || dims.height == 0) {
+      continue;
+    }
+
     time += 0.016f;
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
@@ -322,8 +343,6 @@ int main() {
       uploaded = true;
     }
 
-    ImageLayout currentLayout = device->GetImageLayout(frame.backbufferImage);
-
     cmd.Barrier({
         .image = frame.backbufferImage,
         .newLayout = ImageLayout::ColorAttachment,
@@ -333,15 +352,15 @@ int main() {
     cmd.SetViewport({
         .x = 0.0f,
         .y = 0.0f,
-        .width = 1280.0f,
-        .height = 720.0f,
+        .width = static_cast<float>(dims.width),
+        .height = static_cast<float>(dims.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     });
 
     cmd.SetScissor({
         .offset = {0, 0},
-        .extent = {1280, 720},
+        .extent = {dims.width, dims.height},
     });
 
     ColorAttachmentDesc colorAttachment{};
@@ -351,7 +370,7 @@ int main() {
     colorAttachment.clearValue = {0.1f, 0.2f, 0.35f, 1.0f};
 
     RenderingInfo renderingInfo{};
-    renderingInfo.renderArea = {{0, 0}, {1280, 720}};
+    renderingInfo.renderArea = {{0, 0}, {dims.width, dims.height}};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.depthAttachment = nullptr;
