@@ -82,6 +82,9 @@ public:
 
   virtual void WaitIdle() = 0;
   virtual void CollectGarbage() = 0;
+
+public:
+  virtual Extent2D GetSwapchainDimensions() const = 0;
 };
 
 IDevice *CreateDevice(const DeviceDesc &desc);

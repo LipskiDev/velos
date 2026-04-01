@@ -173,6 +173,25 @@ static void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset) {
   self->input_->ProcessEvent(e);
 }
 
+static void WindowSizeCallback(GLFWwindow *window, int width, int height) {
+  auto *self = static_cast<GlfwWindow *>(glfwGetWindowUserPointer(window));
+  if (self) {
+    self->windowWidth_ = width;
+    self->framebufferHeight_ = height;
+  }
+}
+
+void FramebufferSizeCallback(GLFWwindow *window, int width, int height) {
+  auto *self = static_cast<GlfwWindow *>(glfwGetWindowUserPointer(window));
+  if (!self) {
+    return;
+  }
+
+  self->framebufferWidth_ = width;
+  self->framebufferHeight_ = height;
+  self->framebufferResized_ = true;
+}
+
 GlfwWindow::GlfwWindow(int width, int height, const std::string &title,
                        bool resizable, InputSystem *input)
     : windowWidth_(width), windowHeight_(height), title_(title), input_(input) {
@@ -194,6 +213,11 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string &title,
   glfwSetCursorPosCallback(window_, CursorPosCallback);
   glfwSetMouseButtonCallback(window_, MouseButtonCallback);
   glfwSetScrollCallback(window_, ScrollCallback);
+  glfwSetWindowSizeCallback(window_, WindowSizeCallback);
+  glfwSetFramebufferSizeCallback(window_, FramebufferSizeCallback);
+
+  glfwGetWindowSize(window_, &windowWidth_, &windowHeight_);
+  glfwGetFramebufferSize(window_, &framebufferWidth_, &framebufferHeight_);
 }
 
 GlfwWindow::~GlfwWindow() {

@@ -549,8 +549,82 @@ void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
   swapchain_.reset();
 }
 
-void VulkanDevice::ResizeSwapchain(SwapchainHandle, u32, u32) {
-  throw std::runtime_error("ResizeSwapchain not implemented yet");
+void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
+                                   u32 height) {
+  if (!handle.IsValid()) {
+    throw std::runtime_error("ResizeSwapchain called with invalid handle");
+  }
+
+  if (!swapchain_) {
+    throw std::runtime_error(
+        "ResizeSwapchain called without an existing swapchain");
+  }
+
+  if (width == 0 || height == 0) {
+    return;
+  }
+
+  vkDeviceWaitIdle(device_);
+
+  DestroySwapchainSyncObjects();
+
+  for (ImageViewHandle view : swapchainImageViewHandles_) {
+    DestroyImageView(view);
+  }
+  swapchainImageViewHandles_.clear();
+
+  for (ImageHandle image : swapchainImageHandles_) {
+    DestroyImage(image);
+  }
+  swapchainImageHandles_.clear();
+
+  SwapchainDesc desc = swapchain_->GetDesc();
+  desc.width = width;
+  desc.height = height;
+
+  swapchain_.reset();
+
+  swapchain_ = std::make_unique<VulkanSwapchain>(
+      instance_, physicalDevice_, device_, presentQueueFamily_, desc);
+
+  for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
+    const VulkanSwapchainImage &swapImage = swapchain_->GetImage(i);
+
+    VulkanImage wrappedImage{};
+    wrappedImage.image = swapImage.image;
+    wrappedImage.memory = VK_NULL_HANDLE;
+    wrappedImage.format =
+        Format::BGRA8_UNORM; // later derive from actual swapchain format
+    wrappedImage.usage = ImageUsage::ColorAttachment;
+    wrappedImage.layout = ImageLayout::Undefined;
+    wrappedImage.width = swapchain_->GetWidth();
+    wrappedImage.height = swapchain_->GetHeight();
+    wrappedImage.depth = 1;
+    wrappedImage.mipLevels = 1;
+    wrappedImage.arrayLayers = 1;
+    wrappedImage.owned = false;
+
+    const u32 imageHandleId = nextImageHandle_++;
+    images_.emplace(imageHandleId, wrappedImage);
+
+    ImageHandle imageHandle{imageHandleId};
+    swapchainImageHandles_.push_back(imageHandle);
+
+    VulkanImageView vkView{};
+    vkView.view = swapImage.view;
+    vkView.image = imageHandle;
+    vkView.format = wrappedImage.format;
+    vkView.aspect = ImageAspect::Color;
+    vkView.owned = false;
+
+    const u32 viewHandleId = nextImageViewHandle_++;
+    imageViews_.emplace(viewHandleId, vkView);
+
+    swapchainImageViewHandles_.push_back(ImageViewHandle{viewHandleId});
+  }
+
+  CreateSwapchainSyncObjects();
+  currentBackbufferIndex_ = 0;
 }
 
 BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
@@ -1524,46 +1598,39 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   VK_CHECK(vkWaitForFences(device_, 1, &inFlightFence_, VK_TRUE, UINT64_MAX),
            "Failed to wait for in-flight fence");
 
-  VK_CHECK(vkResetFences(device_, 1, &inFlightFence_),
-           "Failed to reset in-flight fence");
-
   u32 imageIndex = 0;
   VkResult result = vkAcquireNextImageKHR(device_, swapchain_->GetVkSwapchain(),
                                           UINT64_MAX, imageAvailableSemaphore_,
                                           VK_NULL_HANDLE, &imageIndex);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    return FrameBeginResult({
+    return FrameBeginResult{
         .commandList = CommandListHandle{},
         .backbuffer = ImageViewHandle{},
         .backbufferImage = ImageHandle{},
         .backbufferIndex = 0,
         .success = false,
-    });
+    };
   }
 
-  if (result == VK_SUBOPTIMAL_KHR) {
-    currentBackbufferIndex_ = imageIndex;
-
-    return FrameBeginResult{
-        .commandList = CommandListHandle{1},
-        .backbuffer = swapchainImageViewHandles_[imageIndex],
-        .backbufferImage = swapchainImageHandles_[imageIndex],
-        .backbufferIndex = imageIndex,
-        .success = true};
+  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    VK_CHECK(result, "Failed to acquire next swapchain image");
   }
 
-  VK_CHECK(result, "Failed to acquire next swapchain image");
+  VK_CHECK(vkResetFences(device_, 1, &inFlightFence_),
+           "Failed to reset in-flight fence");
 
   currentBackbufferIndex_ = imageIndex;
   auto &img = images_.at(swapchainImageHandles_[imageIndex].id);
   img.layout = ImageLayout::Undefined;
 
-  return FrameBeginResult{.commandList = CommandListHandle{1},
-                          .backbuffer = swapchainImageViewHandles_[imageIndex],
-                          .backbufferImage = swapchainImageHandles_[imageIndex],
-                          .backbufferIndex = imageIndex,
-                          .success = true};
+  return FrameBeginResult{
+      .commandList = CommandListHandle{1},
+      .backbuffer = swapchainImageViewHandles_[imageIndex],
+      .backbufferImage = swapchainImageHandles_[imageIndex],
+      .backbufferIndex = imageIndex,
+      .success = true,
+  };
 }
 
 ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {
@@ -1653,5 +1720,9 @@ void VulkanDevice::SubmitAndPresent(CommandListHandle commandList,
   }
 
   VK_CHECK(result, "Failed to present Vulkan swapchain image");
+}
+
+Extent2D VulkanDevice::GetSwapchainDimensions() const {
+  return {.width = swapchain_->GetWidth(), .height = swapchain_->GetHeight()};
 }
 } // namespace Velos::RHI

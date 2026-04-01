@@ -23,6 +23,10 @@ public:
   int GetFramebufferWidth() const override;
   int GetFramebufferHeight() const override;
 
+  bool WasFramebufferResized() const override { return framebufferResized_; }
+
+  void ResetFramebufferResizedFlag() override { framebufferResized_ = false; }
+
   const std::string &GetTitle() const override;
 
   void *GetNativeHandle() const override;
@@ -30,13 +34,16 @@ public:
 public:
   InputSystem *input_ = nullptr;
 
-private:
-  GLFWwindow *window_ = nullptr;
-
   int windowWidth_ = 0;
   int windowHeight_ = 0;
   int framebufferWidth_ = 0;
   int framebufferHeight_ = 0;
+
+  bool framebufferResized_ = false;
+
+private:
+  GLFWwindow *window_ = nullptr;
+
   std::string title_;
 };
 

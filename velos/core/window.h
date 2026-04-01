@@ -21,6 +21,9 @@ public:
   virtual int GetFramebufferWidth() const = 0;
   virtual int GetFramebufferHeight() const = 0;
 
+  virtual bool WasFramebufferResized() const = 0;
+  virtual void ResetFramebufferResizedFlag() = 0;
+
   virtual const std::string &GetTitle() const = 0;
 
   virtual void *GetNativeHandle() const = 0;

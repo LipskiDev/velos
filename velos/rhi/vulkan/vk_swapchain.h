@@ -35,6 +35,8 @@ public:
     return images_[index];
   }
 
+  SwapchainDesc GetDesc() const { return desc_; }
+
 private:
   void CreateSurface(void *windowHandle);
   void CreateSwapchain(const SwapchainDesc &desc);
@@ -48,6 +50,8 @@ private:
   u32 graphicsQueueFamily_ = 0;
 
   GLFWwindow *window_ = nullptr;
+
+  SwapchainDesc desc_;
 
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;

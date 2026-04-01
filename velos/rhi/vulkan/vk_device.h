@@ -185,6 +185,8 @@ public:
   }
   VkCommandBuffer GetCommandBuffer() const { return commandBuffer_; }
 
+  Extent2D GetSwapchainDimensions() const override;
+
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;

@@ -31,7 +31,7 @@ int main() {
       .width = 1280,
       .height = 720,
       .title = "Velos Cube Indexed",
-      .resizable = false,
+      .resizable = true,
   });
 
   std::cout << "Creating device\n";
@@ -53,21 +53,13 @@ int main() {
   });
 
   std::vector<Vertex> vertices = {
-      // 0: front-bottom-left
       {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
-      // 1: front-bottom-right
       {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-      // 2: front-top-right
       {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-      // 3: front-top-left
       {{-0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
-      // 4: back-bottom-left
       {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}},
-      // 5: back-bottom-right
       {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 1.0f}},
-      // 6: back-top-right
       {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-      // 7: back-top-left
       {{-0.5f, 0.5f, -0.5f}, {0.3f, 0.3f, 1.0f}},
   };
 
@@ -186,9 +178,11 @@ int main() {
                      }},
   };
 
+  Extent2D initialDims = device->GetSwapchainDimensions();
+
   ImageHandle depthImage = device->CreateImage({
-      .width = static_cast<u32>(app.GetWindow().GetWidth()),
-      .height = static_cast<u32>(app.GetWindow().GetHeight()),
+      .width = initialDims.width,
+      .height = initialDims.height,
       .depth = 1,
       .mipLevels = 1,
       .arrayLayers = 1,
@@ -238,6 +232,57 @@ int main() {
   float time = 0.0f;
   while (!app.GetWindow().ShouldClose()) {
     app.GetWindow().PollEvents();
+
+    if (app.GetWindow().WasFramebufferResized()) {
+      app.GetWindow().ResetFramebufferResizedFlag();
+
+      const u32 fbWidth =
+          static_cast<u32>(app.GetWindow().GetFramebufferWidth());
+      const u32 fbHeight =
+          static_cast<u32>(app.GetWindow().GetFramebufferHeight());
+
+      if (fbWidth > 0 && fbHeight > 0) {
+        device->WaitIdle();
+        device->ResizeSwapchain(swapchain, fbWidth, fbHeight);
+
+        Extent2D newDims = device->GetSwapchainDimensions();
+
+        device->DestroyImageView(depthView);
+        device->DestroyImage(depthImage);
+
+        depthImage = device->CreateImage({
+            .width = newDims.width,
+            .height = newDims.height,
+            .depth = 1,
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .format = Format::D32_FLOAT,
+            .usage = ImageUsage::DepthStencil,
+            .debugName = "Main Depth Image",
+        });
+
+        depthView = device->CreateImageView({
+            .image = depthImage,
+            .format = Format::D32_FLOAT,
+            .aspect = ImageAspect::Depth,
+            .baseMipLevel = 0,
+            .mipLevelCount = 1,
+            .baseArrayLayer = 0,
+            .arrayLayerCount = 1,
+            .debugName = "Main Depth View",
+        });
+
+        depthAttachment.view = depthView;
+      }
+
+      continue;
+    }
+
+    Extent2D dims = device->GetSwapchainDimensions();
+    if (dims.width == 0 || dims.height == 0) {
+      continue;
+    }
+
     time += 0.016f;
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
@@ -254,7 +299,7 @@ int main() {
     colorAttachment.clearValue = {0.08f, 0.08f, 0.12f, 1.0f};
 
     RenderingInfo renderingInfo{};
-    renderingInfo.renderArea = {{0, 0}, {1280, 720}};
+    renderingInfo.renderArea = {{0, 0}, {dims.width, dims.height}};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.depthAttachment = &depthAttachment;
@@ -266,8 +311,10 @@ int main() {
         glm::lookAt(glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(0.0f, 0.0f, 0.0f),
                     glm::vec3(0.0f, 1.0f, 0.0f));
 
-    glm::mat4 proj =
-        glm::perspective(glm::radians(60.0f), 1280.0f / 720.0f, 0.1f, 100.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(60.0f),
+                                      static_cast<float>(dims.width) /
+                                          static_cast<float>(dims.height),
+                                      0.1f, 100.0f);
     proj[1][1] *= -1.0f;
 
     glm::mat4 mvp = proj * view * model;
@@ -277,15 +324,15 @@ int main() {
     cmd.SetViewport({
         .x = 0.0f,
         .y = 0.0f,
-        .width = 1280.0f,
-        .height = 720.0f,
+        .width = static_cast<float>(dims.width),
+        .height = static_cast<float>(dims.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     });
 
     cmd.SetScissor({
         .offset = {0, 0},
-        .extent = {1280, 720},
+        .extent = {dims.width, dims.height},
     });
 
     cmd.Barrier({

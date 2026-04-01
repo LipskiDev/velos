@@ -70,7 +70,7 @@ VulkanSwapchain::VulkanSwapchain(VkInstance instance,
                                  const SwapchainDesc &desc)
     : instance_(instance), physicalDevice_(physicalDevice), device_(device),
       graphicsQueueFamily_(graphicsQueueFamily), width_(desc.width),
-      height_(desc.height) {
+      height_(desc.height), desc_(desc) {
   std::cout << "Creating Surface\n";
   CreateSurface(desc.windowHandle);
 
