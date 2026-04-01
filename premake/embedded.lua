@@ -3,36 +3,36 @@ if not outputdir then
 end
 
 IncludeDir = IncludeDir or {}
-IncludeDir["Velos"] = "external/velos/velos"
-IncludeDir["GLFW"] = "external/velos/external/glfw/include"
-IncludeDir["GLM"] = "external/velos/external/glm"
-IncludeDir["VOLK"] = "external/velos/external/volk"
-IncludeDir["VMA"] = "external/velos/external/vma/include"
-IncludeDir["STB"] = "external/velos/external/stb"
-IncludeDir["ImGui"] = "external/velos/external/imgui"
-IncludeDir["SPIRVReflect"] = "external/velos/external/SPIRV-Reflect"
+IncludeDir["Velos"] = "../velos"
+IncludeDir["GLFW"] = "../external/glfw/include"
+IncludeDir["GLM"] = "../external/glm"
+IncludeDir["VOLK"] = "../external/volk"
+IncludeDir["VMA"] = "../external/vma/include"
+IncludeDir["STB"] = "../external/stb"
+IncludeDir["ImGui"] = "../external/imgui"
+IncludeDir["SPIRVReflect"] = "../external/SPIRV-Reflect"
 
 project "Velos"
-	location "build/Velos"
+	location "../../build/Velos"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++23"
 	staticruntime "off"
 
-	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+	targetdir ("../../bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("../../bin-int/" .. outputdir .. "/%{prj.name}")
 
-	pchheader "velos/core/vlpch.h"
-	pchsource "external/velos/velos/core/vlpch.cpp"
+  pchheader "../velos/core/vlpch.h"
+	pchsource "../velos/core/vlpch.cpp"
 
 	files
 	{
-		"external/velos/velos/**.h",
-		"external/velos/velos/**.hpp",
-		"external/velos/velos/**.cpp",
-		"external/velos/velos/**.c",
-		"external/velos/external/SPIRV-Reflect/spirv_reflect.h",
-		"external/velos/external/SPIRV-Reflect/spirv_reflect.c"
+		"../velos/**.h",
+		"../velos/**.hpp",
+		"../velos/**.cpp",
+		"../velos/**.c",
+		"../external/SPIRV-Reflect/spirv_reflect.h",
+		"../external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -115,22 +115,22 @@ project "Velos"
 	filter {}
 
 project "imgui"
-	location "build/imgui"
+	location "../../build/imgui"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++23"
 	staticruntime "off"
 
-	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+	targetdir ("../../bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("../../bin-int/" .. outputdir .. "/%{prj.name}")
 
 	files
 	{
-		"external/velos/external/imgui/imgui.cpp",
-		"external/velos/external/imgui/imgui_draw.cpp",
-		"external/velos/external/imgui/imgui_tables.cpp",
-		"external/velos/external/imgui/imgui_widgets.cpp",
-		"external/velos/external/imgui/imgui_demo.cpp"
+		"../external/imgui/imgui.cpp",
+		"../external/imgui/imgui_draw.cpp",
+		"../external/imgui/imgui_tables.cpp",
+		"../external/imgui/imgui_widgets.cpp",
+		"../external/imgui/imgui_demo.cpp"
 	}
 
 	includedirs
@@ -152,27 +152,27 @@ project "imgui"
 	filter {}
 
 project "VelosImGui"
-	location "build/VelosImGui"
+	location "../../build/VelosImGui"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++23"
 	staticruntime "off"
 
-	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+	targetdir ("../../bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("../../bin-int/" .. outputdir .. "/%{prj.name}")
 
 	files
 	{
-		"external/velos/tools/imgui/**.h",
-		"external/velos/tools/imgui/**.hpp",
-		"external/velos/tools/imgui/**.cpp",
-		"external/velos/tools/imgui/**.c"
+		"../tools/imgui/**.h",
+		"../tools/imgui/**.hpp",
+		"../tools/imgui/**.cpp",
+		"../tools/imgui/**.c"
 	}
 
 	includedirs
 	{
-		"external/velos/velos",
-		"external/velos/tools/imgui",
+		"../velos",
+		"../tools/imgui",
 		"%{IncludeDir.ImGui}",
 		"%{IncludeDir.GLFW}",
 		"%{IncludeDir.GLM}",
