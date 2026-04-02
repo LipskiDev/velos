@@ -13,7 +13,11 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
+#include <rhi/vulkan/vk_profiler.h>
+
 #include <vk_mem_alloc.h>
+
+#include "rhi/vulkan/vk_profiler.h"
 
 namespace Velos::RHI {
 class VulkanCommandList;
@@ -191,6 +195,10 @@ private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
+
+#if VL_PROFILING
+  TracyVkCtx tracyContext_ = nullptr;
+#endif
 
   VkPhysicalDeviceProperties physicalDeviceProperties_{};
 

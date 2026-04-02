@@ -4,6 +4,7 @@
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_common.h"
+#include "rhi/vulkan/vk_profiler.h"
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -12,9 +13,13 @@
 
 #include <GLFW/glfw3.h>
 
+#include <core/profiling.h>
+
 namespace Velos::RHI {
 
 VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::VulkanDevice");
+
   VK_CHECK(volkInitialize(), "Failed to initialize Volk");
 
   CreateInstance(desc);
@@ -27,8 +32,18 @@ VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
   CreateCommandObjects();
   CreateSyncObjects();
 }
+
 VulkanDevice::~VulkanDevice() {
+  VL_PROFILE_ZONE_N("VulkanDevice::~VulkanDevice");
+
   commandList_.reset();
+
+#if VL_PROFILING
+  if (tracyContext_) {
+    VL_PROFILE_GPU_DESTROY(tracyContext_);
+    tracyContext_ = nullptr;
+  }
+#endif
 
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
@@ -58,8 +73,6 @@ VulkanDevice::~VulkanDevice() {
     DestroySwapchainSyncObjects();
     swapchain_.reset();
 
-    DestroySwapchainSyncObjects();
-
     if (inFlightFence_ != VK_NULL_HANDLE) {
       vkDestroyFence(device_, inFlightFence_, nullptr);
       inFlightFence_ = VK_NULL_HANDLE;
@@ -88,6 +101,7 @@ VulkanDevice::~VulkanDevice() {
 BackendAPI VulkanDevice::GetBackend() const { return BackendAPI::Vulkan; }
 
 void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateInstance");
   VkApplicationInfo appInfo{};
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   appInfo.pApplicationName = desc.applicationName;
@@ -146,6 +160,7 @@ void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
 }
 
 void VulkanDevice::PickPhysicalDevice() {
+  VL_PROFILE_ZONE_N("VulkanDevice::PickPhysicalDevice");
   u32 deviceCount = 0;
   VkResult result =
       vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -177,6 +192,7 @@ void VulkanDevice::PickPhysicalDevice() {
 }
 
 void VulkanDevice::CreateLogicalDevice() {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateLogicalDevice");
   u32 queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount,
                                            nullptr);
@@ -238,6 +254,8 @@ void VulkanDevice::CreateLogicalDevice() {
 }
 
 void VulkanDevice::CreateCommandObjects() {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateCommandObjects");
+
   VkCommandPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -256,9 +274,16 @@ void VulkanDevice::CreateCommandObjects() {
            "Failed to allocate Vulkan command buffer");
 
   commandList_ = std::make_unique<VulkanCommandList>(*this, commandBuffer_);
+
+#if VL_PROFILING
+  tracyContext_ = VL_PROFILE_GPU_CONTEXT(physicalDevice_, device_,
+                                         graphicsQueue_, commandBuffer_);
+#endif
 }
 
 void VulkanDevice::CreateSyncObjects() {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateSyncObjects");
+
   VkSemaphoreCreateInfo semaphoreInfo{};
   semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -275,6 +300,8 @@ void VulkanDevice::CreateSyncObjects() {
 }
 
 void VulkanDevice::CreateSwapchainSyncObjects() {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateSwapchain");
+
   if (!swapchain_) {
     throw std::runtime_error(
         "Cannot create swapchain sync objects without a swapchain");
@@ -460,6 +487,7 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
 
 void VulkanDevice::ClearCurrentSwapchainImage(float r, float g, float b,
                                               float a) {
+  VL_PROFILE_ZONE_N("VulkanDevice::ClearCurrentSwapchainImage");
   if (!swapchain_) {
     throw std::runtime_error("No swapchain available to clear");
   }
@@ -551,6 +579,8 @@ void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
 
 void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
                                    u32 height) {
+  VL_PROFILE_ZONE_N("VulkanDevice::ResizeSwapchain");
+
   if (!handle.IsValid()) {
     throw std::runtime_error("ResizeSwapchain called with invalid handle");
   }
@@ -628,6 +658,7 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
 }
 
 BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateBuffer");
 
   if (desc.size == 0) {
     throw std::runtime_error(
@@ -750,6 +781,7 @@ const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
 }
 
 ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateImage");
 
   if (desc.width == 0 || desc.height == 0 || desc.depth == 0) {
     throw std::runtime_error(
@@ -1077,6 +1109,8 @@ const VulkanShader &VulkanDevice::GetShader(ShaderHandle handle) const {
 
 PipelineHandle
 VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateGraphicsPipeline");
+
   if (!desc.vertexShader.IsValid()) {
     throw std::runtime_error(
         "CreateGraphicsPipeline requires a valid vertex shader");
@@ -1587,6 +1621,8 @@ ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle) const {
 }
 
 FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
+  VL_PROFILE_ZONE_N("VulkanDevice::BeginFrame");
+
   if (!swapchain.IsValid()) {
     throw std::runtime_error("BeginFrame called with invalid swapchain handle");
   }
@@ -1646,6 +1682,8 @@ ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {
 }
 
 void VulkanDevice::Submit(CommandListHandle commandList) {
+  VL_PROFILE_ZONE_N("VulkanDevice::Submit");
+
   if (!commandList.IsValid()) {
     throw std::runtime_error("Submit called with invalid command list handle");
   }
@@ -1666,6 +1704,8 @@ void VulkanDevice::Submit(CommandListHandle commandList) {
 
 void VulkanDevice::SubmitAndPresent(CommandListHandle commandList,
                                     SwapchainHandle swapchain) {
+  VL_PROFILE_ZONE_N("VulkanDevice::SubmitAndPresent");
+
   if (!commandList.IsValid()) {
     throw std::runtime_error(
         "SubmitAndPresent called with invalid command list handle");
@@ -1718,6 +1758,10 @@ void VulkanDevice::SubmitAndPresent(CommandListHandle commandList,
   if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
     return;
   }
+
+#if VL_PROFILING
+  VL_PROFILE_GPU_COLLECT(tracyContext_, commandBuffer_);
+#endif
 
   VK_CHECK(result, "Failed to present Vulkan swapchain image");
 }
