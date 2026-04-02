@@ -45,6 +45,7 @@ struct VulkanImage {
   VkDeviceMemory memory = VK_NULL_HANDLE;
 
   Format format = Format::Undefined;
+  ImageType type = ImageType::Image2D;
   ImageUsage usage = ImageUsage::None;
   ImageLayout layout = ImageLayout::Undefined;
 

@@ -33,6 +33,18 @@ enum class Format {
   D24_UNORM_S8_UINT,
 };
 
+enum class ImageType {
+  Image2D,
+  Cube,
+};
+
+enum class ImageViewType {
+  View2D,
+  View2DArray,
+  Cube,
+  CubeArray,
+};
+
 enum class VertexFormat {
   Float32,
   Float32x2,

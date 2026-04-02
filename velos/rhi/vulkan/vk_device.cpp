@@ -796,9 +796,35 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
     throw std::runtime_error("CreateImage: usage must not be None");
   }
 
+  if (desc.mipLevels == 0) {
+    throw std::runtime_error("CreateImage: mipLevels must be greater than 0");
+  }
+
+  if (desc.arrayLayers == 0) {
+    throw std::runtime_error("CreateImage: arrayLayers must be greater than 0");
+  }
+
+  if (desc.type == ImageType::Cube) {
+    if (desc.width != desc.height) {
+      throw std::runtime_error(
+          "CreateImage: cube textures must have width == height");
+    }
+
+    if (desc.depth != 1) {
+      throw std::runtime_error(
+          "CreateImage: cube textures must have depth == 1");
+    }
+
+    if (desc.arrayLayers != 6) {
+      throw std::runtime_error(
+          "CreateImage: cube textures must have exactly 6 array layers");
+    }
+  }
+
   VkImageCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  createInfo.imageType = VK_IMAGE_TYPE_2D;
+  createInfo.flags = 0;
+  createInfo.imageType = ToVkImageType(desc.type);
   createInfo.format = ToVkFormat(desc.format);
   createInfo.extent = {desc.width, desc.height, desc.depth};
   createInfo.mipLevels = desc.mipLevels;
@@ -808,6 +834,10 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
   createInfo.usage = ToVkImageUsage(desc.usage);
   createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  if (desc.type == ImageType::Cube) {
+    createInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+  }
 
   VkImage image = VK_NULL_HANDLE;
   VkResult result = vkCreateImage(device_, &createInfo, nullptr, &image);
@@ -841,6 +871,7 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
   VulkanImage vkImage{};
   vkImage.image = image;
   vkImage.memory = memory;
+  vkImage.type = desc.type;
   vkImage.format = desc.format;
   vkImage.usage = desc.usage;
   vkImage.layout = ImageLayout::Undefined;
@@ -932,16 +963,30 @@ ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
         "CreateImageView: array layer range out of bounds");
   }
 
+  if (desc.type == ImageViewType::Cube) {
+    if (desc.arrayLayerCount != 6) {
+      throw std::runtime_error(
+          "CreateImageView: cube view must have arrayLayerCount == 6");
+    }
+
+    if (vkImage.type != ImageType::Cube) {
+      throw std::runtime_error(
+          "CreateImageView: source image is not a cube image");
+    }
+  }
+
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   viewInfo.image = vkImage.image;
-  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  viewInfo.viewType = ToVkImageViewType(desc.type);
   viewInfo.format = ToVkFormat(viewFormat);
   viewInfo.subresourceRange.aspectMask = ToVkImageAspect(aspect);
   viewInfo.subresourceRange.baseMipLevel = desc.baseMipLevel;
   viewInfo.subresourceRange.levelCount = desc.mipLevelCount;
   viewInfo.subresourceRange.baseArrayLayer = desc.baseArrayLayer;
   viewInfo.subresourceRange.layerCount = desc.arrayLayerCount;
+  viewInfo.pNext = nullptr;
+  viewInfo.flags = 0;
 
   VkImageView view = VK_NULL_HANDLE;
   VkResult result = vkCreateImageView(device_, &viewInfo, nullptr, &view);

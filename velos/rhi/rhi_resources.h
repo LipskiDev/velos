@@ -24,6 +24,7 @@ struct ImageDesc {
   u32 arrayLayers = 1;
 
   Format format = Format::Undefined;
+  ImageType type = ImageType::Image2D;
   ImageUsage usage = ImageUsage::None;
 
   const char *debugName = nullptr;
@@ -42,6 +43,7 @@ struct SwapchainDesc {
 struct ImageViewDesc {
   ImageHandle image;
   Format format = Format::Undefined;
+  ImageViewType type = ImageViewType::View2D;
   ImageAspect aspect = ImageAspect::Color;
 
   u32 baseMipLevel = 0;

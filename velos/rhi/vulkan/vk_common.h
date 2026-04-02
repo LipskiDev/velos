@@ -241,6 +241,31 @@ inline VkImageLayout ToVkImageLayout(ImageLayout layout) {
   throw std::runtime_error("Unsupported ImageLayout");
 }
 
+inline VkImageType ToVkImageType(ImageType type) {
+  switch (type) {
+  case ImageType::Image2D:
+    return VK_IMAGE_TYPE_2D;
+
+  case ImageType::Cube:
+    // Cubemaps are still 2D images in Vulkan
+    return VK_IMAGE_TYPE_2D;
+
+  default:
+    throw std::runtime_error("Unknown ImageType");
+  }
+}
+
+inline VkImageViewType ToVkImageViewType(ImageViewType type) {
+  switch (type) {
+  case ImageViewType::View2D:
+    return VK_IMAGE_VIEW_TYPE_2D;
+  case ImageViewType::Cube:
+    return VK_IMAGE_VIEW_TYPE_CUBE;
+  default:
+    throw std::runtime_error("Unknown ImageType");
+  }
+}
+
 inline bool IsDepthFormat(Format format) {
   switch (format) {
   case Format::D32_FLOAT:
