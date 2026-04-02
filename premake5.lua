@@ -21,6 +21,7 @@ workspace "Velos"
 	IncludeDir["STB"] = "external/stb"
 	IncludeDir["ImGui"] = "external/imgui"
 	IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
+	IncludeDir["Tracy"] = "external/tracy/public"
 
 project "Velos"
 	location "build/Velos"
@@ -42,7 +43,8 @@ project "Velos"
 		"velos/**.cpp",
 		"velos/**.c",
 		"external/SPIRV-Reflect/spirv_reflect.h",
-		"external/SPIRV-Reflect/spirv_reflect.c"
+		"external/SPIRV-Reflect/spirv_reflect.c",
+		"external/tracy/public/TracyClient.cpp"
 	}
 
 	includedirs
@@ -53,7 +55,8 @@ project "Velos"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -64,7 +67,8 @@ project "Velos"
 	defines
 	{
 		"_CRT_SECURE_NO_WARNINGS",
-		"GLFW_INCLUDE_NONE"
+		"GLFW_INCLUDE_NONE",
+		"TRACY_ENABLE"
 	}
 
 	filter "system:windows"
@@ -81,7 +85,9 @@ project "Velos"
 			"user32.lib",
 			"gdi32.lib",
 			"shell32.lib",
-			"ole32.lib"
+			"ole32.lib",
+			"ws2_32.lib",
+			"dbghelp.lib"
 		}
 
 	filter "system:linux"
@@ -189,7 +195,8 @@ project "VelosImGui"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -248,6 +255,7 @@ for _, dir in ipairs(exampleDirs) do
 			"%{IncludeDir.STB}",
 			"%{IncludeDir.SPIRVReflect}",
 			"%{IncludeDir.ImGui}",
+			"%{IncludeDir.Tracy}",
 			"tools/imgui"
 		}
 
