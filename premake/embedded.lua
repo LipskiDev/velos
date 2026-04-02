@@ -11,6 +11,7 @@ IncludeDir["VMA"] = "../external/vma/include"
 IncludeDir["STB"] = "../external/stb"
 IncludeDir["ImGui"] = "../external/imgui"
 IncludeDir["SPIRVReflect"] = "../external/SPIRV-Reflect"
+IncludeDir["Tracy"] = "../external/tracy/public"
 
 project "Velos"
 	location "../../build/Velos"
@@ -32,7 +33,8 @@ project "Velos"
 		"../velos/**.cpp",
 		"../velos/**.c",
 		"../external/SPIRV-Reflect/spirv_reflect.h",
-		"../external/SPIRV-Reflect/spirv_reflect.c"
+		"../external/SPIRV-Reflect/spirv_reflect.c",
+    "../external/tracy/public/TracyClient.cpp",
 	}
 
 	includedirs
@@ -43,7 +45,8 @@ project "Velos"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+    "%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -99,7 +102,8 @@ project "Velos"
 	filter "configurations:Debug"
 		defines
 		{
-			"VL_DEBUG"
+			"VL_DEBUG",
+      "TRACY_ENABLE"
 		}
 		runtime "Debug"
 		symbols "On"
@@ -179,7 +183,8 @@ project "VelosImGui"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+    "%{IncludeDir.Tracy}"
 	}
 
 	links
