@@ -110,6 +110,9 @@ inline VkBufferUsageFlags ToVkBufferUsageFlags(BufferUsage usage) {
   if (HasFlag(usage, BufferUsage::TransferDst)) {
     flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   }
+  if (HasFlag(usage, BufferUsage::ShaderDeviceAddress)) {
+    flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+  }
 
   return flags;
 }

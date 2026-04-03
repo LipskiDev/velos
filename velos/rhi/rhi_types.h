@@ -79,6 +79,7 @@ enum class BufferUsage : u32 {
   Storage = 1 << 3,
   TransferSrc = 1 << 4,
   TransferDst = 1 << 5,
+  ShaderDeviceAddress = 1 << 6
 };
 
 enum class TextureUsage : u32 {

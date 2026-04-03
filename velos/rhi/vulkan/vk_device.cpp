@@ -228,10 +228,16 @@ void VulkanDevice::CreateLogicalDevice() {
 
   VkPhysicalDeviceFeatures deviceFeatures{};
 
+  VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
+  bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+  bda.bufferDeviceAddress = VK_TRUE;
+  bda.pNext = nullptr;
+
   VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
   dynamicRenderingFeatures.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
   dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+  dynamicRenderingFeatures.pNext = &bda;
 
   const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -689,12 +695,20 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
   VkMemoryRequirements memRequirements{};
   vkGetBufferMemoryRequirements(device_, buffer.buffer, &memRequirements);
 
+  VkMemoryAllocateFlagsInfo flagsInfo{};
+  flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+
   VkMemoryAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocInfo.allocationSize = memRequirements.size;
   allocInfo.memoryTypeIndex =
       FindMemoryType(memRequirements.memoryTypeBits,
                      ToVkMemoryPropertyFlags(desc.memoryUsage));
+
+  if (HasFlag(desc.usage, BufferUsage::ShaderDeviceAddress)) {
+    flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+    allocInfo.pNext = &flagsInfo;
+  }
 
   result = vkAllocateMemory(device_, &allocInfo, nullptr, &buffer.memory);
 
@@ -709,6 +723,14 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
     vkFreeMemory(device_, buffer.memory, nullptr);
     vkDestroyBuffer(device_, buffer.buffer, nullptr);
     throw std::runtime_error("CreateBuffer: vkBindBufferMemory failed");
+  }
+
+  if (HasFlag(desc.usage, BufferUsage::ShaderDeviceAddress)) {
+    VkBufferDeviceAddressInfo addressInfo{};
+    addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    addressInfo.buffer = buffer.buffer;
+
+    buffer.deviceAddress = vkGetBufferDeviceAddress(device_, &addressInfo);
   }
 
   if (desc.initialData != nullptr) {
@@ -778,6 +800,11 @@ const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
   }
 
   return it->second;
+}
+
+u64 VulkanDevice::GetBufferDeviceAddress(BufferHandle handle) const {
+  VulkanBuffer buffer = GetBuffer(handle);
+  return static_cast<u64>(buffer.deviceAddress);
 }
 
 ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {

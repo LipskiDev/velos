@@ -71,6 +71,7 @@ struct VulkanBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VkDeviceMemory memory = VK_NULL_HANDLE;
   u64 size = 0;
+  u64 deviceAddress = 0;
   BufferUsage usage = BufferUsage::None;
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
 };
@@ -107,6 +108,7 @@ public:
   BufferHandle CreateBuffer(const BufferDesc &desc) override;
   void DestroyBuffer(BufferHandle handle) override;
   const VulkanBuffer &GetBuffer(BufferHandle handle) const;
+  u64 GetBufferDeviceAddress(BufferHandle handle) const override;
 
   ImageHandle CreateImage(const ImageDesc &desc) override;
   void DestroyImage(ImageHandle handle) override;

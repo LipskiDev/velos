@@ -41,6 +41,7 @@ public:
 
   virtual BufferHandle CreateBuffer(const BufferDesc &desc) = 0;
   virtual void DestroyBuffer(BufferHandle handle) = 0;
+  virtual u64 GetBufferDeviceAddress(BufferHandle handle) const = 0;
 
   virtual ImageHandle CreateImage(const ImageDesc &desc) = 0;
   virtual void DestroyImage(ImageHandle image) = 0;
