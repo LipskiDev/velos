@@ -1389,8 +1389,7 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   renderingInfo.colorAttachmentCount = 1;
   renderingInfo.pColorAttachmentFormats = &colorFormat;
-  renderingInfo.depthAttachmentFormat =
-      desc.depth.depthTestEnable ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_UNDEFINED;
+  renderingInfo.depthAttachmentFormat = ToVkFormat(desc.depth.depthFormat);
   renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
   VkGraphicsPipelineCreateInfo pipelineInfo{};
