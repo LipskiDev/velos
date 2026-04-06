@@ -409,8 +409,10 @@ void VulkanCommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &vkRegion);
 };
 
-void VulkanCommandList::Draw(u32 vertexCount, u32 firstVertex) {
-  vkCmdDraw(commandBuffer_, vertexCount, 1, firstVertex, 0);
+void VulkanCommandList::Draw(u32 vertexCount, u32 instanceCount,
+                             u32 firstVertex, u32 baseInstance) {
+  vkCmdDraw(commandBuffer_, vertexCount, instanceCount, firstVertex,
+            baseInstance);
 }
 
 void VulkanCommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
