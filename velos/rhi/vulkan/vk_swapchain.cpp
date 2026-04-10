@@ -151,8 +151,24 @@ void VulkanSwapchain::CreateSwapchain(const SwapchainDesc &desc) {
       ChoosePresentMode(presentModes, desc.vsync);
   const VkExtent2D chosenExtent =
       ChooseExtent(capabilities, desc.width, desc.height);
+  auto PresentModeToString = [](VkPresentModeKHR mode) {
+    switch (mode) {
+    case VK_PRESENT_MODE_FIFO_KHR:
+      return "FIFO (vsync ON)";
+    case VK_PRESENT_MODE_MAILBOX_KHR:
+      return "MAILBOX (triple buffering)";
+    case VK_PRESENT_MODE_IMMEDIATE_KHR:
+      return "IMMEDIATE (no vsync)";
+    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+      return "FIFO_RELAXED";
+    default:
+      return "UNKNOWN";
+    }
+  };
 
-  u32 imageCount = capabilities.minImageCount + 1;
+  std::cout << "[Swapchain] Present mode: "
+            << PresentModeToString(chosenPresentMode) << std::endl;
+  u32 imageCount = capabilities.minImageCount + 2;
   if (capabilities.maxImageCount > 0 &&
       imageCount > capabilities.maxImageCount) {
     imageCount = capabilities.maxImageCount;

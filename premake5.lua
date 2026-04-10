@@ -5,7 +5,8 @@ workspace "Velos"
 	configurations
 	{
 		"Debug",
-		"Release"
+		"Release",
+    "Profile"
 	}
 
 	multiprocessorcompile "On"
@@ -43,8 +44,7 @@ project "Velos"
 		"velos/**.cpp",
 		"velos/**.c",
 		"external/SPIRV-Reflect/spirv_reflect.h",
-		"external/SPIRV-Reflect/spirv_reflect.c",
-		"external/tracy/public/TracyClient.cpp"
+		"external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -67,8 +67,7 @@ project "Velos"
 	defines
 	{
 		"_CRT_SECURE_NO_WARNINGS",
-		"GLFW_INCLUDE_NONE",
-		"TRACY_ENABLE"
+		"GLFW_INCLUDE_NONE"
 	}
 
 	filter "system:windows"
@@ -112,21 +111,35 @@ project "Velos"
 			"shaderc"
 		}
 
-	filter "configurations:Debug"
-		defines
-		{
-			"VL_DEBUG"
-		}
-		runtime "Debug"
-		symbols "On"
+  filter "configurations:Debug"
+    files
+    {
+      "external/tracy/public/TracyClient.cpp"
+    }
+    defines
+    {
+      "VL_DEBUG",
+      "TRACY_ENABLE"
+    }
+    runtime "Debug"
+    symbols "On"
 
-	filter "configurations:Release"
-		defines
-		{
-			"VL_RELEASE"
-		}
-		runtime "Release"
-		optimize "Speed"
+  filter "configurations:Release"
+    defines
+    {
+      "VL_RELEASE"
+    }
+    runtime "Release"
+    optimize "Speed"
+
+  filter "configurations:Profile"
+    defines
+    {
+      "VL_RELEASE"
+    }
+    runtime "Release"
+    optimize "Speed"
+    symbols "On"
 
 	filter {}
 
@@ -164,6 +177,11 @@ project "imgui"
 	filter "configurations:Release"
 		runtime "Release"
 		optimize "Speed"
+
+  filter "configurations:Profile"
+    runtime "Release"
+    optimize "Speed"
+    symbols "On"
 
 	filter {}
 
@@ -217,5 +235,11 @@ project "VelosImGui"
 		defines { "VL_RELEASE" }
 		runtime "Release"
 		optimize "Speed"
+
+  filter "configurations:Profile"
+    defines { "VL_RELEASE" }
+    runtime "Release"
+    optimize "Speed"
+    symbols "On"
 
 	filter {}

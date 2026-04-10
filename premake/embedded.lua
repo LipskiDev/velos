@@ -23,7 +23,7 @@ project "Velos"
 	targetdir ("../../bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("../../bin-int/" .. outputdir .. "/%{prj.name}")
 
-  pchheader "../velos/core/vlpch.h"
+	pchheader "../velos/core/vlpch.h"
 	pchsource "../velos/core/vlpch.cpp"
 
 	files
@@ -33,8 +33,7 @@ project "Velos"
 		"../velos/**.cpp",
 		"../velos/**.c",
 		"../external/SPIRV-Reflect/spirv_reflect.h",
-		"../external/SPIRV-Reflect/spirv_reflect.c",
-    "../external/tracy/public/TracyClient.cpp",
+		"../external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -46,7 +45,7 @@ project "Velos"
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
 		"%{IncludeDir.SPIRVReflect}",
-    "%{IncludeDir.Tracy}"
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -100,10 +99,14 @@ project "Velos"
 		}
 
 	filter "configurations:Debug"
+		files
+		{
+			"../external/tracy/public/TracyClient.cpp"
+		}
 		defines
 		{
 			"VL_DEBUG",
-      "TRACY_ENABLE"
+			"TRACY_ENABLE"
 		}
 		runtime "Debug"
 		symbols "On"
@@ -115,6 +118,15 @@ project "Velos"
 		}
 		runtime "Release"
 		optimize "Speed"
+
+	filter "configurations:Profile"
+		defines
+		{
+			"VL_RELEASE"
+		}
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
 
 	filter {}
 
@@ -153,6 +165,11 @@ project "imgui"
 		runtime "Release"
 		optimize "Speed"
 
+	filter "configurations:Profile"
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
+
 	filter {}
 
 project "VelosImGui"
@@ -184,7 +201,7 @@ project "VelosImGui"
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
 		"%{IncludeDir.SPIRVReflect}",
-    "%{IncludeDir.Tracy}"
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -205,5 +222,11 @@ project "VelosImGui"
 		defines { "VL_RELEASE" }
 		runtime "Release"
 		optimize "Speed"
+
+	filter "configurations:Profile"
+		defines { "VL_RELEASE" }
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
 
 	filter {}
