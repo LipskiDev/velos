@@ -190,7 +190,9 @@ public:
   const VkPhysicalDeviceProperties &GetPhysicalDeviceProperties() const {
     return physicalDeviceProperties_;
   }
-  VkCommandBuffer GetCommandBuffer() const { return commandBuffer_; }
+  VkCommandBuffer GetCommandBuffer() const {
+    return commandBuffers_[currentFrame_];
+  }
 
   Extent2D GetSwapchainDimensions() const override;
 
@@ -211,18 +213,28 @@ private:
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   u32 presentQueueFamily_ = 0;
 
-  VkCommandPool commandPool_ = VK_NULL_HANDLE;
-  VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
+  static constexpr u32 k_MaxFramesInFlight = 2;
 
-  std::unique_ptr<VulkanCommandList> commandList_;
+  VkCommandPool commandPool_ = VK_NULL_HANDLE;
+  std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
+  std::array<std::unique_ptr<VulkanCommandList>, k_MaxFramesInFlight>
+      commandLists_;
+
   std::unique_ptr<VulkanSwapchain> swapchain_;
   std::vector<ImageHandle> swapchainImageHandles_;
   std::vector<ImageViewHandle> swapchainImageViewHandles_;
 
-  VkSemaphore imageAvailableSemaphore_;
-  std::vector<VkSemaphore> renderFinishedSemaphores_;
-  VkFence inFlightFence_;
-  u32 currentBackbufferIndex_;
+  u32 currentFrame_ = 0;
+  u32 currentBackbufferIndex_ = 0;
+
+  struct FrameSyncData {
+    VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+    VkFence inFlightFence = VK_NULL_HANDLE;
+  };
+
+  std::array<FrameSyncData, k_MaxFramesInFlight> frames_;
+  std::vector<VkFence> swapchainImagesInFlight_;
+  std::vector<VkSemaphore> swapchainRenderFinishedSemaphores_;
 
 private:
   u32 nextShaderHandle_ = 1;

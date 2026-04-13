@@ -121,7 +121,10 @@ project "Velos"
 	{
 		"../velos/**.h",
 		"../velos/**.hpp",
-		"../velos/**.cpp"
+		"../velos/**.cpp",
+		"../velos/**.c",
+		"../external/SPIRV-Reflect/spirv_reflect.h",
+		"../external/SPIRV-Reflect/spirv_reflect.c"
 	}
 
 	includedirs
@@ -133,7 +136,8 @@ project "Velos"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -207,7 +211,11 @@ project "Velos"
 			"shaderc"
 		}
 
-	filter { "system:linux", "configurations:Debug" }
+	filter "configurations:Debug"
+		files
+		{
+			"../external/tracy/public/TracyClient.cpp"
+		}
 		defines
 		{
 			"VL_DEBUG",
@@ -248,6 +256,15 @@ project "Velos"
 		runtime "Release"
 		optimize "Speed"
 
+	filter "configurations:Profile"
+		defines
+		{
+			"VL_RELEASE"
+		}
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
+
 	filter {}
 
 project "imgui"
@@ -285,6 +302,11 @@ project "imgui"
 		runtime "Release"
 		optimize "Speed"
 
+	filter "configurations:Profile"
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
+
 	filter {}
 
 project "VelosImGui"
@@ -315,7 +337,8 @@ project "VelosImGui"
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}"
+		"%{IncludeDir.SPIRVReflect}",
+		"%{IncludeDir.Tracy}"
 	}
 
 	links
@@ -374,5 +397,11 @@ project "VelosImGui"
 		}
 		runtime "Release"
 		optimize "Speed"
+
+	filter "configurations:Profile"
+		defines { "VL_RELEASE" }
+		runtime "Release"
+		optimize "Speed"
+		symbols "On"
 
 	filter {}
