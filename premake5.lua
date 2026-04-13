@@ -12,8 +12,14 @@ workspace "Velos"
 
 	outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
+	local VulkanSDK = os.getenv("VULKAN_SDK")
+	if os.host() == "windows" and (not VulkanSDK or VulkanSDK == "") then
+		error("VULKAN_SDK is not set for Premake generation.")
+	end
+
 	IncludeDir = {}
 	IncludeDir["Velos"] = "velos"
+	IncludeDir["VelosCore"] = "velos/core"
 	IncludeDir["GLFW"] = "external/glfw/include"
 	IncludeDir["GLM"] = "external/glm"
 	IncludeDir["VOLK"] = "external/volk"
@@ -22,6 +28,97 @@ workspace "Velos"
 	IncludeDir["ImGui"] = "external/imgui"
 	IncludeDir["SPIRVReflect"] = "external/SPIRV-Reflect"
 	IncludeDir["Tracy"] = "external/tracy/public"
+
+project "SPIRVReflect"
+	location "build/SPIRVReflect"
+	kind "StaticLib"
+	language "C"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"external/SPIRV-Reflect/spirv_reflect.h",
+		"external/SPIRV-Reflect/spirv_reflect.c"
+	}
+
+	includedirs
+	{
+		"%{IncludeDir.SPIRVReflect}"
+	}
+
+	filter "system:windows"
+		systemversion "latest"
+
+	filter "system:linux"
+		pic "On"
+
+	filter "configurations:Debug"
+		runtime "Debug"
+		symbols "On"
+
+	filter "configurations:Release"
+		runtime "Release"
+		optimize "Speed"
+
+	filter {}
+
+project "GLFW"
+	location "build/GLFW"
+	kind "StaticLib"
+	language "C"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"external/glfw/src/**.h",
+		"external/glfw/src/**.c"
+	}
+
+	includedirs
+	{
+		"external/glfw/include",
+		"external/glfw/src"
+	}
+
+	filter "system:windows"
+		systemversion "latest"
+
+		files
+		{
+			"external/glfw/src/win32_*.*",
+			"external/glfw/src/wgl_context.*",
+			"external/glfw/src/egl_context.*",
+			"external/glfw/src/osmesa_context.*"
+		}
+
+		defines
+		{
+			"_GLFW_WIN32"
+		}
+
+	filter "system:linux"
+		pic "On"
+
+		defines
+		{
+			"_GLFW_X11"
+		}
+
+	filter "configurations:Debug"
+		runtime "Debug"
+		symbols "On"
+
+	filter "configurations:Release"
+		runtime "Release"
+		optimize "Speed"
+
+	filter {}
 
 project "Velos"
 	location "build/Velos"
@@ -33,46 +130,49 @@ project "Velos"
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
-	pchheader "velos/core/vlpch.h"
-	pchsource "velos/core/vlpch.cpp"
-
 	files
 	{
 		"velos/**.h",
 		"velos/**.hpp",
-		"velos/**.cpp",
-		"velos/**.c",
-		"external/SPIRV-Reflect/spirv_reflect.h",
-		"external/SPIRV-Reflect/spirv_reflect.c",
-		"external/tracy/public/TracyClient.cpp"
+		"velos/**.cpp"
 	}
 
 	includedirs
 	{
 		"%{IncludeDir.Velos}",
+		"%{IncludeDir.VelosCore}",
 		"%{IncludeDir.GLFW}",
 		"%{IncludeDir.GLM}",
 		"%{IncludeDir.VOLK}",
 		"%{IncludeDir.VMA}",
 		"%{IncludeDir.STB}",
-		"%{IncludeDir.SPIRVReflect}",
-		"%{IncludeDir.Tracy}"
+		"%{IncludeDir.SPIRVReflect}"
 	}
 
 	links
 	{
-		"GLFW"
+		"GLFW",
+		"SPIRVReflect"
 	}
 
 	defines
 	{
 		"_CRT_SECURE_NO_WARNINGS",
-		"GLFW_INCLUDE_NONE",
-		"TRACY_ENABLE"
+		"GLFW_INCLUDE_NONE"
 	}
 
 	filter "system:windows"
 		systemversion "latest"
+
+		includedirs
+		{
+			VulkanSDK .. "/Include"
+		}
+
+		libdirs
+		{
+			VulkanSDK .. "/Lib"
+		}
 
 		defines
 		{
@@ -81,16 +181,24 @@ project "Velos"
 
 		links
 		{
-			"vulkan-1.lib",
-			"user32.lib",
-			"gdi32.lib",
-			"shell32.lib",
-			"ole32.lib",
-			"ws2_32.lib",
-			"dbghelp.lib"
+			"vulkan-1",
+			"user32",
+			"gdi32",
+			"shell32",
+			"ole32"
 		}
 
 	filter "system:linux"
+		files
+		{
+			"external/tracy/public/TracyClient.cpp"
+		}
+
+		includedirs
+		{
+			"%{IncludeDir.Tracy}"
+		}
+
 		pic "On"
 
 		defines
@@ -112,13 +220,38 @@ project "Velos"
 			"shaderc"
 		}
 
-	filter "configurations:Debug"
+	filter { "system:linux", "configurations:Debug" }
+		defines
+		{
+			"VL_DEBUG",
+			"TRACY_ENABLE"
+		}
+		runtime "Debug"
+		symbols "On"
+
+	filter { "system:windows", "configurations:Debug" }
 		defines
 		{
 			"VL_DEBUG"
 		}
+		links
+		{
+			"shaderc_combinedd"
+		}
 		runtime "Debug"
 		symbols "On"
+
+	filter { "system:windows", "configurations:Release" }
+		defines
+		{
+			"VL_RELEASE"
+		}
+		links
+		{
+			"shaderc_combined"
+		}
+		runtime "Release"
+		optimize "Speed"
 
 	filter "configurations:Release"
 		defines
@@ -188,6 +321,7 @@ project "VelosImGui"
 	includedirs
 	{
 		"velos",
+		"velos/core",
 		"tools/imgui",
 		"%{IncludeDir.ImGui}",
 		"%{IncludeDir.GLFW}",
@@ -205,16 +339,54 @@ project "VelosImGui"
 		"imgui"
 	}
 
+	filter "system:windows"
+		systemversion "latest"
+
+		includedirs
+		{
+			VulkanSDK .. "/Include"
+		}
+
+		libdirs
+		{
+			VulkanSDK .. "/Lib"
+		}
+
+		defines
+		{
+			"VL_PLATFORM_WINDOWS"
+		}
+
+		links
+		{
+			"vulkan-1",
+			"user32",
+			"gdi32",
+			"shell32",
+			"ole32"
+		}
+
 	filter "system:linux"
 		pic "On"
 
+		defines
+		{
+			"VL_PLATFORM_LINUX"
+		}
+
 	filter "configurations:Debug"
-		defines { "VL_DEBUG" }
+		defines
+		{
+			"VL_DEBUG"
+		}
 		runtime "Debug"
 		symbols "On"
 
 	filter "configurations:Release"
-		defines { "VL_RELEASE" }
+		defines
+		{
+			"VL_RELEASE"
+		}
 		runtime "Release"
 		optimize "Speed"
 

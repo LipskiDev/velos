@@ -1,3 +1,5 @@
+#include "vlpch.h"
+
 #include "rhi/vulkan/vk_swapchain.h"
 #include "rhi/rhi_device.h"
 #include "rhi/vulkan/vk_common.h"

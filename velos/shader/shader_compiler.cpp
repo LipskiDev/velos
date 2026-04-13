@@ -1,3 +1,4 @@
+#include "vlpch.h"
 #include "shader_compiler.h"
 
 #include <fstream>
