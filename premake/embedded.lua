@@ -180,16 +180,6 @@ project "Velos"
 		}
 
 	filter "system:linux"
-		files
-		{
-			"../external/tracy/public/TracyClient.cpp"
-		}
-
-		includedirs
-		{
-			"%{IncludeDir.Tracy}"
-		}
-
 		pic "On"
 
 		defines
@@ -227,14 +217,12 @@ project "Velos"
 	filter { "system:windows", "configurations:Debug" }
 		defines
 		{
-			"VL_DEBUG"
+			"TRACY_NO_SYSTEM_TRACING"
 		}
 		links
 		{
 			"shaderc_combinedd"
 		}
-		runtime "Debug"
-		symbols "On"
 
 	filter { "system:windows", "configurations:Release" }
 		defines
@@ -248,7 +236,7 @@ project "Velos"
 		runtime "Release"
 		optimize "Speed"
 
-	filter "configurations:Release"
+	filter { "system:linux", "configurations:Release" }
 		defines
 		{
 			"VL_RELEASE"
@@ -257,13 +245,28 @@ project "Velos"
 		optimize "Speed"
 
 	filter "configurations:Profile"
+		files
+		{
+			"../external/tracy/public/TracyClient.cpp"
+		}
 		defines
 		{
-			"VL_RELEASE"
+			"VL_RELEASE",
+			"TRACY_ENABLE"
 		}
 		runtime "Release"
 		optimize "Speed"
 		symbols "On"
+
+	filter { "system:windows", "configurations:Profile" }
+		defines
+		{
+			"TRACY_NO_SYSTEM_TRACING"
+		}
+		links
+		{
+			"shaderc_combined"
+		}
 
 	filter {}
 
@@ -399,7 +402,10 @@ project "VelosImGui"
 		optimize "Speed"
 
 	filter "configurations:Profile"
-		defines { "VL_RELEASE" }
+		defines
+		{
+			"VL_RELEASE"
+		}
 		runtime "Release"
 		optimize "Speed"
 		symbols "On"
