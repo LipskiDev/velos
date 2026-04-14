@@ -153,10 +153,9 @@ public:
   ImageLayout GetImageLayout(ImageHandle image) const override;
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
-  ICommandList &GetCommandList(CommandListHandle handle) override;
-  void Submit(CommandListHandle commandList) override;
-  void SubmitAndPresent(CommandListHandle commandList,
-                        SwapchainHandle swapchain) override;
+  ICommandList &GetCommandList() override;
+  void Submit() override;
+  void SubmitAndPresent(SwapchainHandle swapchain) override;
 
   void ClearCurrentSwapchainImage(float r, float g, float b, float a);
 

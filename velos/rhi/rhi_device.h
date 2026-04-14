@@ -26,6 +26,8 @@ struct FrameBeginResult {
   ImageHandle backbufferImage{};
   u32 backbufferIndex = 0;
   bool success = false;
+  uint32_t frameIndex;
+  uint32_t imageIndex;
 };
 
 class IDevice {
@@ -76,10 +78,9 @@ public:
   virtual ImageLayout GetImageLayout(ImageHandle image) const = 0;
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;
-  virtual ICommandList &GetCommandList(CommandListHandle handle) = 0;
-  virtual void Submit(CommandListHandle commandList) = 0;
-  virtual void SubmitAndPresent(CommandListHandle commandList,
-                                SwapchainHandle swapchain) = 0;
+  virtual ICommandList &GetCommandList() = 0;
+  virtual void Submit() = 0;
+  virtual void SubmitAndPresent(SwapchainHandle swapchain) = 0;
 
   virtual void WaitIdle() = 0;
   virtual void CollectGarbage() = 0;

@@ -1642,7 +1642,8 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
     throw std::runtime_error("BeginFrame called without a created swapchain");
   }
 
-  FrameSyncData &frame = frames_[currentFrame_];
+  const u32 frameIndex = currentFrame_;
+  FrameSyncData &frame = frames_[frameIndex];
 
   {
     VL_PROFILE_ZONE_N("BeginFrame.WaitForFrameFence");
@@ -1667,6 +1668,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
         .backbufferImage = ImageHandle{},
         .backbufferIndex = 0,
         .success = false,
+        .frameIndex = frameIndex,
     };
   }
 
@@ -1692,18 +1694,16 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   img.layout = ImageLayout::Undefined;
 
   return FrameBeginResult{
-      .commandList = CommandListHandle{1},
+      .commandList = {},
       .backbuffer = swapchainImageViewHandles_[imageIndex],
       .backbufferImage = swapchainImageHandles_[imageIndex],
       .backbufferIndex = imageIndex,
       .success = true,
+      .frameIndex = frameIndex,
   };
 }
 
-ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {
-  if (!handle.IsValid()) {
-    throw std::runtime_error("Invalid command list handle");
-  }
+ICommandList &VulkanDevice::GetCommandList() {
 
   if (!commandLists_[currentFrame_]) {
     throw std::runtime_error("Command list has not been created");
@@ -1712,12 +1712,8 @@ ICommandList &VulkanDevice::GetCommandList(CommandListHandle handle) {
   return *commandLists_[currentFrame_];
 }
 
-void VulkanDevice::Submit(CommandListHandle commandList) {
+void VulkanDevice::Submit() {
   VL_PROFILE_ZONE_N("VulkanDevice::Submit");
-
-  if (!commandList.IsValid()) {
-    throw std::runtime_error("Submit called with invalid command list handle");
-  }
 
   FrameSyncData &frame = frames_[currentFrame_];
   VkCommandBuffer cmd = commandBuffers_[currentFrame_];
@@ -1737,14 +1733,8 @@ void VulkanDevice::Submit(CommandListHandle commandList) {
            "Failed to submit Vulkan command buffer");
 }
 
-void VulkanDevice::SubmitAndPresent(CommandListHandle commandList,
-                                    SwapchainHandle swapchain) {
+void VulkanDevice::SubmitAndPresent(SwapchainHandle swapchain) {
   VL_PROFILE_ZONE_N("VulkanDevice::SubmitAndPresent");
-
-  if (!commandList.IsValid()) {
-    throw std::runtime_error(
-        "SubmitAndPresent called with invalid command list handle");
-  }
 
   if (!swapchain.IsValid()) {
     throw std::runtime_error(
