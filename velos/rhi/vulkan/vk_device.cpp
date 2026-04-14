@@ -1,4 +1,3 @@
-#include "vlpch.h"
 #include "vk_device.h"
 #include "../rhi_device.h"
 #include "rhi/rhi_handles.h"
@@ -6,6 +5,7 @@
 #include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_profiler.h"
+#include "vlpch.h"
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -704,6 +704,9 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
 
   const u32 handleId = nextBufferHandle_++;
   buffers_.emplace(handleId, buffer);
+
+  setObjectDebugName(device_, VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer.buffer,
+                     desc.debugName);
 
   return BufferHandle{handleId};
 }

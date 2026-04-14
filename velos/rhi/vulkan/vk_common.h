@@ -12,6 +12,23 @@
 #include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
+
+inline VkResult setObjectDebugName(VkDevice device, VkObjectType type,
+                                   uint64_t handle, const char *name) {
+  if (!name || !*name || !vkSetDebugUtilsObjectNameEXT) {
+    return VK_SUCCESS;
+  }
+
+  const VkDebugUtilsObjectNameInfoEXT ni = {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+      .objectType = type,
+      .objectHandle = handle,
+      .pObjectName = name,
+  };
+
+  return vkSetDebugUtilsObjectNameEXT(device, &ni);
+}
+
 inline void VK_CHECK(VkResult result, const char *message) {
   if (result != VK_SUCCESS) {
     throw std::runtime_error(message);
