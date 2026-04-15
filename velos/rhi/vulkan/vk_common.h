@@ -77,20 +77,26 @@ inline VkFormat ToVkVertexFormat(VertexFormat format) {
   }
 }
 
-inline VkShaderStageFlagBits ToVkShaderStage(ShaderStage stage) {
-  switch (stage) {
-  case ShaderStage::Vertex:
-    return VK_SHADER_STAGE_VERTEX_BIT;
+inline VkShaderStageFlags ToVkShaderStage(ShaderStage stage) {
+  VkShaderStageFlags flags = 0;
 
-  case ShaderStage::Fragment:
-    return VK_SHADER_STAGE_FRAGMENT_BIT;
-
-  case ShaderStage::Compute:
-    return VK_SHADER_STAGE_COMPUTE_BIT;
-
-  default:
-    throw std::runtime_error("Unsupported ShaderStage");
+  if ((stage & ShaderStage::Vertex) == ShaderStage::Vertex) {
+    flags |= VK_SHADER_STAGE_VERTEX_BIT;
   }
+
+  if ((stage & ShaderStage::Fragment) == ShaderStage::Fragment) {
+    flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+  }
+
+  if ((stage & ShaderStage::Compute) == ShaderStage::Compute) {
+    flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+  }
+
+  if (flags == 0) {
+    throw std::runtime_error("Unsupported ShaderStage (empty)");
+  }
+
+  return flags;
 }
 
 inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveTopology topology) {

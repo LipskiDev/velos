@@ -1264,24 +1264,63 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   dynamicState.dynamicStateCount = 2;
   dynamicState.pDynamicStates = dynamicStates;
 
-  std::vector<VkPushConstantRange> vertexPushConstantRanges = {};
-  vertexPushConstantRanges.reserve(vs.reflection.pushConstants.size() +
-                                   fs.reflection.pushConstants.size());
+  std::vector<VkPushConstantRange> pushConstantRanges = {};
+  pushConstantRanges.reserve(vs.reflection.pushConstants.size() +
+                             fs.reflection.pushConstants.size());
 
-  for (auto &pushConstantRange : vs.reflection.pushConstants) {
-    VkPushConstantRange pcr;
-    pcr.size = pushConstantRange.size;
-    pcr.offset = pushConstantRange.offset;
-    pcr.stageFlags = ToVkShaderStage(ShaderStage::Vertex);
-    vertexPushConstantRanges.push_back(pcr);
+  auto addOrMergePushConstantRange = [&](uint32_t offset, uint32_t size,
+                                         VkShaderStageFlags stageFlags) {
+    const uint32_t newStart = offset;
+    const uint32_t newEnd = offset + size;
+
+    for (auto &existing : pushConstantRanges) {
+      const uint32_t existingStart = existing.offset;
+      const uint32_t existingEnd = existing.offset + existing.size;
+
+      const bool overlaps =
+          !(newEnd <= existingStart || newStart >= existingEnd);
+
+      if (overlaps) {
+        const uint32_t mergedStart = std::min(existingStart, newStart);
+        const uint32_t mergedEnd = std::max(existingEnd, newEnd);
+
+        existing.offset = mergedStart;
+        existing.size = mergedEnd - mergedStart;
+        existing.stageFlags |= stageFlags;
+        return;
+      }
+
+      // Optional: also merge directly adjacent ranges
+      const bool adjacent =
+          (newEnd == existingStart || newStart == existingEnd);
+      if (adjacent) {
+        const uint32_t mergedStart = std::min(existingStart, newStart);
+        const uint32_t mergedEnd = std::max(existingEnd, newEnd);
+
+        existing.offset = mergedStart;
+        existing.size = mergedEnd - mergedStart;
+        existing.stageFlags |= stageFlags;
+        return;
+      }
+    }
+
+    VkPushConstantRange pcr{};
+    pcr.offset = offset;
+    pcr.size = size;
+    pcr.stageFlags = stageFlags;
+    pushConstantRanges.push_back(pcr);
+  };
+
+  for (const auto &pushConstantRange : vs.reflection.pushConstants) {
+    addOrMergePushConstantRange(pushConstantRange.offset,
+                                pushConstantRange.size,
+                                VK_SHADER_STAGE_VERTEX_BIT);
   }
 
-  for (auto &pushConstantRange : fs.reflection.pushConstants) {
-    VkPushConstantRange pcr;
-    pcr.size = pushConstantRange.size;
-    pcr.offset = pushConstantRange.offset;
-    pcr.stageFlags = ToVkShaderStage(ShaderStage::Fragment);
-    vertexPushConstantRanges.push_back(pcr);
+  for (const auto &pushConstantRange : fs.reflection.pushConstants) {
+    addOrMergePushConstantRange(pushConstantRange.offset,
+                                pushConstantRange.size,
+                                VK_SHADER_STAGE_FRAGMENT_BIT);
   }
 
   std::vector<VkDescriptorSetLayout> vkSetLayouts;
@@ -1299,8 +1338,8 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   pipelineLayoutInfo.setLayoutCount = static_cast<u32>(vkSetLayouts.size());
   pipelineLayoutInfo.pSetLayouts =
       vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
-  pipelineLayoutInfo.pushConstantRangeCount = vertexPushConstantRanges.size();
-  pipelineLayoutInfo.pPushConstantRanges = vertexPushConstantRanges.data();
+  pipelineLayoutInfo.pushConstantRangeCount = pushConstantRanges.size();
+  pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
   VK_CHECK(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr,
