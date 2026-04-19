@@ -82,6 +82,12 @@ struct BufferUpdateDesc {
   u64 size = 0;
 };
 
+struct BufferCopyRegion {
+  u64 srcOffset;
+  u64 dstOffset;
+  u64 size;
+};
+
 struct BufferImageCopyRegion {
   u64 bufferOffset = 0;
 

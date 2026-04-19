@@ -1,23 +1,16 @@
 #pragma once
 
-#include "../rhi_device.h"
-#include "core/types.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
-#include "shader/shader_compiler.h"
-#include "vk_command_list.h"
-#include "vk_swapchain.h"
-#include "volk.h"
-#include <memory>
-#include <unordered_map>
-#include <vulkan/vulkan_core.h>
-
 #include <rhi/vulkan/vk_profiler.h>
 
+#include <unordered_map>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_core.h>
 
+#include "rhi/rhi_device.h"
+#include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_profiler.h"
+#include "rhi/vulkan/vk_swapchain.h"
+#include "shader/shader_compiler.h"
 
 namespace Velos::RHI {
 class VulkanCommandList;
@@ -69,9 +62,12 @@ struct VulkanImageView {
 
 struct VulkanBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VmaAllocation allocation = VK_NULL_HANDLE;
+  VmaAllocationInfo allocationInfo{};
+
   u64 size = 0;
   u64 deviceAddress = 0;
+
   BufferUsage usage = BufferUsage::None;
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
 };
@@ -98,6 +94,8 @@ class VulkanDevice final : public IDevice {
 public:
   explicit VulkanDevice(const DeviceDesc &desc);
   ~VulkanDevice() override;
+
+  void CreateAllocator();
 
   BackendAPI GetBackend() const override;
 
@@ -156,19 +154,20 @@ public:
   ICommandList &GetCommandList() override;
   void Submit() override;
   void SubmitAndPresent(SwapchainHandle swapchain) override;
+  void Submit(CommandListHandle handle, VkFence fence);
 
   void ClearCurrentSwapchainImage(float r, float g, float b, float a);
 
   void WaitIdle() override;
   void CollectGarbage() override;
 
+  std::unique_ptr<IUploadContext>
+  CreateUploadContext(u64 stagingBufferSize = 1024 * 16 * 1024) override;
+
+  void DumpLiveResources() const;
+
 private:
   u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) const;
-
-public:
-  void TransitionCurrentSwapchainImageForRendering();
-  void TransitionCurrentSwapchainImageForPresent();
-  void TransitionImageToDepthAttachment(ImageHandle handle);
 
 private:
   void CreateInstance(const DeviceDesc &desc);
@@ -193,12 +192,18 @@ public:
     return commandBuffers_[currentFrame_];
   }
 
+  VkCommandPool GetUploadCommandPool() const { return uploadCommandPool_; }
+
   Extent2D GetSwapchainDimensions() const override;
+
+  VmaAllocator GetAllocator() { return allocator_; }
 
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
+
+  VmaAllocator allocator_ = VK_NULL_HANDLE;
 
 #if VL_PROFILING
   TracyVkCtx tracyContext_ = nullptr;
@@ -215,6 +220,8 @@ private:
   static constexpr u32 k_MaxFramesInFlight = 2;
 
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
+  VkCommandPool uploadCommandPool_ = VK_NULL_HANDLE;
+
   std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
   std::array<std::unique_ptr<VulkanCommandList>, k_MaxFramesInFlight>
       commandLists_;

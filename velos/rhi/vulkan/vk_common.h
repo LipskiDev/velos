@@ -450,4 +450,153 @@ inline VkBlendOp ToVkBlendOp(BlendOp op) {
     throw std::runtime_error("Unsupported BlendOp");
   }
 }
+inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
+  switch (state) {
+  case ResourceState::Undefined:
+  case ResourceState::Common:
+  case ResourceState::Present:
+    return 0;
+
+  case ResourceState::TransferSrc:
+    return VK_ACCESS_TRANSFER_READ_BIT;
+
+  case ResourceState::TransferDst:
+    return VK_ACCESS_TRANSFER_WRITE_BIT;
+
+  case ResourceState::VertexBuffer:
+    return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+
+  case ResourceState::IndexBuffer:
+    return VK_ACCESS_INDEX_READ_BIT;
+
+  case ResourceState::UniformBuffer:
+    return VK_ACCESS_UNIFORM_READ_BIT;
+
+  case ResourceState::ShaderRead:
+    return VK_ACCESS_SHADER_READ_BIT;
+
+  case ResourceState::ShaderWrite:
+    return VK_ACCESS_SHADER_WRITE_BIT;
+
+  case ResourceState::RenderTarget:
+    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+  case ResourceState::DepthWrite:
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+  case ResourceState::DepthRead:
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+  }
+
+  throw std::runtime_error("Unsupported ResourceState");
+}
+
+inline VkPipelineStageFlags ToVkPipelineStage(ResourceState state) {
+  switch (state) {
+  case ResourceState::Undefined:
+    return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+  case ResourceState::Common:
+    return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+  case ResourceState::TransferSrc:
+  case ResourceState::TransferDst:
+    return VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+  case ResourceState::VertexBuffer:
+  case ResourceState::IndexBuffer:
+    return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+
+  case ResourceState::UniformBuffer:
+  case ResourceState::ShaderRead:
+  case ResourceState::ShaderWrite:
+    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+  case ResourceState::RenderTarget:
+    return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+  case ResourceState::DepthWrite:
+  case ResourceState::DepthRead:
+    return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+  case ResourceState::Present:
+    return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  }
+
+  throw std::runtime_error("Unsupported ResourceState");
+}
+
+inline VkAccessFlags ToVkAccessFlags(ImageLayout layout) {
+  switch (layout) {
+  case ImageLayout::Undefined:
+    return 0;
+
+  case ImageLayout::ColorAttachment:
+    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+  case ImageLayout::DepthAttachment:
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+  case ImageLayout::ShaderReadOnly:
+    return VK_ACCESS_SHADER_READ_BIT;
+
+  case ImageLayout::TransferSrc:
+    return VK_ACCESS_TRANSFER_READ_BIT;
+
+  case ImageLayout::TransferDst:
+    return VK_ACCESS_TRANSFER_WRITE_BIT;
+
+  case ImageLayout::Present:
+    return 0;
+  }
+
+  throw std::runtime_error("Unsupported ImageLayout");
+}
+
+inline VkPipelineStageFlags ToVkPipelineStage(ImageLayout layout) {
+  switch (layout) {
+  case ImageLayout::Undefined:
+    return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+  case ImageLayout::ColorAttachment:
+    return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+  case ImageLayout::DepthAttachment:
+    return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+  case ImageLayout::ShaderReadOnly:
+    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+  case ImageLayout::TransferSrc:
+  case ImageLayout::TransferDst:
+    return VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+  case ImageLayout::Present:
+    return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  }
+
+  throw std::runtime_error("Unsupported ImageLayout");
+}
+
+struct VulkanBarrierInfo {
+  VkAccessFlags access;
+  VkPipelineStageFlags stage;
+};
+
+inline VulkanBarrierInfo GetBufferBarrierInfo(ResourceState state) {
+  return VulkanBarrierInfo{ToVkAccessFlags(state), ToVkPipelineStage(state)};
+}
+
+inline VulkanBarrierInfo GetImageBarrierInfo(ImageLayout layout) {
+  return VulkanBarrierInfo{ToVkAccessFlags(layout), ToVkPipelineStage(layout)};
+}
 } // namespace Velos::RHI

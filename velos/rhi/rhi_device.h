@@ -1,11 +1,13 @@
 
 #pragma once
 
+#include "rhi/rhi_upload_context.h"
 #include "rhi_command_list.h"
 #include "rhi_handles.h"
 #include "rhi_pipeline.h"
 #include "rhi_resources.h"
 #include "rhi_types.h"
+#include <memory>
 
 namespace Velos::RHI {
 enum class BackendAPI {
@@ -84,6 +86,9 @@ public:
 
   virtual void WaitIdle() = 0;
   virtual void CollectGarbage() = 0;
+
+  virtual std::unique_ptr<IUploadContext>
+  CreateUploadContext(u64 stagingBufferSize = 16 * 1024 * 1024) = 0;
 
 public:
   virtual Extent2D GetSwapchainDimensions() const = 0;

@@ -3,8 +3,10 @@
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
+#include "rhi/vulkan/vk_command_list.h"
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_profiler.h"
+#include "rhi/vulkan/vk_upload_context.h"
 #include "vlpch.h"
 #include <cstdint>
 #include <iostream>
@@ -12,11 +14,63 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
+#include <vk_mem_alloc.h>
+
 #include <GLFW/glfw3.h>
 
 #include <core/profiling.h>
 
 namespace Velos::RHI {
+
+static const char *BoolStr(bool v) { return v ? "true" : "false"; }
+
+void VulkanDevice::DumpLiveResources() const {
+  std::cout << "\n==== Live VulkanDevice resources ====\n";
+
+  std::cout << "Buffers: " << buffers_.size() << "\n";
+  for (const auto &[id, buffer] : buffers_) {
+    std::cout << "  Buffer id=" << id << " vkBuffer=" << buffer.buffer
+              << " allocation=" << buffer.allocation << " size=" << buffer.size
+              << " usage=" << static_cast<u32>(buffer.usage)
+              << " memoryUsage=" << static_cast<u32>(buffer.memoryUsage)
+              << "\n";
+  }
+
+  std::cout << "Images: " << images_.size() << "\n";
+  for (const auto &[id, image] : images_) {
+    std::cout << "  Image id=" << id << " vkImage=" << image.image
+              << " memory=" << image.memory << " owned=" << BoolStr(image.owned)
+              << " size=" << image.width << "x" << image.height << "x"
+              << image.depth << " layers=" << image.arrayLayers
+              << " mips=" << image.mipLevels << "\n";
+  }
+
+  std::cout << "ImageViews: " << imageViews_.size() << "\n";
+  for (const auto &[id, view] : imageViews_) {
+    std::cout << "  ImageView id=" << id << " vkView=" << view.view
+              << " imageHandle=" << view.image.id
+              << " owned=" << BoolStr(view.owned) << "\n";
+  }
+
+  std::cout << "Samplers: " << samplers_.size() << "\n";
+  for (const auto &[id, sampler] : samplers_) {
+    std::cout << "  Sampler id=" << id << " vkSampler=" << sampler.sampler
+              << "\n";
+  }
+
+  std::cout << "Shaders: " << shaders_.size() << "\n";
+  for (const auto &[id, shader] : shaders_) {
+    std::cout << "  Shader id=" << id << " module=" << shader.module
+              << " stage=" << static_cast<u32>(shader.stage) << "\n";
+  }
+
+  std::cout << "Pipelines: " << pipelines_.size() << "\n";
+  std::cout << "DescriptorSetLayouts: " << descriptorSetLayouts_.size() << "\n";
+  std::cout << "DescriptorPools: " << descriptorPools_.size() << "\n";
+  std::cout << "DescriptorSets: " << descriptorSets_.size() << "\n";
+
+  std::cout << "=====================================\n";
+}
 
 VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
   VL_PROFILE_ZONE_N("VulkanDevice::VulkanDevice");
@@ -29,6 +83,8 @@ VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
   PickPhysicalDevice();
   CreateLogicalDevice();
   volkLoadDevice(device_);
+
+  CreateAllocator();
 
   CreateCommandObjects();
   CreateSyncObjects();
@@ -94,6 +150,18 @@ VulkanDevice::~VulkanDevice() {
       commandPool_ = VK_NULL_HANDLE;
     }
 
+    if (uploadCommandPool_ != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(device_, uploadCommandPool_, nullptr);
+      uploadCommandPool_ = VK_NULL_HANDLE;
+    }
+
+    DumpLiveResources();
+
+    if (allocator_ != VK_NULL_HANDLE) {
+      vmaDestroyAllocator(allocator_);
+      allocator_ = VK_NULL_HANDLE;
+    }
+
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
   }
@@ -104,6 +172,28 @@ VulkanDevice::~VulkanDevice() {
   }
 }
 
+void VulkanDevice::CreateAllocator() {
+  VmaAllocatorCreateInfo allocatorInfo{};
+  allocatorInfo.instance = instance_;
+  allocatorInfo.physicalDevice = physicalDevice_;
+  allocatorInfo.device = device_;
+  allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+  allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+
+  VmaVulkanFunctions vmaFunctions{};
+  VK_CHECK(vmaImportVulkanFunctionsFromVolk(&allocatorInfo, &vmaFunctions),
+           "Failed to import Vulkan functions from Volk");
+
+  allocatorInfo.pVulkanFunctions = &vmaFunctions;
+
+  VK_CHECK(vmaCreateAllocator(&allocatorInfo, &allocator_),
+           "Failed to create VMA allocator");
+
+  if (allocator_ == VK_NULL_HANDLE) {
+    throw std::runtime_error(
+        "CreateAllocator: allocator_ is null after creation");
+  }
+}
 BackendAPI VulkanDevice::GetBackend() const { return BackendAPI::Vulkan; }
 
 void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
@@ -268,13 +358,23 @@ void VulkanDevice::CreateLogicalDevice() {
 void VulkanDevice::CreateCommandObjects() {
   VL_PROFILE_ZONE_N("VulkanDevice::CreateCommandObjects");
 
-  VkCommandPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  poolInfo.queueFamilyIndex = graphicsQueueFamily_;
+  VkCommandPoolCreateInfo framePoolInfo{};
+  framePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  framePoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  framePoolInfo.queueFamilyIndex = graphicsQueueFamily_;
 
-  VK_CHECK(vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_),
+  VK_CHECK(vkCreateCommandPool(device_, &framePoolInfo, nullptr, &commandPool_),
            "Failed to create Vulkan command pool");
+
+  VkCommandPoolCreateInfo uploadPoolInfo{};
+  uploadPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  uploadPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT |
+                         VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+  uploadPoolInfo.queueFamilyIndex = graphicsQueueFamily_;
+
+  VK_CHECK(vkCreateCommandPool(device_, &uploadPoolInfo, nullptr,
+                               &uploadCommandPool_),
+           "Failed to create upload command pool");
 
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -356,6 +456,11 @@ void VulkanDevice::DestroySwapchainSyncObjects() {
 
 void VulkanDevice::CollectGarbage() {
   // no-op
+}
+
+std::unique_ptr<IUploadContext>
+VulkanDevice::CreateUploadContext(u64 stagingBufferSize) {
+  return std::make_unique<VulkanUploadContext>(*this, stagingBufferSize);
 }
 
 u32 VulkanDevice::FindMemoryType(u32 typeFilter,
@@ -623,43 +728,19 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
   buffer.usage = desc.usage;
   buffer.memoryUsage = desc.memoryUsage;
 
-  VkResult result =
-      vkCreateBuffer(device_, &bufferInfo, nullptr, &buffer.buffer);
-  if (result != VK_SUCCESS) {
-    throw std::runtime_error("CreateBuffer: vkCreateBuffer failed");
-  }
-
-  VkMemoryRequirements memRequirements{};
-  vkGetBufferMemoryRequirements(device_, buffer.buffer, &memRequirements);
-
-  VkMemoryAllocateFlagsInfo flagsInfo{};
-  flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-
-  VkMemoryAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  allocInfo.allocationSize = memRequirements.size;
-  allocInfo.memoryTypeIndex =
-      FindMemoryType(memRequirements.memoryTypeBits,
-                     ToVkMemoryPropertyFlags(desc.memoryUsage));
+  VmaAllocationCreateInfo allocInfo =
+      ToVmaAllocationCreateInfo(desc.memoryUsage);
 
   if (HasFlag(desc.usage, BufferUsage::ShaderDeviceAddress)) {
-    flagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    allocInfo.pNext = &flagsInfo;
+    allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
   }
 
-  result = vkAllocateMemory(device_, &allocInfo, nullptr, &buffer.memory);
+  VkResult result =
+      vmaCreateBuffer(allocator_, &bufferInfo, &allocInfo, &buffer.buffer,
+                      &buffer.allocation, &buffer.allocationInfo);
 
   if (result != VK_SUCCESS) {
-    vkDestroyBuffer(device_, buffer.buffer, nullptr);
-    throw std::runtime_error("CreateBuffer: vkAllocateMemory failed");
-  }
-
-  result = vkBindBufferMemory(device_, buffer.buffer, buffer.memory, 0);
-
-  if (result != VK_SUCCESS) {
-    vkFreeMemory(device_, buffer.memory, nullptr);
-    vkDestroyBuffer(device_, buffer.buffer, nullptr);
-    throw std::runtime_error("CreateBuffer: vkBindBufferMemory failed");
+    throw std::runtime_error("CreateBuffer: vmaCreateBuffer failed");
   }
 
   if (HasFlag(desc.usage, BufferUsage::ShaderDeviceAddress)) {
@@ -672,41 +753,35 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
 
   if (desc.initialData != nullptr) {
     if (desc.memoryUsage == MemoryUsage::GPUOnly) {
-      vkFreeMemory(device_, buffer.memory, nullptr);
-      vkDestroyBuffer(device_, buffer.buffer, nullptr);
+      vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
       throw std::runtime_error("CreateBuffer: initialData for GPUOnly buffers "
                                "requires staging upload path");
     }
 
-    void *mappedData = nullptr;
-    result = vkMapMemory(device_, buffer.memory, 0, desc.size, 0, &mappedData);
+    if (buffer.allocationInfo.pMappedData == nullptr) {
+      void *mappedData = nullptr;
+      result = vmaMapMemory(allocator_, buffer.allocation, &mappedData);
 
-    if (result != VK_SUCCESS || mappedData == nullptr) {
-      vkFreeMemory(device_, buffer.memory, nullptr);
-      vkDestroyBuffer(device_, buffer.buffer, nullptr);
-      throw std::runtime_error("CreateBuffer: vkMapMemory failed");
+      if (result != VK_SUCCESS || mappedData == nullptr) {
+        vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
+        throw std::runtime_error("CreateBuffer: vmaMapMemory failed");
+      }
+
+      memcpy(mappedData, desc.initialData, static_cast<size_t>(desc.size));
+      vmaUnmapMemory(allocator_, buffer.allocation);
+    } else {
+      memcpy(buffer.allocationInfo.pMappedData, desc.initialData,
+             static_cast<size_t>(desc.size));
     }
 
-    memcpy(mappedData, desc.initialData, static_cast<size_t>(desc.size));
-
-    if ((ToVkMemoryPropertyFlags(desc.memoryUsage) &
-         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
-      VkMappedMemoryRange range{};
-      range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-      range.memory = buffer.memory;
-      range.offset = 0;
-      range.size = desc.size;
-      vkFlushMappedMemoryRanges(device_, 1, &range);
-    }
-
-    vkUnmapMemory(device_, buffer.memory);
+    vmaFlushAllocation(allocator_, buffer.allocation, 0, desc.size);
   }
 
   const u32 handleId = nextBufferHandle_++;
   buffers_.emplace(handleId, buffer);
 
-  setObjectDebugName(device_, VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer.buffer,
-                     desc.debugName);
+  setObjectDebugName(device_, VK_OBJECT_TYPE_BUFFER,
+                     reinterpret_cast<uint64_t>(buffer.buffer), desc.debugName);
 
   return BufferHandle{handleId};
 }
@@ -717,16 +792,10 @@ void VulkanDevice::DestroyBuffer(BufferHandle handle) {
     return;
   }
 
-  VulkanBuffer buffer = it->second;
+  auto &buffer = it->second;
 
   if (buffer.buffer != VK_NULL_HANDLE) {
-    vkDestroyBuffer(device_, buffer.buffer, nullptr);
-    buffer.buffer = VK_NULL_HANDLE;
-  }
-
-  if (buffer.memory != VK_NULL_HANDLE) {
-    vkFreeMemory(device_, buffer.memory, nullptr);
-    buffer.memory = VK_NULL_HANDLE;
+    vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
   }
 
   buffers_.erase(it);
@@ -1534,13 +1603,21 @@ VulkanDevice::CreateDescriptorPool(const DescriptorPoolDesc &desc) {
 }
 
 void VulkanDevice::DestroyDescriptorPool(DescriptorPoolHandle handle) {
-  if (!handle) {
+  if (!handle.IsValid()) {
     return;
   }
 
   auto it = descriptorPools_.find(handle.id);
   if (it == descriptorPools_.end()) {
     return;
+  }
+
+  for (auto setIt = descriptorSets_.begin(); setIt != descriptorSets_.end();) {
+    if (setIt->second.pool.id == handle.id) {
+      setIt = descriptorSets_.erase(setIt);
+    } else {
+      ++setIt;
+    }
   }
 
   if (it->second.pool != VK_NULL_HANDLE) {
@@ -1830,6 +1907,19 @@ void VulkanDevice::SubmitAndPresent(SwapchainHandle swapchain) {
   VK_CHECK(result, "Failed to present Vulkan swapchain image");
 
   currentFrame_ = (currentFrame_ + 1) % k_MaxFramesInFlight;
+}
+
+void VulkanDevice::Submit(CommandListHandle handle, VkFence fence) {
+
+  VkCommandBuffer cmd = GetCommandBuffer();
+
+  VkSubmitInfo submit{};
+  submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit.commandBufferCount = 1;
+  submit.pCommandBuffers = &cmd;
+
+  VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submit, fence),
+           "Failed to submit command buffer");
 }
 
 Extent2D VulkanDevice::GetSwapchainDimensions() const {

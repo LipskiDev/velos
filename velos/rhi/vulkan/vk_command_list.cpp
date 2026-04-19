@@ -1,9 +1,9 @@
-#include "vlpch.h"
 #include "rhi/vulkan/vk_command_list.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_device.h"
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_device.h"
+#include "vlpch.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -55,131 +55,12 @@ void VulkanCommandList::SetScissor(const Rect2D &scissor) {
   vkCmdSetScissor(commandBuffer_, 0, 1, &vkScissor);
 }
 
-void VulkanCommandList::Barrier(const BufferBarrier &) {
-  throw std::runtime_error("Buffer barrier not implemented yet");
+void VulkanCommandList::Barrier(const BufferBarrier &barrier) {
+  PipelineBarrier(std::span<const BufferBarrier>(&barrier, 1), {});
 }
 
 void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
-  if (!barrier.image.IsValid()) {
-    throw std::runtime_error("Image barrier requires a valid image handle");
-  }
-
-  const VulkanImage &srcImage = device_.GetImage(barrier.image);
-  VulkanImage &image = const_cast<VulkanImage &>(srcImage);
-
-  VkPipelineStageFlags srcStageMask = 0;
-  VkPipelineStageFlags dstStageMask = 0;
-  VkAccessFlags srcAccessMask = 0;
-  VkAccessFlags dstAccessMask = 0;
-
-  const ImageLayout oldLayout = image.layout;
-  const ImageLayout newLayout = barrier.newLayout;
-
-  if (oldLayout == newLayout) {
-    return;
-  }
-
-  // Determine stage/access masks for supported transitions
-  if (oldLayout == ImageLayout::Undefined &&
-      newLayout == ImageLayout::ColorAttachment) {
-    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    srcAccessMask = 0;
-    dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  } else if (oldLayout == ImageLayout::ColorAttachment &&
-             newLayout == ImageLayout::Present) {
-    srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dstAccessMask = 0;
-  } else if (oldLayout == ImageLayout::Undefined &&
-             newLayout == ImageLayout::DepthAttachment) {
-    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    srcAccessMask = 0;
-    dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  } else if (oldLayout == ImageLayout::Undefined &&
-             newLayout == ImageLayout::TransferDst) {
-    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    srcAccessMask = 0;
-    dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  } else if (oldLayout == ImageLayout::TransferDst &&
-             newLayout == ImageLayout::ShaderReadOnly) {
-    srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  } else if (oldLayout == ImageLayout::Present &&
-             newLayout == ImageLayout::ColorAttachment) {
-    srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    srcAccessMask = 0;
-    dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  } else {
-    throw std::runtime_error("Unsupported image barrier transition");
-  }
-
-  VkImageMemoryBarrier vkBarrier{};
-  vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  vkBarrier.srcAccessMask = srcAccessMask;
-  vkBarrier.dstAccessMask = dstAccessMask;
-  vkBarrier.oldLayout = ToVkImageLayout(oldLayout);
-  vkBarrier.newLayout = ToVkImageLayout(newLayout);
-  vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  vkBarrier.image = image.image;
-  vkBarrier.subresourceRange.aspectMask = ToVkImageAspect(barrier.aspect);
-  vkBarrier.subresourceRange.baseMipLevel = 0;
-  vkBarrier.subresourceRange.levelCount = image.mipLevels;
-  vkBarrier.subresourceRange.baseArrayLayer = 0;
-  vkBarrier.subresourceRange.layerCount = image.arrayLayers;
-
-  vkCmdPipelineBarrier(device_.GetCommandBuffer(), srcStageMask, dstStageMask,
-                       0, 0, nullptr, 0, nullptr, 1, &vkBarrier);
-
-  image.layout = newLayout;
-}
-
-void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
-  const VulkanBuffer &dst = device_.GetBuffer(update.buffer);
-
-  void *mapped = nullptr;
-  VkResult result = vkMapMemory(device_.GetVkDevice(), dst.memory, 0,
-                                VK_WHOLE_SIZE, 0, &mapped);
-  if (result != VK_SUCCESS || mapped == nullptr) {
-    throw std::runtime_error(
-        "VulkanCommandList::UpdateBuffer: vkMapMemory failed");
-  }
-
-  memcpy(static_cast<std::byte *>(mapped) + update.offset, update.data,
-         static_cast<size_t>(update.size));
-
-  if (true) {
-    const VkDeviceSize atomSize =
-        device_.GetPhysicalDeviceProperties().limits.nonCoherentAtomSize;
-
-    const VkDeviceSize alignedOffset = update.offset & ~(atomSize - 1);
-    const VkDeviceSize end = update.offset + update.size;
-    const VkDeviceSize alignedEnd = (end + atomSize - 1) & ~(atomSize - 1);
-
-    VkMappedMemoryRange range{};
-    range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = dst.memory;
-    range.offset = alignedOffset;
-    range.size = alignedEnd - alignedOffset;
-
-    result = vkFlushMappedMemoryRanges(device_.GetVkDevice(), 1, &range);
-    if (result != VK_SUCCESS) {
-      vkUnmapMemory(device_.GetVkDevice(), dst.memory);
-      throw std::runtime_error(
-          "VulkanCommandList::UpdateBuffer: vkFlushMappedMemoryRanges failed");
-    }
-  }
-
-  vkUnmapMemory(device_.GetVkDevice(), dst.memory);
+  PipelineBarrier({}, std::span<const ImageBarrier>(&barrier, 1));
 }
 
 void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
@@ -362,6 +243,19 @@ void VulkanCommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
                      offset, size, data);
 }
 
+void VulkanCommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
+                                   const BufferCopyRegion &region) {
+  VkBuffer srcBuffer = device_.GetBuffer(src).buffer;
+  VkBuffer dstBuffer = device_.GetBuffer(dst).buffer;
+
+  VkBufferCopy copy{};
+  copy.srcOffset = region.srcOffset;
+  copy.dstOffset = region.dstOffset;
+  copy.size = region.size;
+
+  vkCmdCopyBuffer(commandBuffer_, srcBuffer, dstBuffer, 1, &copy);
+}
+
 void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                                           DescriptorSetHandle descriptorSet) {
   const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
@@ -381,35 +275,144 @@ void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                           vkPipeline.layout, setIndex, 1, &set, 0, nullptr);
 }
 
+void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
+  const VulkanBuffer &dst = device_.GetBuffer(update.buffer);
+
+  if (update.data == nullptr) {
+    throw std::runtime_error(
+        "VulkanCommandList::UpdateBuffer: update.data must not be null");
+  }
+
+  if (update.offset + update.size > dst.size) {
+    throw std::runtime_error(
+        "VulkanCommandList::UpdateBuffer: write out of bounds");
+  }
+
+  if (dst.memoryUsage == MemoryUsage::GPUOnly) {
+    throw std::runtime_error("VulkanCommandList::UpdateBuffer: cannot update "
+                             "GPUOnly buffer directly");
+  }
+
+  void *mapped = dst.allocationInfo.pMappedData;
+
+  if (mapped == nullptr) {
+    VkResult result =
+        vmaMapMemory(device_.GetAllocator(), dst.allocation, &mapped);
+    if (result != VK_SUCCESS || mapped == nullptr) {
+      throw std::runtime_error(
+          "VulkanCommandList::UpdateBuffer: vmaMapMemory failed");
+    }
+
+    memcpy(static_cast<std::byte *>(mapped) + update.offset, update.data,
+           static_cast<size_t>(update.size));
+
+    vmaFlushAllocation(device_.GetAllocator(), dst.allocation, update.offset,
+                       update.size);
+
+    vmaUnmapMemory(device_.GetAllocator(), dst.allocation);
+  } else {
+    memcpy(static_cast<std::byte *>(mapped) + update.offset, update.data,
+           static_cast<size_t>(update.size));
+
+    vmaFlushAllocation(device_.GetAllocator(), dst.allocation, update.offset,
+                       update.size);
+  }
+}
 void VulkanCommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
                                           const BufferImageCopyRegion &region) {
-  const VulkanBuffer &vkBuffer = device_.GetBuffer(src);
-  const VulkanImage &vkImage = device_.GetImage(dst);
 
-  VkBufferImageCopy vkRegion{};
-  vkRegion.bufferOffset = region.bufferOffset;
-  vkRegion.bufferRowLength = region.bufferRowLength;
-  vkRegion.bufferImageHeight = region.bufferImageHeight;
+  VkBuffer buffer = device_.GetBuffer(src).buffer;
+  VkImage image = device_.GetImage(dst).image;
 
-  vkRegion.imageSubresource.aspectMask = ToVkImageAspect(region.aspect);
-  vkRegion.imageSubresource.mipLevel = region.mipLevel;
-  vkRegion.imageSubresource.baseArrayLayer = region.baseArrayLayer;
-  vkRegion.imageSubresource.layerCount = region.layerCount;
+  VkBufferImageCopy copy{};
 
-  vkRegion.imageOffset = {static_cast<int32_t>(region.imageOffset.x),
-                          static_cast<int32_t>(region.imageOffset.y),
-                          static_cast<int32_t>(region.imageOffset.z)};
+  copy.bufferOffset = region.bufferOffset;
+  copy.bufferRowLength = region.bufferRowLength;
+  copy.bufferImageHeight = region.bufferImageHeight;
 
-  vkRegion.imageExtent = {
-      region.imageExtent.width,
-      region.imageExtent.height,
-      region.imageExtent.depth,
-  };
+  copy.imageSubresource.aspectMask = ToVkImageAspect(region.aspect);
+  copy.imageSubresource.mipLevel = region.mipLevel;
+  copy.imageSubresource.baseArrayLayer = region.baseArrayLayer;
+  copy.imageSubresource.layerCount = region.layerCount;
 
-  vkCmdCopyBufferToImage(commandBuffer_, vkBuffer.buffer, vkImage.image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &vkRegion);
-};
+  copy.imageOffset = {(int32_t)region.imageOffset.x,
+                      (int32_t)region.imageOffset.y,
+                      (int32_t)region.imageOffset.z};
 
+  copy.imageExtent = {region.imageExtent.width, region.imageExtent.height,
+                      region.imageExtent.depth};
+
+  vkCmdCopyBufferToImage(commandBuffer_, buffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+}
+
+void VulkanCommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
+                                        std::span<const ImageBarrier> images) {
+
+  std::vector<VkBufferMemoryBarrier> vkBufferBarriers;
+  std::vector<VkImageMemoryBarrier> vkImageBarriers;
+
+  VkPipelineStageFlags srcStageMask = 0;
+  VkPipelineStageFlags dstStageMask = 0;
+
+  vkBufferBarriers.reserve(buffers.size());
+  vkImageBarriers.reserve(images.size());
+
+  for (const auto &b : buffers) {
+    const auto srcInfo = GetBufferBarrierInfo(b.oldState);
+    const auto dstInfo = GetBufferBarrierInfo(b.newState);
+
+    VkBufferMemoryBarrier vkBarrier{};
+    vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    vkBarrier.srcAccessMask = srcInfo.access;
+    vkBarrier.dstAccessMask = dstInfo.access;
+    vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBarrier.buffer = device_.GetBuffer(b.buffer).buffer;
+    vkBarrier.offset = 0;
+    vkBarrier.size = VK_WHOLE_SIZE;
+
+    vkBufferBarriers.push_back(vkBarrier);
+
+    srcStageMask |= srcInfo.stage;
+    dstStageMask |= dstInfo.stage;
+  }
+
+  for (const auto &i : images) {
+    const auto srcInfo = GetImageBarrierInfo(i.oldLayout);
+    const auto dstInfo = GetImageBarrierInfo(i.newLayout);
+
+    VkImageMemoryBarrier vkBarrier{};
+    vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    vkBarrier.srcAccessMask = srcInfo.access;
+    vkBarrier.dstAccessMask = dstInfo.access;
+    vkBarrier.oldLayout = ToVkImageLayout(i.oldLayout);
+    vkBarrier.newLayout = ToVkImageLayout(i.newLayout);
+    vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBarrier.image = device_.GetImage(i.image).image;
+    vkBarrier.subresourceRange.aspectMask = ToVkImageAspect(i.aspect);
+    vkBarrier.subresourceRange.baseMipLevel = i.baseMipLevel;
+    vkBarrier.subresourceRange.levelCount = i.mipLevelCount;
+    vkBarrier.subresourceRange.baseArrayLayer = i.baseArrayLayer;
+    vkBarrier.subresourceRange.layerCount = i.layerCount;
+
+    vkImageBarriers.push_back(vkBarrier);
+
+    srcStageMask |= srcInfo.stage;
+    dstStageMask |= dstInfo.stage;
+  }
+
+  if (srcStageMask == 0)
+    srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+  if (dstStageMask == 0)
+    dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+  vkCmdPipelineBarrier(
+      commandBuffer_, srcStageMask, dstStageMask, 0, 0, nullptr,
+      static_cast<u32>(vkBufferBarriers.size()), vkBufferBarriers.data(),
+      static_cast<u32>(vkImageBarriers.size()), vkImageBarriers.data());
+}
 void VulkanCommandList::Draw(u32 vertexCount, u32 instanceCount,
                              u32 firstVertex, u32 baseInstance) {
   vkCmdDraw(commandBuffer_, vertexCount, instanceCount, firstVertex,

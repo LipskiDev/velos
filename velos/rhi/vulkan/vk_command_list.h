@@ -42,11 +42,17 @@ public:
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;
 
+  void CopyBuffer(BufferHandle src, BufferHandle dst,
+                  const BufferCopyRegion &region) override;
+
   void CopyBufferToImage(BufferHandle src, ImageHandle dst,
                          const BufferImageCopyRegion &region) override;
 
-  virtual void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
-                    u32 baseInstance = 0) override;
+  void PipelineBarrier(std::span<const BufferBarrier> buffers,
+                       std::span<const ImageBarrier> images) override;
+
+  void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
+            u32 baseInstance = 0) override;
   void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
                    i32 vertexOffset = 0) override;
 

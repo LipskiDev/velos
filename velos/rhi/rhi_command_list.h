@@ -5,6 +5,8 @@
 #include "rhi_resources.h"
 #include "rhi_types.h"
 
+#include <span>
+
 namespace Velos::RHI {
 
 struct ColorAttachmentDesc {
@@ -36,9 +38,15 @@ struct BufferBarrier {
 };
 
 struct ImageBarrier {
-  ImageHandle image;
+  ImageHandle image{};
+  ImageLayout oldLayout = ImageLayout::Undefined;
   ImageLayout newLayout = ImageLayout::Undefined;
   ImageAspect aspect = ImageAspect::Color;
+
+  u32 baseMipLevel = 0;
+  u32 mipLevelCount = 1;
+  u32 baseArrayLayer = 0;
+  u32 layerCount = 1;
 };
 
 struct BufferBinding {
@@ -80,8 +88,14 @@ public:
   virtual void PushConstants(ShaderStage stages, u32 offset, u32 size,
                              const void *data) = 0;
 
+  virtual void CopyBuffer(BufferHandle src, BufferHandle dst,
+                          const BufferCopyRegion &region) = 0;
+
   virtual void CopyBufferToImage(BufferHandle src, ImageHandle dst,
                                  const BufferImageCopyRegion &region) = 0;
+
+  virtual void PipelineBarrier(std::span<const BufferBarrier> buffers,
+                               std::span<const ImageBarrier> images) = 0;
 
   virtual void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
                     u32 baseInstance = 0) = 0;

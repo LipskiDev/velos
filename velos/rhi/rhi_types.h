@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdint>
 
 #include "../core/types.h"
 
@@ -111,6 +110,23 @@ enum class ImageLayout {
   Present,
 };
 
+enum class PipelineStage {
+  TopOfPipe,
+  Transfer,
+  VertexShader,
+  FragmentShader,
+  ColorAttachmentOutput,
+  BottomOfPipe,
+};
+
+enum class AccessFlags {
+  None,
+  TransferRead,
+  TransferWrite,
+  ShaderRead,
+  ColorAttachmentWrite,
+};
+
 enum class ImageAspect : u32 {
   None = 0,
   Color = 1 << 0,
@@ -138,14 +154,26 @@ enum class StoreOp {
 enum class ResourceState {
   Undefined,
   Common,
+
+  // Transfer
   TransferSrc,
   TransferDst,
+
+  // Geometry
   VertexBuffer,
   IndexBuffer,
+
+  // Shader resources
   UniformBuffer,
   ShaderRead,
+  ShaderWrite,
+
+  // Render targets
   RenderTarget,
   DepthWrite,
+  DepthRead,
+
+  // Present
   Present,
 };
 
