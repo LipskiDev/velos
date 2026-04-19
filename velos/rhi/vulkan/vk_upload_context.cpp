@@ -1,6 +1,7 @@
 #include "vk_upload_context.h"
 #include "rhi/vulkan/vk_command_list.h"
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 
 namespace Velos::RHI {
@@ -97,6 +98,10 @@ void VulkanUploadContext::UploadImage(const ImageUploadDesc &desc,
 
   u64 offset = Allocate(dataSize, 16);
   std::memcpy(mappedPtr_ + offset, data, dataSize);
+
+  vmaFlushAllocation(device_.GetAllocator(),
+                     device_.GetBuffer(stagingBuffer_).allocation, offset,
+                     dataSize);
 
   cmd_->Barrier(ImageBarrier{
       .image = desc.dstImage,
