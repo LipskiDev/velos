@@ -41,6 +41,10 @@ inline VkFormat ToVkFormat(Format format) {
     return VK_FORMAT_R8G8B8A8_UNORM;
   case Format::BGRA8_UNORM:
     return VK_FORMAT_B8G8R8A8_UNORM;
+  case Format::RGBA8_SRGB:
+    return VK_FORMAT_R8G8B8A8_SRGB;
+  case Format::BGRA8_SRGB:
+    return VK_FORMAT_B8G8R8A8_SRGB;
   case Format::RGBA16_FLOAT:
     return VK_FORMAT_R16G16B16A16_SFLOAT;
   case Format::R32_FLOAT:

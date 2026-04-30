@@ -22,6 +22,8 @@ enum class Format {
   RGBA8_UNORM,
   BGRA8_UNORM,
   RGBA16_FLOAT,
+  RGBA8_SRGB,
+  BGRA8_SRGB,
 
   R32_FLOAT,
   RG32_FLOAT,
