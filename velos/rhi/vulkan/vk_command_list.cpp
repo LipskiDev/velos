@@ -64,57 +64,67 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
 }
 
 void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
-  if (renderingInfo.colorAttachmentCount == 0 ||
-      !renderingInfo.colorAttachments) {
+  const bool hasColor = renderingInfo.colorAttachmentCount > 0 &&
+                        renderingInfo.colorAttachments != nullptr;
+
+  const bool hasDepth = renderingInfo.depthAttachment != nullptr;
+
+  if (!hasColor && !hasDepth) {
+    throw std::runtime_error("BeginRendering requires at least one attachment");
+  }
+
+  if (renderingInfo.colorAttachmentCount > 1) {
     throw std::runtime_error(
-        "BeginRendering requires at least one color attachment");
+        "BeginRendering currently supports at most one color attachment");
   }
-
-  if (renderingInfo.colorAttachmentCount != 1) {
-    throw std::runtime_error(
-        "BeginRendering currently supports exactly one color attachment");
-  }
-
-  const ColorAttachmentDesc &colorAttachment =
-      renderingInfo.colorAttachments[0];
-  const VulkanImageView &colorView = device_.GetImageView(colorAttachment.view);
-
-  VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  switch (colorAttachment.loadOp) {
-  case LoadOp::Load:
-    loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    break;
-  case LoadOp::Clear:
-    loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    break;
-  case LoadOp::DontCare:
-    loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    break;
-  }
-
-  VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  switch (colorAttachment.storeOp) {
-  case StoreOp::Store:
-    storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    break;
-  case StoreOp::DontCare:
-    storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    break;
-  }
-
-  VkClearValue clearValue{};
-  clearValue.color.float32[0] = colorAttachment.clearValue.r;
-  clearValue.color.float32[1] = colorAttachment.clearValue.g;
-  clearValue.color.float32[2] = colorAttachment.clearValue.b;
-  clearValue.color.float32[3] = colorAttachment.clearValue.a;
 
   VkRenderingAttachmentInfo colorAttachmentInfo{};
-  colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-  colorAttachmentInfo.imageView = colorView.view;
-  colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  colorAttachmentInfo.loadOp = loadOp;
-  colorAttachmentInfo.storeOp = storeOp;
-  colorAttachmentInfo.clearValue = clearValue;
+
+  if (hasColor) {
+    const ColorAttachmentDesc &colorAttachment =
+        renderingInfo.colorAttachments[0];
+
+    const VulkanImageView &colorView =
+        device_.GetImageView(colorAttachment.view);
+
+    VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    switch (colorAttachment.loadOp) {
+    case LoadOp::Load:
+      loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      break;
+    case LoadOp::Clear:
+      loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      break;
+    case LoadOp::DontCare:
+      loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      break;
+    }
+
+    VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    switch (colorAttachment.storeOp) {
+    case StoreOp::Store:
+      storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      break;
+    case StoreOp::DontCare:
+      storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      break;
+    }
+
+    VkClearValue clearValue{};
+    clearValue.color.float32[0] = colorAttachment.clearValue.r;
+    clearValue.color.float32[1] = colorAttachment.clearValue.g;
+    clearValue.color.float32[2] = colorAttachment.clearValue.b;
+    clearValue.color.float32[3] = colorAttachment.clearValue.a;
+
+    colorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+
+    colorAttachmentInfo.imageView = colorView.view;
+    colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    colorAttachmentInfo.loadOp = loadOp;
+    colorAttachmentInfo.storeOp = storeOp;
+    colorAttachmentInfo.clearValue = clearValue;
+  }
 
   VkRenderingAttachmentInfo depthAttachmentInfo{};
   bool hasDepthAttachment = renderingInfo.depthAttachment != nullptr;
@@ -168,8 +178,10 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   vkRenderingInfo.renderArea.extent.height =
       renderingInfo.renderArea.extent.height;
   vkRenderingInfo.layerCount = 1;
-  vkRenderingInfo.colorAttachmentCount = 1;
-  vkRenderingInfo.pColorAttachments = &colorAttachmentInfo;
+  vkRenderingInfo.colorAttachmentCount =
+      hasColor ? renderingInfo.colorAttachmentCount : 0;
+
+  vkRenderingInfo.pColorAttachments = hasColor ? &colorAttachmentInfo : nullptr;
   vkRenderingInfo.pDepthAttachment =
       hasDepthAttachment ? &depthAttachmentInfo : nullptr;
   vkRenderingInfo.pStencilAttachment = nullptr;

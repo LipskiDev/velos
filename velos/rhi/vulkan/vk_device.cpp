@@ -1415,12 +1415,22 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
                                   &pipelineLayout),
            "Failed to create Vulkan pipeline layout");
 
-  VkFormat colorFormat = ToVkFormat(desc.colorFormat);
-  if (colorFormat == VK_FORMAT_UNDEFINED) {
+  const bool hasColor = desc.colorFormat != Format::Undefined;
+
+  const bool hasDepth = desc.depth.depthFormat != Format::Undefined;
+
+  if (!hasColor && !hasDepth) {
     vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+
     throw std::runtime_error(
-        "CreateGraphicsPipeline received unsupported color format");
+        "Graphics pipeline requires at least one attachment");
   }
+
+  VkFormat colorFormat =
+      hasColor ? ToVkFormat(desc.colorFormat) : VK_FORMAT_UNDEFINED;
+
+  VkFormat depthFormat =
+      hasDepth ? ToVkFormat(desc.depth.depthFormat) : VK_FORMAT_UNDEFINED;
 
   VkPipelineDepthStencilStateCreateInfo depthStencil{};
   depthStencil.sType =
@@ -1435,9 +1445,9 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   VkPipelineRenderingCreateInfo renderingInfo{};
   renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-  renderingInfo.colorAttachmentCount = 1;
-  renderingInfo.pColorAttachmentFormats = &colorFormat;
-  renderingInfo.depthAttachmentFormat = ToVkFormat(desc.depth.depthFormat);
+  renderingInfo.colorAttachmentCount = hasColor ? 1 : 0;
+  renderingInfo.pColorAttachmentFormats = hasColor ? &colorFormat : nullptr;
+  renderingInfo.depthAttachmentFormat = depthFormat;
   renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
   VkGraphicsPipelineCreateInfo pipelineInfo{};
