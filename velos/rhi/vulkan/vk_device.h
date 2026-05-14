@@ -126,6 +126,8 @@ public:
 
   PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
+  PipelineHandle
+  CreateComputePipeline(const ComputePipelineDesc &desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
   const VulkanPipeline &GetPipeline(PipelineHandle handle) const;
 

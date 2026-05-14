@@ -29,6 +29,7 @@ public:
   void EndRendering() override;
 
   void BindPipeline(PipelineHandle pipeline) override;
+  void BindComputePipeline(PipelineHandle pipeline) override;
   void BindVertexBuffer(u32 slot, BufferHandle buffer, u64 offset = 0) override;
   void BindIndexBuffer(BufferHandle buffer, IndexType indexType,
                        u64 offset = 0) override;
@@ -38,6 +39,8 @@ public:
 
   void BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                          DescriptorSetHandle descriptorSet) override;
+  void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
+                                DescriptorSetHandle descriptorSet) override;
 
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;
@@ -56,11 +59,15 @@ public:
   void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
                    i32 vertexOffset = 0) override;
 
+  void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
+                uint32_t groupCountZ) override;
+
   VkCommandBuffer GetVkCommandBuffer() const { return commandBuffer_; }
 
 private:
   VulkanDevice &device_;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
   PipelineHandle boundGraphicsPipeline_{};
+  PipelineHandle boundComputePipeline_{};
 };
 } // namespace Velos::RHI

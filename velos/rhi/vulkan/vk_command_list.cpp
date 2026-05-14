@@ -199,6 +199,15 @@ void VulkanCommandList::BindPipeline(PipelineHandle pipeline) {
   boundGraphicsPipeline_ = pipeline;
 }
 
+void VulkanCommandList::BindComputePipeline(PipelineHandle pipeline) {
+  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+
+  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    vkPipeline.pipeline);
+
+  boundComputePipeline_ = pipeline;
+}
+
 void VulkanCommandList::BindVertexBuffer(u32 firstSlot,
                                          BufferHandle bufferHandle,
                                          u64 offset) {
@@ -285,6 +294,17 @@ void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
 
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           vkPipeline.layout, setIndex, 1, &set, 0, nullptr);
+}
+
+void VulkanCommandList::BindComputeDescriptorSet(PipelineHandle pipeline,
+                                                 uint32_t setIndex,
+                                                 DescriptorSetHandle set) {
+  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+  const VulkanDescriptorSet &vkSet = device_.GetDescriptorSet(set);
+
+  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          vkPipeline.layout, setIndex, 1, &vkSet.set, 0,
+                          nullptr);
 }
 
 void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
@@ -434,6 +454,18 @@ void VulkanCommandList::Draw(u32 vertexCount, u32 instanceCount,
 void VulkanCommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
                                     i32 vertexOffset) {
   vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset, 0);
+}
+
+void VulkanCommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
+  if (!boundComputePipeline_.IsValid()) {
+    throw std::runtime_error("Dispatch called without bound compute pipeline");
+  }
+
+  if (x == 0 || y == 0 || z == 0) {
+    return;
+  }
+
+  vkCmdDispatch(commandBuffer_, x, y, z);
 }
 
 } // namespace Velos::RHI

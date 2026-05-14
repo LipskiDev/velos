@@ -1507,6 +1507,83 @@ void VulkanDevice::DestroyPipeline(PipelineHandle handle) {
   pipelines_.erase(it);
 }
 
+PipelineHandle
+VulkanDevice::CreateComputePipeline(const ComputePipelineDesc &desc) {
+  VL_PROFILE_ZONE_N("VulkanDevice::CreateComputePipeline");
+
+  if (!desc.computeShader.IsValid()) {
+    throw std::runtime_error(
+        "CreateComputePipeline requires a valid compute shader");
+  }
+
+  const VulkanShader &cs = GetShader(desc.computeShader);
+
+  VkPipelineShaderStageCreateInfo shaderStage{};
+  shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+  shaderStage.module = cs.module;
+  shaderStage.pName = "main";
+
+  std::vector<VkPushConstantRange> pushConstantRanges;
+  pushConstantRanges.reserve(cs.reflection.pushConstants.size());
+
+  for (const auto &range : cs.reflection.pushConstants) {
+    VkPushConstantRange vkRange{};
+    vkRange.offset = range.offset;
+    vkRange.size = range.size;
+    vkRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRanges.push_back(vkRange);
+  }
+
+  std::vector<VkDescriptorSetLayout> vkSetLayouts;
+  vkSetLayouts.reserve(desc.layout.descriptorSetLayoutCount);
+
+  for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
+    DescriptorSetLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
+
+    const VulkanDescriptorSetLayout &vkLayout =
+        descriptorSetLayouts_.at(handle.id);
+
+    vkSetLayouts.push_back(vkLayout.layout);
+  }
+
+  VkPipelineLayoutCreateInfo layoutInfo{};
+  layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.setLayoutCount = static_cast<u32>(vkSetLayouts.size());
+  layoutInfo.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
+  layoutInfo.pushConstantRangeCount =
+      static_cast<u32>(pushConstantRanges.size());
+  layoutInfo.pPushConstantRanges =
+      pushConstantRanges.empty() ? nullptr : pushConstantRanges.data();
+
+  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+  VK_CHECK(
+      vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &pipelineLayout),
+      "Failed to create Vulkan compute pipeline layout");
+
+  VkComputePipelineCreateInfo pipelineInfo{};
+  pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  pipelineInfo.stage = shaderStage;
+  pipelineInfo.layout = pipelineLayout;
+  pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+  pipelineInfo.basePipelineIndex = -1;
+
+  VkPipeline pipeline = VK_NULL_HANDLE;
+  VkResult result = vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1,
+                                             &pipelineInfo, nullptr, &pipeline);
+
+  if (result != VK_SUCCESS) {
+    vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+    throw std::runtime_error("Failed to create Vulkan compute pipeline");
+  }
+
+  const u32 handleId = nextPipelineHandle_++;
+  pipelines_.emplace(
+      handleId, VulkanPipeline{.pipeline = pipeline, .layout = pipelineLayout});
+
+  return PipelineHandle{handleId};
+}
+
 const VulkanPipeline &VulkanDevice::GetPipeline(PipelineHandle handle) const {
   auto it = pipelines_.find(handle.id);
   if (it == pipelines_.end()) {
@@ -1730,6 +1807,23 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
     break;
   }
 
+  case DescriptorType::StorageImage: {
+    if (desc.imageInfo == nullptr) {
+      throw std::runtime_error(
+          "UpdateDescriptorSet: imageInfo is null for StorageImage");
+    }
+
+    const DescriptorImageInfo &imageInfo = *desc.imageInfo;
+    const VulkanImageView &vkImageView = GetImageView(imageInfo.imageView);
+
+    vkImageInfo.sampler = VK_NULL_HANDLE;
+    vkImageInfo.imageView = vkImageView.view;
+    vkImageInfo.imageLayout = ToVkImageLayout(imageInfo.imageLayout);
+
+    write.pImageInfo = &vkImageInfo;
+    break;
+  }
+
   default:
     throw std::runtime_error(
         "UpdateDescriptorSet: unsupported descriptor type");
@@ -1878,8 +1972,7 @@ void VulkanDevice::SubmitAndPresent(SwapchainHandle swapchain) {
   VkSemaphore renderFinishedSemaphore =
       swapchainRenderFinishedSemaphores_[currentBackbufferIndex_];
 
-  VkPipelineStageFlags waitStages[] = {
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+  VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
 
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

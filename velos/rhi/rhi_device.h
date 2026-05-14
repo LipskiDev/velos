@@ -61,6 +61,8 @@ public:
 
   virtual PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) = 0;
+  virtual PipelineHandle
+  CreateComputePipeline(const ComputePipelineDesc &desc) = 0;
   virtual void DestroyPipeline(PipelineHandle handle) = 0;
 
   virtual DescriptorSetLayoutHandle

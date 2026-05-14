@@ -78,4 +78,12 @@ struct GraphicsPipelineDesc {
   const char *debugName = nullptr;
 };
 
+struct ComputePipelineDesc {
+  ShaderHandle computeShader;
+
+  PipelineLayoutDesc layout{};
+
+  const char *debugName = nullptr;
+};
+
 }; // namespace Velos::RHI

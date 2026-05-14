@@ -100,6 +100,7 @@ enum class ImageUsage : u32 {
   Sampled = 1 << 2,
   ColorAttachment = 1 << 3,
   DepthStencil = 1 << 4,
+  Storage = 1 << 5,
 };
 
 enum class ImageLayout {
@@ -110,6 +111,7 @@ enum class ImageLayout {
   TransferSrc,
   TransferDst,
   Present,
+  General,
 };
 
 enum class PipelineStage {
@@ -192,6 +194,8 @@ enum class SamplerAddressMode {
 enum class DescriptorType {
   UniformBuffer,
   CombinedImageSampler,
+  StorageBuffer,
+  StorageImage,
 };
 
 enum class BlendFactor {

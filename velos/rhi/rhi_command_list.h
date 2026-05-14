@@ -74,6 +74,7 @@ public:
   virtual void EndRendering() = 0;
 
   virtual void BindPipeline(PipelineHandle pipeline) = 0;
+  virtual void BindComputePipeline(PipelineHandle pipeline) = 0;
   virtual void BindVertexBuffer(u32 slot, BufferHandle buffer,
                                 u64 offset = 0) = 0;
   virtual void BindIndexBuffer(BufferHandle buffer, IndexType indexType,
@@ -84,6 +85,8 @@ public:
 
   virtual void BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                                  DescriptorSetHandle descriptorSet) = 0;
+  virtual void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
+                                        DescriptorSetHandle descriptorSet) = 0;
 
   virtual void PushConstants(ShaderStage stages, u32 offset, u32 size,
                              const void *data) = 0;
@@ -101,5 +104,8 @@ public:
                     u32 baseInstance = 0) = 0;
   virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
                            i32 vertexOffset = 0) = 0;
+
+  virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
+                        uint32_t groupCountZ) = 0;
 };
 } // namespace Velos::RHI

@@ -223,6 +223,10 @@ inline VkImageUsageFlags ToVkImageUsage(ImageUsage usage) {
     flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   }
 
+  if ((usage & ImageUsage::Storage) == ImageUsage::Storage) {
+    flags |= VK_IMAGE_USAGE_STORAGE_BIT;
+  }
+
   return flags;
 }
 
@@ -266,6 +270,8 @@ inline VkImageLayout ToVkImageLayout(ImageLayout layout) {
 
   case ImageLayout::Present:
     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  case ImageLayout::General:
+    return VK_IMAGE_LAYOUT_GENERAL;
   }
 
   throw std::runtime_error("Unsupported ImageLayout");
@@ -363,6 +369,10 @@ inline VkDescriptorType ToVkDescriptorType(DescriptorType type) {
     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   case DescriptorType::CombinedImageSampler:
     return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  case DescriptorType::StorageImage:
+    return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  case DescriptorType::StorageBuffer:
+    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   default:
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
   }
@@ -558,6 +568,9 @@ inline VkAccessFlags ToVkAccessFlags(ImageLayout layout) {
 
   case ImageLayout::Present:
     return 0;
+
+  case ImageLayout::General:
+    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
   }
 
   throw std::runtime_error("Unsupported ImageLayout");
@@ -586,6 +599,9 @@ inline VkPipelineStageFlags ToVkPipelineStage(ImageLayout layout) {
 
   case ImageLayout::Present:
     return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+  case ImageLayout::General:
+    return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
   }
 
   throw std::runtime_error("Unsupported ImageLayout");
