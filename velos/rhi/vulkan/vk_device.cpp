@@ -1824,6 +1824,23 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
     break;
   }
 
+  case DescriptorType::StorageBuffer: {
+    if (desc.bufferInfo == nullptr) {
+      throw std::runtime_error(
+          "UpdateDescriptorSet: bufferInfo is null for StorageBuffer");
+    }
+
+    const DescriptorBufferInfo &bufferInfo = *desc.bufferInfo;
+    const VulkanBuffer &vkBuffer = GetBuffer(bufferInfo.buffer);
+
+    vkBufferInfo.buffer = vkBuffer.buffer;
+    vkBufferInfo.offset = bufferInfo.offset;
+    vkBufferInfo.range = bufferInfo.range;
+
+    write.pBufferInfo = &vkBufferInfo;
+    break;
+  }
+
   default:
     throw std::runtime_error(
         "UpdateDescriptorSet: unsupported descriptor type");
