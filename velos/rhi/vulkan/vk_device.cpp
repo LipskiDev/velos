@@ -12,7 +12,6 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
 #include <vk_mem_alloc.h>
 
@@ -1089,8 +1088,8 @@ SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &desc) {
   createInfo.maxAnisotropy = desc.enableAnisotropy ? desc.maxAnisotropy : 1.0f;
   createInfo.compareEnable = VK_FALSE;
   createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-  createInfo.minLod = 0.0f;
-  createInfo.maxLod = 0.0f;
+  createInfo.minLod = desc.minLod;
+  createInfo.maxLod = desc.maxLod;
   createInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   createInfo.unnormalizedCoordinates = VK_FALSE;
 

@@ -1,11 +1,8 @@
 #pragma once
 
-#include "rhi/rhi_device.h"
-#include "vk_common.h"
-
-#include <vector>
+#include "rhi/rhi_resources.h"
+#include "types.h"
 #include <vulkan/vulkan_core.h>
-
 struct GLFWwindow;
 
 namespace Velos::RHI {

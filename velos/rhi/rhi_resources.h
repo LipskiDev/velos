@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../core/types.h"
-#include "rhi/rhi_pipeline.h"
 #include "rhi_handles.h"
 #include "rhi_types.h"
 #include "shader/shader_compiler.h"
@@ -62,6 +61,8 @@ struct SamplerDesc {
   SamplerAddressMode addressW = SamplerAddressMode::Repeat;
   bool enableAnisotropy = false;
   float maxAnisotropy = 1.0f;
+  float minLod = 0.0f;
+  float maxLod = 0.0f;
 
   const char *debugName = nullptr;
 };

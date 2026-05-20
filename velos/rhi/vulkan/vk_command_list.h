@@ -1,8 +1,7 @@
 #pragma once
 
 #include "../rhi_command_list.h"
-#include "rhi/vulkan/vk_device.h"
-#include "vk_common.h"
+#include <rhi/vulkan/vk_common.h>
 
 namespace Velos::RHI {
 
@@ -41,6 +40,9 @@ public:
                          DescriptorSetHandle descriptorSet) override;
   void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                                 DescriptorSetHandle descriptorSet) override;
+
+  void GenerateMipmaps(ImageHandle image, uint32_t width, uint32_t height,
+                       uint32_t mipLevels, uint32_t arrayLayers) override;
 
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;

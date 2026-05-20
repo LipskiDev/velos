@@ -1,13 +1,10 @@
 #include "rhi/vulkan/vk_command_list.h"
 #include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
 #include "rhi/vulkan/vk_common.h"
 #include "rhi/vulkan/vk_device.h"
 #include "vlpch.h"
 
-#include <iostream>
 #include <stdexcept>
-#include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
 
@@ -206,6 +203,104 @@ void VulkanCommandList::BindComputePipeline(PipelineHandle pipeline) {
                     vkPipeline.pipeline);
 
   boundComputePipeline_ = pipeline;
+}
+
+void VulkanCommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
+                                        uint32_t height, uint32_t mipLevels,
+                                        uint32_t arrayLayers) {
+  const VulkanImage &image = device_.GetImage(imageHandle);
+
+  if (mipLevels <= 1)
+    return;
+
+  int32_t mipWidth = static_cast<int32_t>(width);
+  int32_t mipHeight = static_cast<int32_t>(height);
+
+  for (uint32_t mip = 1; mip < mipLevels; ++mip) {
+    VkImageMemoryBarrier toSrc{};
+    toSrc.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toSrc.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toSrc.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    toSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toSrc.image = image.image;
+    toSrc.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    toSrc.subresourceRange.baseMipLevel = mip - 1;
+    toSrc.subresourceRange.levelCount = 1;
+    toSrc.subresourceRange.baseArrayLayer = 0;
+    toSrc.subresourceRange.layerCount = arrayLayers;
+
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &toSrc);
+
+    VkImageBlit blit{};
+    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.srcSubresource.mipLevel = mip - 1;
+    blit.srcSubresource.baseArrayLayer = 0;
+    blit.srcSubresource.layerCount = arrayLayers;
+    blit.srcOffsets[0] = {0, 0, 0};
+    blit.srcOffsets[1] = {mipWidth, mipHeight, 1};
+
+    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.mipLevel = mip;
+    blit.dstSubresource.baseArrayLayer = 0;
+    blit.dstSubresource.layerCount = arrayLayers;
+    blit.dstOffsets[0] = {0, 0, 0};
+    blit.dstOffsets[1] = {
+        mipWidth > 1 ? mipWidth / 2 : 1,
+        mipHeight > 1 ? mipHeight / 2 : 1,
+        1,
+    };
+
+    vkCmdBlitImage(commandBuffer_, image.image,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image.image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                   VK_FILTER_LINEAR);
+
+    VkImageMemoryBarrier toShaderRead{};
+    toShaderRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    toShaderRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    toShaderRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShaderRead.image = image.image;
+    toShaderRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    toShaderRead.subresourceRange.baseMipLevel = mip - 1;
+    toShaderRead.subresourceRange.levelCount = 1;
+    toShaderRead.subresourceRange.baseArrayLayer = 0;
+    toShaderRead.subresourceRange.layerCount = arrayLayers;
+
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &toShaderRead);
+
+    mipWidth = std::max(1, mipWidth / 2);
+    mipHeight = std::max(1, mipHeight / 2);
+  }
+
+  VkImageMemoryBarrier lastMipToShaderRead{};
+  lastMipToShaderRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  lastMipToShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  lastMipToShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  lastMipToShaderRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  lastMipToShaderRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  lastMipToShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  lastMipToShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  lastMipToShaderRead.image = image.image;
+  lastMipToShaderRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  lastMipToShaderRead.subresourceRange.baseMipLevel = mipLevels - 1;
+  lastMipToShaderRead.subresourceRange.levelCount = 1;
+  lastMipToShaderRead.subresourceRange.baseArrayLayer = 0;
+  lastMipToShaderRead.subresourceRange.layerCount = arrayLayers;
+
+  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &lastMipToShaderRead);
 }
 
 void VulkanCommandList::BindVertexBuffer(u32 firstSlot,

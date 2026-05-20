@@ -1,8 +1,8 @@
 #include "vlpch.h"
 
-#include "rhi/vulkan/vk_swapchain.h"
 #include "rhi/rhi_device.h"
 #include "rhi/vulkan/vk_common.h"
+#include "rhi/vulkan/vk_swapchain.h"
 
 #include <GLFW/glfw3.h>
 
@@ -11,7 +11,6 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
 namespace Velos::RHI {
 
