@@ -79,7 +79,7 @@ public:
 
   virtual void UpdateDescriptorSet(const WriteDescriptorDesc &desc) = 0;
 
-  virtual ImageLayout GetImageLayout(ImageHandle image) const = 0;
+  virtual ImageLayout GetImageLayout(ImageHandle image, u32 mipLevel) const = 0;
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;
   virtual ICommandList &GetCommandList() = 0;

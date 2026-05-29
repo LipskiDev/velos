@@ -500,7 +500,7 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
     wrappedImage.format =
         Format::BGRA8_UNORM; // later: derive from swapchain_->GetFormat()
     wrappedImage.usage = ImageUsage::ColorAttachment;
-    wrappedImage.layout = ImageLayout::Undefined;
+    wrappedImage.mipLayouts.resize(1, ImageLayout::Undefined);
     wrappedImage.width = swapchain_->GetWidth();
     wrappedImage.height = swapchain_->GetHeight();
     wrappedImage.depth = 1;
@@ -674,7 +674,7 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
     wrappedImage.format =
         Format::BGRA8_UNORM; // later derive from actual swapchain format
     wrappedImage.usage = ImageUsage::ColorAttachment;
-    wrappedImage.layout = ImageLayout::Undefined;
+    wrappedImage.mipLayouts.resize(1, ImageLayout::Undefined);
     wrappedImage.width = swapchain_->GetWidth();
     wrappedImage.height = swapchain_->GetHeight();
     wrappedImage.depth = 1;
@@ -910,7 +910,7 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
   vkImage.type = desc.type;
   vkImage.format = desc.format;
   vkImage.usage = desc.usage;
-  vkImage.layout = ImageLayout::Undefined;
+  vkImage.mipLayouts.resize(desc.mipLevels, ImageLayout::Undefined);
   vkImage.width = desc.width;
   vkImage.height = desc.height;
   vkImage.depth = desc.depth;
@@ -1859,13 +1859,19 @@ VulkanDevice::GetDescriptorSet(DescriptorSetHandle handle) const {
   return it->second;
 }
 
-ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle) const {
+ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle,
+                                         u32 mipLevel) const {
   if (!imageHandle.IsValid()) {
     throw std::runtime_error("GetImageLayout: invalid image handle");
   }
 
   const VulkanImage &image = GetImage(imageHandle);
-  return image.layout;
+
+  if (mipLevel >= image.mipLayouts.size()) {
+    throw std::runtime_error("GetImageLayout: mip level out of bounds");
+  }
+
+  return image.mipLayouts[mipLevel];
 }
 
 FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
@@ -1928,7 +1934,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   currentBackbufferIndex_ = imageIndex;
 
   auto &img = images_.at(swapchainImageHandles_[imageIndex].id);
-  img.layout = ImageLayout::Undefined;
+  img.mipLayouts[0] = ImageLayout::Undefined;
 
   return FrameBeginResult{
       .commandList = {},

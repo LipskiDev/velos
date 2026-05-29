@@ -39,7 +39,7 @@ struct VulkanImage {
   Format format = Format::Undefined;
   ImageType type = ImageType::Image2D;
   ImageUsage usage = ImageUsage::None;
-  ImageLayout layout = ImageLayout::Undefined;
+  std::vector<ImageLayout> mipLayouts;
 
   u32 width = 0;
   u32 height = 0;
@@ -149,7 +149,7 @@ public:
   void UpdateDescriptorSet(const WriteDescriptorDesc &desc) override;
   const VulkanDescriptorSet &GetDescriptorSet(DescriptorSetHandle handle) const;
 
-  ImageLayout GetImageLayout(ImageHandle image) const override;
+  ImageLayout GetImageLayout(ImageHandle imageHandle, u32 mipLevel) const;
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
   ICommandList &GetCommandList() override;

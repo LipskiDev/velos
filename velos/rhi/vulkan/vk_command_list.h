@@ -42,7 +42,8 @@ public:
                                 DescriptorSetHandle descriptorSet) override;
 
   void GenerateMipmaps(ImageHandle image, uint32_t width, uint32_t height,
-                       uint32_t mipLevels, uint32_t arrayLayers) override;
+                       uint32_t mipLevels, uint32_t arrayLayers,
+                       ImageLayout baseMipLayout) override;
 
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;
