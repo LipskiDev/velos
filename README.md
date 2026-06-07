@@ -13,7 +13,7 @@
 
 velos is a modern Render Hardware Interface (RHI) with a Vulkan backend, designed to provide a clean abstraction over GPU APIs for real-time rendering. It serves as the foundation for [Rodan](https://github.com/LipskiDev/Rodan).
 
-velos is **not** a rendering engine — scene systems, materials, lighting, and rendering techniques are intentionally left to higher-level systems built on top.
+velos is **not** a rendering engine - scene systems, materials, lighting, and rendering techniques are intentionally left to higher-level systems built on top.
 
 ---
 
