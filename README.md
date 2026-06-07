@@ -67,7 +67,7 @@ Application / Engine
 |---------|--------|
 | Vulkan | ✅ Implemented |
 | DirectX 12 | 🔲 Planned |
-| Metal | 🔲 Planned |
+| WebGPU | 🔲 Planned |
 
 ---
 
