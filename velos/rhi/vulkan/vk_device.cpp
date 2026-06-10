@@ -329,17 +329,18 @@ void VulkanDevice::CreateLogicalDevice() {
   bda.bufferDeviceAddress = VK_TRUE;
   bda.pNext = nullptr;
 
-  VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
-  dynamicRenderingFeatures.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-  dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
-  dynamicRenderingFeatures.pNext = &bda;
+  VkPhysicalDeviceVulkan13Features vulkan13Features{};
+  vulkan13Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13Features.dynamicRendering = VK_TRUE;
+  vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+  vulkan13Features.pNext = &bda;
 
   const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  createInfo.pNext = &dynamicRenderingFeatures;
+  createInfo.pNext = &vulkan13Features;
   createInfo.queueCreateInfoCount = 1;
   createInfo.pQueueCreateInfos = &queueCreateInfo;
   createInfo.pEnabledFeatures = &deviceFeatures;
