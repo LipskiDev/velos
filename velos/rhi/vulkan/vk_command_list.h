@@ -41,9 +41,11 @@ public:
   void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                                 DescriptorSetHandle descriptorSet) override;
 
-  void GenerateMipmaps(ImageHandle image, uint32_t width, uint32_t height,
-                       uint32_t mipLevels, uint32_t arrayLayers,
-                       ImageLayout baseMipLayout) override;
+  void GenerateMipmaps(ImageHandle imageHandle, uint32_t width, uint32_t height,
+                       uint32_t mipLevels, uint32_t arrayLayers) override;
+
+  void BlitMip(ImageHandle image, uint32_t width, uint32_t height,
+               uint32_t srcMip, uint32_t dstMip, uint32_t arrayLayers) override;
 
   void PushConstants(ShaderStage stages, u32 offset, u32 size,
                      const void *data) override;
