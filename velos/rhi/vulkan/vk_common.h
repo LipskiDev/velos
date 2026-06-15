@@ -489,6 +489,12 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   case ResourceState::ShaderWrite:
     return VK_ACCESS_SHADER_WRITE_BIT;
 
+  case ResourceState::ColorAttachmentRead:
+    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+  case ResourceState::ColorAttachmentWrite:
+    return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
   case ResourceState::RenderTarget:
     return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -526,6 +532,8 @@ inline VkPipelineStageFlags ToVkPipelineStage(ResourceState state) {
            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
+  case ResourceState::ColorAttachmentRead:
+  case ResourceState::ColorAttachmentWrite:
   case ResourceState::RenderTarget:
     return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 

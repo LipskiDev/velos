@@ -65,8 +65,15 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.oldLayout = ToVkImageLayout(barrier.oldLayout);
   vkBarrier.newLayout = ToVkImageLayout(barrier.newLayout);
 
-  vkBarrier.srcAccessMask = ToVkAccessFlags(barrier.oldLayout);
-  vkBarrier.dstAccessMask = ToVkAccessFlags(barrier.newLayout);
+  const VulkanBarrierInfo srcInfo =
+      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.oldState)
+                                : GetImageBarrierInfo(barrier.oldLayout);
+  const VulkanBarrierInfo dstInfo =
+      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.newState)
+                                : GetImageBarrierInfo(barrier.newLayout);
+
+  vkBarrier.srcAccessMask = srcInfo.access;
+  vkBarrier.dstAccessMask = dstInfo.access;
 
   vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -78,9 +85,11 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.subresourceRange.baseArrayLayer = barrier.baseArrayLayer;
   vkBarrier.subresourceRange.layerCount = barrier.layerCount;
 
-  vkCmdPipelineBarrier(commandBuffer_, ToVkPipelineStage(barrier.oldLayout),
-                       ToVkPipelineStage(barrier.newLayout), 0, 0, nullptr, 0,
-                       nullptr, 1, &vkBarrier);
+  vkCmdPipelineBarrier(commandBuffer_, srcInfo.stage, dstInfo.stage, 0, 0,
+                       nullptr, 0, nullptr, 1, &vkBarrier);
+
+  device_.SetImageLayout(barrier.image, barrier.baseMipLevel,
+                         barrier.mipLevelCount, barrier.newLayout);
 }
 
 void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
@@ -508,8 +517,12 @@ void VulkanCommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
   }
 
   for (const auto &i : images) {
-    const auto srcInfo = GetImageBarrierInfo(i.oldLayout);
-    const auto dstInfo = GetImageBarrierInfo(i.newLayout);
+    const auto srcInfo =
+        i.useExplicitStates ? GetBufferBarrierInfo(i.oldState)
+                            : GetImageBarrierInfo(i.oldLayout);
+    const auto dstInfo =
+        i.useExplicitStates ? GetBufferBarrierInfo(i.newState)
+                            : GetImageBarrierInfo(i.newLayout);
 
     VkImageMemoryBarrier vkBarrier{};
     vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -541,6 +554,11 @@ void VulkanCommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
       commandBuffer_, srcStageMask, dstStageMask, 0, 0, nullptr,
       static_cast<u32>(vkBufferBarriers.size()), vkBufferBarriers.data(),
       static_cast<u32>(vkImageBarriers.size()), vkImageBarriers.data());
+
+  for (const auto &i : images) {
+    device_.SetImageLayout(i.image, i.baseMipLevel, i.mipLevelCount,
+                           i.newLayout);
+  }
 }
 void VulkanCommandList::Draw(u32 vertexCount, u32 instanceCount,
                              u32 firstVertex, u32 baseInstance) {

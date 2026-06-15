@@ -959,6 +959,27 @@ const VulkanImage &VulkanDevice::GetImage(ImageHandle handle) const {
   return it->second;
 }
 
+void VulkanDevice::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
+                                  u32 mipLevelCount, ImageLayout layout) {
+  auto it = images_.find(handle.id);
+  if (it == images_.end()) {
+    throw std::runtime_error("Invalid image handle");
+  }
+
+  VulkanImage &image = it->second;
+  if (baseMipLevel >= image.mipLayouts.size()) {
+    throw std::runtime_error("SetImageLayout: mip level out of bounds");
+  }
+
+  const u32 endMip =
+      std::min<u32>(baseMipLevel + mipLevelCount,
+                    static_cast<u32>(image.mipLayouts.size()));
+
+  for (u32 mip = baseMipLevel; mip < endMip; ++mip) {
+    image.mipLayouts[mip] = layout;
+  }
+}
+
 ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
   if (!desc.image.IsValid()) {
     throw std::runtime_error("CreateImageView: invalid image handle");

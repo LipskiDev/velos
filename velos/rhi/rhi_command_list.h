@@ -41,6 +41,9 @@ struct ImageBarrier {
   ImageHandle image{};
   ImageLayout oldLayout = ImageLayout::Undefined;
   ImageLayout newLayout = ImageLayout::Undefined;
+  ResourceState oldState = ResourceState::Undefined;
+  ResourceState newState = ResourceState::Undefined;
+  bool useExplicitStates = false;
   ImageAspect aspect = ImageAspect::Color;
 
   u32 baseMipLevel = 0;

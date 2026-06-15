@@ -173,6 +173,8 @@ enum class ResourceState {
   ShaderWrite,
 
   // Render targets
+  ColorAttachmentRead,
+  ColorAttachmentWrite,
   RenderTarget,
   DepthWrite,
   DepthRead,

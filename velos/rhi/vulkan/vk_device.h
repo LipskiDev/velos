@@ -110,6 +110,8 @@ public:
   ImageHandle CreateImage(const ImageDesc &desc) override;
   void DestroyImage(ImageHandle handle) override;
   const VulkanImage &GetImage(ImageHandle handle) const;
+  void SetImageLayout(ImageHandle handle, u32 baseMipLevel, u32 mipLevelCount,
+                      ImageLayout layout);
 
   ImageViewHandle CreateImageView(const ImageViewDesc &desc) override;
   void DestroyImageView(ImageViewHandle view) override;
