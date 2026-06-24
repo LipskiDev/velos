@@ -8,6 +8,7 @@
 #include "rhi/vulkan/vk_profiler.h"
 #include "rhi/vulkan/vk_upload_context.h"
 #include "vlpch.h"
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -255,6 +256,112 @@ void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
   VK_CHECK(result, "Failed to create Vulkan instance");
 }
 
+bool HasRequiredQueues(VkPhysicalDevice device) {
+  u32 queueFamilyCount = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+  if (queueFamilyCount == 0) {
+    return false;
+  }
+
+  std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+  vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
+                                           queueFamilies.data());
+
+  for (const auto &queueFamily : queueFamilies) {
+    const bool hasGraphics =
+        (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
+    const bool hasCompute =
+        (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+
+    if (queueFamily.queueCount > 0 && hasGraphics && hasCompute) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool HasRequiredExtensions(VkPhysicalDevice device) {
+  u32 extensionCount = 0;
+  vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
+                                       nullptr);
+
+  std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+  vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
+                                       availableExtensions.data());
+
+  const char *requiredExtensions[] = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+
+  for (const char *required : requiredExtensions) {
+    bool found = false;
+
+    for (const auto &extension : availableExtensions) {
+      if (strcmp(extension.extensionName, required) == 0) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool HasRequiredFeatures(VkPhysicalDevice device) {
+  VkPhysicalDeviceFeatures features{};
+  VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
+  VkPhysicalDeviceVulkan13Features vulkan13Features{};
+
+  bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+
+  vulkan13Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13Features.pNext = &bda;
+
+  VkPhysicalDeviceFeatures2 features2{};
+  features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  features2.pNext = &vulkan13Features;
+
+  vkGetPhysicalDeviceFeatures2(device, &features2);
+
+  return vulkan13Features.dynamicRendering == VK_TRUE &&
+         vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
+         bda.bufferDeviceAddress == VK_TRUE;
+}
+
+u32 ScoreGPU(VkPhysicalDevice device) {
+  if (!HasRequiredQueues(device)) {
+    return 0;
+  }
+
+  if (!HasRequiredExtensions(device)) {
+    return 0;
+  }
+
+  if (!HasRequiredFeatures(device)) {
+    return 0;
+  }
+
+  VkPhysicalDeviceProperties properties{};
+  vkGetPhysicalDeviceProperties(device, &properties);
+
+  u32 score = 1;
+
+  if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+    score += 1000;
+  }
+
+  score += properties.limits.maxImageDimension2D;
+
+  return score;
+}
+
 void VulkanDevice::PickPhysicalDevice() {
   VL_PROFILE_ZONE_N("VulkanDevice::PickPhysicalDevice");
   u32 deviceCount = 0;
@@ -274,7 +381,22 @@ void VulkanDevice::PickPhysicalDevice() {
             << ", deviceCount = " << deviceCount << "\n";
   VK_CHECK(result, "Failed to enumerate physical devices");
 
-  physicalDevice_ = devices[0];
+  u32 maxScore = 0;
+  VkPhysicalDevice bestDevice = VK_NULL_HANDLE;
+
+  for (VkPhysicalDevice device : devices) {
+    uint32_t deviceScore = ScoreGPU(device);
+    if (deviceScore > maxScore) {
+      maxScore = deviceScore;
+      bestDevice = device;
+    }
+  }
+
+  if (bestDevice == VK_NULL_HANDLE) {
+    throw std::runtime_error("No suitable Vulkan physical device found");
+  }
+
+  physicalDevice_ = bestDevice;
 
   vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties_);
 
@@ -971,9 +1093,8 @@ void VulkanDevice::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
     throw std::runtime_error("SetImageLayout: mip level out of bounds");
   }
 
-  const u32 endMip =
-      std::min<u32>(baseMipLevel + mipLevelCount,
-                    static_cast<u32>(image.mipLayouts.size()));
+  const u32 endMip = std::min<u32>(baseMipLevel + mipLevelCount,
+                                   static_cast<u32>(image.mipLayouts.size()));
 
   for (u32 mip = baseMipLevel; mip < endMip; ++mip) {
     image.mipLayouts[mip] = layout;
