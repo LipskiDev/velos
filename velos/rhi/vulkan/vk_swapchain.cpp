@@ -36,13 +36,13 @@ ChoosePresentMode(const std::vector<VkPresentModeKHR> &presentModes,
   }
 
   for (VkPresentModeKHR mode : presentModes) {
-    if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+    if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
       return mode;
     }
   }
 
   for (VkPresentModeKHR mode : presentModes) {
-    if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+    if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
       return mode;
     }
   }
