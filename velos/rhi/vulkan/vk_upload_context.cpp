@@ -84,6 +84,10 @@ void VulkanUploadContext::UploadBuffer(const BufferUploadDesc &desc) {
   u64 offset = Allocate(desc.size, 16);
   std::memcpy(mappedPtr_ + offset, desc.data, desc.size);
 
+  vmaFlushAllocation(device_.GetAllocator(),
+                     device_.GetBuffer(stagingBuffer_).allocation, offset,
+                     desc.size);
+
   cmd_->CopyBuffer(stagingBuffer_, desc.dstBuffer,
                    BufferCopyRegion{.srcOffset = offset,
                                     .dstOffset = desc.dstOffset,
