@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 #include <spirv_reflect.h>
 #include <string>
 #include <vector>

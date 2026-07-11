@@ -1,12 +1,12 @@
-#include "vk_device.h"
-#include "../rhi_device.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
-#include "rhi/vulkan/vk_command_list.h"
-#include "rhi/vulkan/vk_common.h"
-#include "rhi/vulkan/vk_profiler.h"
-#include "rhi/vulkan/vk_upload_context.h"
+#include "device.h"
+#include "../device.h"
+#include "rhi/handles.h"
+#include "rhi/resources.h"
+#include "rhi/types.h"
+#include "rhi/vulkan/command_list.h"
+#include "rhi/vulkan/common.h"
+#include "rhi/vulkan/profiler.h"
+#include "rhi/vulkan/upload_context.h"
 #include "vlpch.h"
 #include <algorithm>
 #include <cstdint>
@@ -21,12 +21,13 @@
 #include <core/profiling.h>
 #include <vulkan/vulkan_core.h>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
 static const char *BoolStr(bool v) { return v ? "true" : "false"; }
 
-void VulkanDevice::DumpLiveResources() const {
-  std::cout << "\n==== Live VulkanDevice resources ====\n";
+void Device::DumpLiveResources() const {
+  std::cout << "\n==== Live Device resources ====\n";
 
   std::cout << "Buffers: " << buffers_.size() << "\n";
   for (const auto &[id, buffer] : buffers_) {
@@ -73,8 +74,8 @@ void VulkanDevice::DumpLiveResources() const {
   std::cout << "=====================================\n";
 }
 
-VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::VulkanDevice");
+Device::Device(const DeviceDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::Device");
 
   VK_CHECK(volkInitialize(), "Failed to initialize Volk");
 
@@ -91,8 +92,8 @@ VulkanDevice::VulkanDevice(const DeviceDesc &desc) {
   CreateSyncObjects();
 }
 
-VulkanDevice::~VulkanDevice() {
-  VL_PROFILE_ZONE_N("VulkanDevice::~VulkanDevice");
+Device::~Device() {
+  VL_PROFILE_ZONE_N("Device::~Device");
 
   for (auto &commandList : commandLists_) {
     commandList.reset();
@@ -173,7 +174,7 @@ VulkanDevice::~VulkanDevice() {
   }
 }
 
-void VulkanDevice::CreateAllocator() {
+void Device::CreateAllocator() {
   VmaAllocatorCreateInfo allocatorInfo{};
   allocatorInfo.instance = instance_;
   allocatorInfo.physicalDevice = physicalDevice_;
@@ -195,10 +196,10 @@ void VulkanDevice::CreateAllocator() {
         "CreateAllocator: allocator_ is null after creation");
   }
 }
-BackendAPI VulkanDevice::GetBackend() const { return BackendAPI::Vulkan; }
+GraphicsAPI Device::GetBackend() const { return GraphicsAPI::Vulkan; }
 
-void VulkanDevice::CreateInstance(const DeviceDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateInstance");
+void Device::CreateInstance(const DeviceDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::CreateInstance");
   VkApplicationInfo appInfo{};
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   appInfo.pApplicationName = desc.applicationName;
@@ -362,8 +363,8 @@ u32 ScoreGPU(VkPhysicalDevice device) {
   return score;
 }
 
-void VulkanDevice::PickPhysicalDevice() {
-  VL_PROFILE_ZONE_N("VulkanDevice::PickPhysicalDevice");
+void Device::PickPhysicalDevice() {
+  VL_PROFILE_ZONE_N("Device::PickPhysicalDevice");
   u32 deviceCount = 0;
   VkResult result =
       vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -400,17 +401,17 @@ void VulkanDevice::PickPhysicalDevice() {
 
   vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties_);
 
-  std::cout << "[VulkanDevice] Selected GPU: "
+  std::cout << "[Device] Selected GPU: "
             << physicalDeviceProperties_.deviceName << "\n";
 
-  std::cout << "[VulkanDevice] API version: "
+  std::cout << "[Device] API version: "
             << VK_VERSION_MAJOR(physicalDeviceProperties_.apiVersion) << "."
             << VK_VERSION_MINOR(physicalDeviceProperties_.apiVersion) << "."
             << VK_VERSION_PATCH(physicalDeviceProperties_.apiVersion) << '\n';
 }
 
-void VulkanDevice::CreateLogicalDevice() {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateLogicalDevice");
+void Device::CreateLogicalDevice() {
+  VL_PROFILE_ZONE_N("Device::CreateLogicalDevice");
   u32 queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount,
                                            nullptr);
@@ -478,8 +479,8 @@ void VulkanDevice::CreateLogicalDevice() {
   presentQueue_ = graphicsQueue_;
 }
 
-void VulkanDevice::CreateCommandObjects() {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateCommandObjects");
+void Device::CreateCommandObjects() {
+  VL_PROFILE_ZONE_N("Device::CreateCommandObjects");
 
   VkCommandPoolCreateInfo framePoolInfo{};
   framePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -516,12 +517,12 @@ void VulkanDevice::CreateCommandObjects() {
 
   for (u32 i = 0; i < k_MaxFramesInFlight; i++) {
     commandLists_[i] =
-        std::make_unique<VulkanCommandList>(*this, commandBuffers_[i]);
+        std::make_unique<CommandList>(*this, commandBuffers_[i]);
   }
 }
 
-void VulkanDevice::CreateSyncObjects() {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateSyncObjects");
+void Device::CreateSyncObjects() {
+  VL_PROFILE_ZONE_N("Device::CreateSyncObjects");
 
   VkSemaphoreCreateInfo semaphoreInfo{};
   semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -541,8 +542,8 @@ void VulkanDevice::CreateSyncObjects() {
   }
 }
 
-void VulkanDevice::CreateSwapchainSyncObjects() {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateSwapchainSyncObjects");
+void Device::CreateSwapchainSyncObjects() {
+  VL_PROFILE_ZONE_N("Device::CreateSwapchainSyncObjects");
 
   if (!swapchain_) {
     throw std::runtime_error(
@@ -566,7 +567,7 @@ void VulkanDevice::CreateSwapchainSyncObjects() {
   }
 }
 
-void VulkanDevice::DestroySwapchainSyncObjects() {
+void Device::DestroySwapchainSyncObjects() {
   for (VkSemaphore semaphore : swapchainRenderFinishedSemaphores_) {
     if (semaphore != VK_NULL_HANDLE) {
       vkDestroySemaphore(device_, semaphore, nullptr);
@@ -577,16 +578,16 @@ void VulkanDevice::DestroySwapchainSyncObjects() {
   swapchainImagesInFlight_.clear();
 }
 
-void VulkanDevice::CollectGarbage() {
+void Device::CollectGarbage() {
   // no-op
 }
 
 std::unique_ptr<IUploadContext>
-VulkanDevice::CreateUploadContext(u64 stagingBufferSize) {
-  return std::make_unique<VulkanUploadContext>(*this, stagingBufferSize);
+Device::CreateUploadContext(u64 stagingBufferSize) {
+  return std::make_unique<UploadContext>(*this, stagingBufferSize);
 }
 
-u32 VulkanDevice::FindMemoryType(u32 typeFilter,
+u32 Device::FindMemoryType(u32 typeFilter,
                                  VkMemoryPropertyFlags properties) const {
   VkPhysicalDeviceMemoryProperties memProperties{};
   vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
@@ -603,21 +604,21 @@ u32 VulkanDevice::FindMemoryType(u32 typeFilter,
   throw std::runtime_error("Failed to find suitable memory");
 }
 
-SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
+SwapchainHandle Device::CreateSwapchain(const SwapchainDesc &desc) {
   if (swapchain_) {
     throw std::runtime_error("Only one swapchain is supported for now");
   }
 
-  swapchain_ = std::make_unique<VulkanSwapchain>(
+  swapchain_ = std::make_unique<Swapchain>(
       instance_, physicalDevice_, device_, presentQueueFamily_, desc);
 
   swapchainImageHandles_.clear();
   swapchainImageViewHandles_.clear();
 
   for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
-    const VulkanSwapchainImage &swapImage = swapchain_->GetImage(i);
+    const SwapchainImage &swapImage = swapchain_->GetImage(i);
 
-    VulkanImage wrappedImage{};
+    Image wrappedImage{};
     wrappedImage.image = swapImage.image;
     wrappedImage.memory = VK_NULL_HANDLE;
     wrappedImage.format =
@@ -637,7 +638,7 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
     ImageHandle imageHandle{imageHandleId};
     swapchainImageHandles_.push_back(imageHandle);
 
-    VulkanImageView vkView{};
+    ImageView vkView{};
     vkView.view = swapImage.view;
     vkView.image = imageHandle;
     vkView.format = wrappedImage.format;
@@ -655,16 +656,16 @@ SwapchainHandle VulkanDevice::CreateSwapchain(const SwapchainDesc &desc) {
   return SwapchainHandle{1};
 }
 
-void VulkanDevice::ClearCurrentSwapchainImage(float r, float g, float b,
+void Device::ClearCurrentSwapchainImage(float r, float g, float b,
                                               float a) {
-  VL_PROFILE_ZONE_N("VulkanDevice::ClearCurrentSwapchainImage");
+  VL_PROFILE_ZONE_N("Device::ClearCurrentSwapchainImage");
   if (!swapchain_) {
     throw std::runtime_error("No swapchain available to clear");
   }
 
   VkCommandBuffer cmd = commandBuffers_[currentFrame_];
 
-  const VulkanSwapchainImage &image =
+  const SwapchainImage &image =
       swapchain_->GetImage(currentBackbufferIndex_);
 
   VkImageMemoryBarrier toTransfer{};
@@ -722,13 +723,13 @@ void VulkanDevice::ClearCurrentSwapchainImage(float r, float g, float b,
                        nullptr, 1, &toPresent);
 }
 
-void VulkanDevice::WaitIdle() {
+void Device::WaitIdle() {
   if (device_ != VK_NULL_HANDLE) {
     VK_CHECK(vkDeviceWaitIdle(device_), "vkDeviceWaitIdle failed");
   }
 }
 
-void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
+void Device::DestroySwapchain(SwapchainHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -748,9 +749,9 @@ void VulkanDevice::DestroySwapchain(SwapchainHandle handle) {
   swapchain_.reset();
 }
 
-void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
+void Device::ResizeSwapchain(SwapchainHandle handle, u32 width,
                                    u32 height) {
-  VL_PROFILE_ZONE_N("VulkanDevice::ResizeSwapchain");
+  VL_PROFILE_ZONE_N("Device::ResizeSwapchain");
 
   if (!handle.IsValid()) {
     throw std::runtime_error("ResizeSwapchain called with invalid handle");
@@ -785,13 +786,13 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
 
   swapchain_.reset();
 
-  swapchain_ = std::make_unique<VulkanSwapchain>(
+  swapchain_ = std::make_unique<Swapchain>(
       instance_, physicalDevice_, device_, presentQueueFamily_, desc);
 
   for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
-    const VulkanSwapchainImage &swapImage = swapchain_->GetImage(i);
+    const SwapchainImage &swapImage = swapchain_->GetImage(i);
 
-    VulkanImage wrappedImage{};
+    Image wrappedImage{};
     wrappedImage.image = swapImage.image;
     wrappedImage.memory = VK_NULL_HANDLE;
     wrappedImage.format =
@@ -811,7 +812,7 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
     ImageHandle imageHandle{imageHandleId};
     swapchainImageHandles_.push_back(imageHandle);
 
-    VulkanImageView vkView{};
+    ImageView vkView{};
     vkView.view = swapImage.view;
     vkView.image = imageHandle;
     vkView.format = wrappedImage.format;
@@ -828,8 +829,8 @@ void VulkanDevice::ResizeSwapchain(SwapchainHandle handle, u32 width,
   currentBackbufferIndex_ = 0;
 }
 
-BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateBuffer");
+BufferHandle Device::CreateBuffer(const BufferDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::CreateBuffer");
 
   if (desc.size == 0) {
     throw std::runtime_error(
@@ -846,7 +847,7 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
   bufferInfo.usage = ToVkBufferUsageFlags(desc.usage);
   bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-  VulkanBuffer buffer{};
+  Buffer buffer{};
   buffer.size = desc.size;
   buffer.usage = desc.usage;
   buffer.memoryUsage = desc.memoryUsage;
@@ -909,7 +910,7 @@ BufferHandle VulkanDevice::CreateBuffer(const BufferDesc &desc) {
   return BufferHandle{handleId};
 }
 
-void VulkanDevice::DestroyBuffer(BufferHandle handle) {
+void Device::DestroyBuffer(BufferHandle handle) {
   auto it = buffers_.find(handle.id);
   if (it == buffers_.end()) {
     return;
@@ -924,7 +925,7 @@ void VulkanDevice::DestroyBuffer(BufferHandle handle) {
   buffers_.erase(it);
 }
 
-const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
+const Buffer &Device::GetBuffer(BufferHandle handle) const {
   auto it = buffers_.find(handle.id);
 
   if (it == buffers_.end()) {
@@ -934,13 +935,13 @@ const VulkanBuffer &VulkanDevice::GetBuffer(BufferHandle handle) const {
   return it->second;
 }
 
-u64 VulkanDevice::GetBufferDeviceAddress(BufferHandle handle) const {
-  VulkanBuffer buffer = GetBuffer(handle);
+u64 Device::GetBufferDeviceAddress(BufferHandle handle) const {
+  Buffer buffer = GetBuffer(handle);
   return static_cast<u64>(buffer.deviceAddress);
 }
 
-ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateImage");
+ImageHandle Device::CreateImage(const ImageDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::CreateImage");
 
   if (desc.width == 0 || desc.height == 0 || desc.depth == 0) {
     throw std::runtime_error(
@@ -1027,7 +1028,7 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
     throw std::runtime_error("CreateImage: vkBindImageMemory failed");
   }
 
-  VulkanImage vkImage{};
+  Image vkImage{};
   vkImage.image = image;
   vkImage.memory = memory;
   vkImage.type = desc.type;
@@ -1046,7 +1047,7 @@ ImageHandle VulkanDevice::CreateImage(const ImageDesc &desc) {
 
   return ImageHandle{handleId};
 }
-void VulkanDevice::DestroyImage(ImageHandle handle) {
+void Device::DestroyImage(ImageHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1056,7 +1057,7 @@ void VulkanDevice::DestroyImage(ImageHandle handle) {
     return;
   }
 
-  VulkanImage &image = it->second;
+  Image &image = it->second;
 
   if (image.image != VK_NULL_HANDLE && image.owned) {
     vkDestroyImage(device_, image.image, nullptr);
@@ -1071,7 +1072,7 @@ void VulkanDevice::DestroyImage(ImageHandle handle) {
   images_.erase(it);
 }
 
-const VulkanImage &VulkanDevice::GetImage(ImageHandle handle) const {
+const Image &Device::GetImage(ImageHandle handle) const {
 
   auto it = images_.find(handle.id);
   if (it == images_.end()) {
@@ -1081,14 +1082,14 @@ const VulkanImage &VulkanDevice::GetImage(ImageHandle handle) const {
   return it->second;
 }
 
-void VulkanDevice::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
+void Device::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
                                   u32 mipLevelCount, ImageLayout layout) {
   auto it = images_.find(handle.id);
   if (it == images_.end()) {
     throw std::runtime_error("Invalid image handle");
   }
 
-  VulkanImage &image = it->second;
+  Image &image = it->second;
   if (baseMipLevel >= image.mipLayouts.size()) {
     throw std::runtime_error("SetImageLayout: mip level out of bounds");
   }
@@ -1101,12 +1102,12 @@ void VulkanDevice::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
   }
 }
 
-ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
+ImageViewHandle Device::CreateImageView(const ImageViewDesc &desc) {
   if (!desc.image.IsValid()) {
     throw std::runtime_error("CreateImageView: invalid image handle");
   }
 
-  const VulkanImage &vkImage = GetImage(desc.image);
+  const Image &vkImage = GetImage(desc.image);
 
   if (vkImage.image == VK_NULL_HANDLE) {
     throw std::runtime_error("CreateImageView: source image is null");
@@ -1173,7 +1174,7 @@ ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
     throw std::runtime_error("CreateImageView: vkCreateImageView failed");
   }
 
-  VulkanImageView vkView{};
+  ImageView vkView{};
   vkView.view = view;
   vkView.image = desc.image;
   vkView.format = viewFormat;
@@ -1187,7 +1188,7 @@ ImageViewHandle VulkanDevice::CreateImageView(const ImageViewDesc &desc) {
   return ImageViewHandle{handleId};
 }
 
-void VulkanDevice::DestroyImageView(ImageViewHandle handle) {
+void Device::DestroyImageView(ImageViewHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1198,7 +1199,7 @@ void VulkanDevice::DestroyImageView(ImageViewHandle handle) {
     return;
   }
 
-  VulkanImageView &view = it->second;
+  ImageView &view = it->second;
 
   if (view.view != VK_NULL_HANDLE && view.owned) {
     vkDestroyImageView(device_, view.view, nullptr);
@@ -1208,8 +1209,8 @@ void VulkanDevice::DestroyImageView(ImageViewHandle handle) {
   imageViews_.erase(it);
 }
 
-const VulkanImageView &
-VulkanDevice::GetImageView(ImageViewHandle handle) const {
+const ImageView &
+Device::GetImageView(ImageViewHandle handle) const {
   auto it = imageViews_.find(handle.id);
   if (it == imageViews_.end()) {
     throw std::runtime_error("Invalid image view handle");
@@ -1218,7 +1219,7 @@ VulkanDevice::GetImageView(ImageViewHandle handle) const {
   return it->second;
 }
 
-SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &desc) {
+SamplerHandle Device::CreateSampler(const SamplerDesc &desc) {
   VkSamplerCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   createInfo.magFilter = ToVkFilter(desc.magFilter);
@@ -1242,12 +1243,12 @@ SamplerHandle VulkanDevice::CreateSampler(const SamplerDesc &desc) {
            "vkCreateSampler: failed to create VkSampler");
 
   const u32 handleId = nextSamplerHandle_++;
-  samplers_.emplace(handleId, VulkanSampler{.sampler = sampler});
+  samplers_.emplace(handleId, Sampler{.sampler = sampler});
 
   return SamplerHandle{handleId};
 }
 
-void VulkanDevice::DestroySampler(SamplerHandle handle) {
+void Device::DestroySampler(SamplerHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1265,7 +1266,7 @@ void VulkanDevice::DestroySampler(SamplerHandle handle) {
   samplers_.erase(it);
 }
 
-const VulkanSampler &VulkanDevice::GetSampler(SamplerHandle handle) const {
+const Sampler &Device::GetSampler(SamplerHandle handle) const {
   auto it = samplers_.find(handle.id);
   if (it == samplers_.end()) {
     throw std::runtime_error("Invalid sampler handle");
@@ -1274,7 +1275,7 @@ const VulkanSampler &VulkanDevice::GetSampler(SamplerHandle handle) const {
   return it->second;
 }
 
-ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &desc) {
+ShaderHandle Device::CreateShader(const ShaderDesc &desc) {
   if (!desc.bytecode) {
     throw std::runtime_error("CreateShader called with null bytecode");
   }
@@ -1298,14 +1299,14 @@ ShaderHandle VulkanDevice::CreateShader(const ShaderDesc &desc) {
            "Failed to create Vulkan shader module");
 
   const u32 handleId = nextShaderHandle_++;
-  shaders_.emplace(handleId, VulkanShader{.module = shaderModule,
+  shaders_.emplace(handleId, Shader{.module = shaderModule,
                                           .stage = desc.stage,
                                           .reflection = desc.reflection});
 
   return ShaderHandle{handleId};
 }
 
-void VulkanDevice::DestroyShader(ShaderHandle handle) {
+void Device::DestroyShader(ShaderHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1322,7 +1323,7 @@ void VulkanDevice::DestroyShader(ShaderHandle handle) {
   shaders_.erase(it);
 }
 
-const VulkanShader &VulkanDevice::GetShader(ShaderHandle handle) const {
+const Shader &Device::GetShader(ShaderHandle handle) const {
   auto it = shaders_.find(handle.id);
   if (it == shaders_.end()) {
     throw std::runtime_error("Invalid shader handle");
@@ -1332,8 +1333,8 @@ const VulkanShader &VulkanDevice::GetShader(ShaderHandle handle) const {
 }
 
 PipelineHandle
-VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateGraphicsPipeline");
+Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::CreateGraphicsPipeline");
 
   if (!desc.vertexShader.IsValid()) {
     throw std::runtime_error(
@@ -1345,8 +1346,8 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
         "CreateGraphicsPipeline requires a valid fragment shader");
   }
 
-  const VulkanShader &vs = GetShader(desc.vertexShader);
-  const VulkanShader &fs = GetShader(desc.fragmentShader);
+  const Shader &vs = GetShader(desc.vertexShader);
+  const Shader &fs = GetShader(desc.fragmentShader);
 
   VkPipelineShaderStageCreateInfo shaderStages[2]{};
 
@@ -1539,8 +1540,8 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   vkSetLayouts.reserve(desc.layout.descriptorSetLayoutCount);
 
   for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
-    DescriptorSetLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
-    const VulkanDescriptorSetLayout &vkLayout =
+    BindingLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
+    const BindingLayout &vkLayout =
         descriptorSetLayouts_[handle.id];
     vkSetLayouts.push_back(vkLayout.layout);
   }
@@ -1622,12 +1623,12 @@ VulkanDevice::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   const u32 handleId = nextPipelineHandle_++;
   pipelines_.emplace(
-      handleId, VulkanPipeline{.pipeline = pipeline, .layout = pipelineLayout});
+      handleId, Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
 
   return PipelineHandle{handleId};
 }
 
-void VulkanDevice::DestroyPipeline(PipelineHandle handle) {
+void Device::DestroyPipeline(PipelineHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1651,15 +1652,15 @@ void VulkanDevice::DestroyPipeline(PipelineHandle handle) {
 }
 
 PipelineHandle
-VulkanDevice::CreateComputePipeline(const ComputePipelineDesc &desc) {
-  VL_PROFILE_ZONE_N("VulkanDevice::CreateComputePipeline");
+Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::CreateComputePipeline");
 
   if (!desc.computeShader.IsValid()) {
     throw std::runtime_error(
         "CreateComputePipeline requires a valid compute shader");
   }
 
-  const VulkanShader &cs = GetShader(desc.computeShader);
+  const Shader &cs = GetShader(desc.computeShader);
 
   VkPipelineShaderStageCreateInfo shaderStage{};
   shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1682,9 +1683,9 @@ VulkanDevice::CreateComputePipeline(const ComputePipelineDesc &desc) {
   vkSetLayouts.reserve(desc.layout.descriptorSetLayoutCount);
 
   for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
-    DescriptorSetLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
+    BindingLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
 
-    const VulkanDescriptorSetLayout &vkLayout =
+    const BindingLayout &vkLayout =
         descriptorSetLayouts_.at(handle.id);
 
     vkSetLayouts.push_back(vkLayout.layout);
@@ -1722,12 +1723,12 @@ VulkanDevice::CreateComputePipeline(const ComputePipelineDesc &desc) {
 
   const u32 handleId = nextPipelineHandle_++;
   pipelines_.emplace(
-      handleId, VulkanPipeline{.pipeline = pipeline, .layout = pipelineLayout});
+      handleId, Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
 
   return PipelineHandle{handleId};
 }
 
-const VulkanPipeline &VulkanDevice::GetPipeline(PipelineHandle handle) const {
+const Pipeline &Device::GetPipeline(PipelineHandle handle) const {
   auto it = pipelines_.find(handle.id);
   if (it == pipelines_.end()) {
     throw std::runtime_error("Invalid shader handle");
@@ -1736,13 +1737,13 @@ const VulkanPipeline &VulkanDevice::GetPipeline(PipelineHandle handle) const {
   return it->second;
 }
 
-DescriptorSetLayoutHandle
-VulkanDevice::CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) {
+BindingLayoutHandle
+Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   std::vector<VkDescriptorSetLayoutBinding> vkBindings;
   vkBindings.reserve(desc.bindingCount);
 
   for (u32 i = 0; i < desc.bindingCount; ++i) {
-    const DescriptorBindingDesc &binding = desc.bindings[i];
+    const BindingDesc &binding = desc.bindings[i];
 
     VkDescriptorSetLayoutBinding vkBinding{};
     vkBinding.binding = binding.binding;
@@ -1764,16 +1765,16 @@ VulkanDevice::CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) {
       vkCreateDescriptorSetLayout(device_, &createInfo, nullptr, &layout),
       "vkCreateDescriptorSetLayout: failed to create Descriptor Set Layout");
 
-  const u32 handleId = nextDescriptorSetLayoutHandle_++;
+  const u32 handleId = nextBindingLayoutHandle_++;
 
   descriptorSetLayouts_.emplace(handleId,
-                                VulkanDescriptorSetLayout{.layout = layout});
+                                BindingLayout{.layout = layout});
 
-  return DescriptorSetLayoutHandle{handleId};
+  return BindingLayoutHandle{handleId};
 }
 
-void VulkanDevice::DestroyDescriptorSetLayout(
-    DescriptorSetLayoutHandle handle) {
+void Device::DestroyBindingLayout(
+    BindingLayoutHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1791,8 +1792,8 @@ void VulkanDevice::DestroyDescriptorSetLayout(
   descriptorSetLayouts_.erase(it);
 }
 
-const VulkanDescriptorSetLayout &
-VulkanDevice::GetDescriptorSetLayout(DescriptorSetLayoutHandle handle) const {
+const BindingLayout &
+Device::GetBindingLayout(BindingLayoutHandle handle) const {
   auto it = descriptorSetLayouts_.find(handle.id);
   if (it == descriptorSetLayouts_.end()) {
     throw std::runtime_error("Invalid shader handle");
@@ -1801,13 +1802,13 @@ VulkanDevice::GetDescriptorSetLayout(DescriptorSetLayoutHandle handle) const {
   return it->second;
 }
 
-DescriptorPoolHandle
-VulkanDevice::CreateDescriptorPool(const DescriptorPoolDesc &desc) {
+BindingPoolHandle
+Device::CreateBindingPool(const BindingPoolDesc &desc) {
   std::vector<VkDescriptorPoolSize> vkPoolSizes;
   vkPoolSizes.reserve(desc.poolSizeCount);
 
   for (u32 i = 0; i < desc.poolSizeCount; ++i) {
-    const DescriptorPoolSize &size = desc.poolSizes[i];
+    const BindingPoolSize &size = desc.poolSizes[i];
 
     VkDescriptorPoolSize vkSize{};
     vkSize.type = ToVkDescriptorType(size.type);
@@ -1825,14 +1826,14 @@ VulkanDevice::CreateDescriptorPool(const DescriptorPoolDesc &desc) {
   VkDescriptorPool pool = VK_NULL_HANDLE;
   VK_CHECK(vkCreateDescriptorPool(device_, &createInfo, nullptr, &pool),
            "vkCreateDescriptorPool: failed to create Descriptor Pool");
-  const u32 handleId = nextDescriptorPoolHandle_++;
+  const u32 handleId = nextBindingPoolHandle_++;
 
-  descriptorPools_.emplace(handleId, VulkanDescriptorPool{.pool = pool});
+  descriptorPools_.emplace(handleId, BindingPool{.pool = pool});
 
-  return DescriptorPoolHandle{handleId};
+  return BindingPoolHandle{handleId};
 }
 
-void VulkanDevice::DestroyDescriptorPool(DescriptorPoolHandle handle) {
+void Device::DestroyBindingPool(BindingPoolHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -1858,8 +1859,8 @@ void VulkanDevice::DestroyDescriptorPool(DescriptorPoolHandle handle) {
   descriptorPools_.erase(it);
 }
 
-const VulkanDescriptorPool &
-VulkanDevice::GetDescriptorPool(DescriptorPoolHandle handle) const {
+const BindingPool &
+Device::GetBindingPool(BindingPoolHandle handle) const {
   auto it = descriptorPools_.find(handle.id);
   if (it == descriptorPools_.end()) {
     throw std::runtime_error("Invalid shader handle");
@@ -1868,12 +1869,12 @@ VulkanDevice::GetDescriptorPool(DescriptorPoolHandle handle) const {
   return it->second;
 }
 
-DescriptorSetHandle
-VulkanDevice::AllocateDescriptorSet(DescriptorPoolHandle poolHandle,
-                                    DescriptorSetLayoutHandle layoutHandle,
+BindingSetHandle
+Device::AllocateBindingSet(BindingPoolHandle poolHandle,
+                                    BindingLayoutHandle layoutHandle,
                                     const char *debugName) {
-  VulkanDescriptorPool &vkPool = descriptorPools_[poolHandle.id];
-  VulkanDescriptorSetLayout &vkLayout = descriptorSetLayouts_[layoutHandle.id];
+  BindingPool &vkPool = descriptorPools_[poolHandle.id];
+  BindingLayout &vkLayout = descriptorSetLayouts_[layoutHandle.id];
 
   VkDescriptorSetAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1885,23 +1886,23 @@ VulkanDevice::AllocateDescriptorSet(DescriptorPoolHandle poolHandle,
   VK_CHECK(vkAllocateDescriptorSets(device_, &allocInfo, &set),
            "vkAllocateDescriptorSets: failed to allocate Descriptor Sets");
 
-  u32 handleId = nextDescriptorSetHandle_++;
-  descriptorSets_.emplace(handleId, VulkanDescriptorSet{
+  u32 handleId = nextBindingSetHandle_++;
+  descriptorSets_.emplace(handleId, BindingSet{
                                         .set = set,
                                         .layout = layoutHandle,
                                         .pool = poolHandle,
                                     });
 
-  return DescriptorSetHandle{handleId};
+  return BindingSetHandle{handleId};
 }
 
-void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
+void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
   if (!desc.dstSet) {
     throw std::runtime_error(
-        "UpdateDescriptorSet: invalid destination descriptor set");
+        "UpdateBindingSet: invalid destination descriptor set");
   }
 
-  VulkanDescriptorSet &vkSet = descriptorSets_[desc.dstSet.id];
+  BindingSet &vkSet = descriptorSets_[desc.dstSet.id];
 
   VkWriteDescriptorSet write{};
   write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1915,14 +1916,14 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
   VkDescriptorImageInfo vkImageInfo{};
 
   switch (desc.type) {
-  case DescriptorType::UniformBuffer: {
+  case BindingType::UniformBuffer: {
     if (desc.bufferInfo == nullptr) {
       throw std::runtime_error(
-          "UpdateDescriptorSet: bufferInfo is null for UniformBuffer");
+          "UpdateBindingSet: bufferInfo is null for UniformBuffer");
     }
 
-    const DescriptorBufferInfo &bufferInfo = *desc.bufferInfo;
-    const VulkanBuffer &vkBuffer = GetBuffer(bufferInfo.buffer);
+    const BindingBufferInfo &bufferInfo = *desc.bufferInfo;
+    const Buffer &vkBuffer = GetBuffer(bufferInfo.buffer);
 
     vkBufferInfo.buffer = vkBuffer.buffer;
     vkBufferInfo.offset = bufferInfo.offset;
@@ -1932,15 +1933,15 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
     break;
   }
 
-  case DescriptorType::CombinedImageSampler: {
+  case BindingType::CombinedImageSampler: {
     if (desc.imageInfo == nullptr) {
       throw std::runtime_error(
-          "UpdateDescriptorSet: imageInfo is null for CombinedImageSampler");
+          "UpdateBindingSet: imageInfo is null for CombinedImageSampler");
     }
 
-    const DescriptorImageInfo &imageInfo = *desc.imageInfo;
-    const VulkanSampler &vkSampler = GetSampler(imageInfo.sampler);
-    const VulkanImageView &vkImageView = GetImageView(imageInfo.imageView);
+    const BindingImageInfo &imageInfo = *desc.imageInfo;
+    const Sampler &vkSampler = GetSampler(imageInfo.sampler);
+    const ImageView &vkImageView = GetImageView(imageInfo.imageView);
 
     vkImageInfo.sampler = vkSampler.sampler;
     vkImageInfo.imageView = vkImageView.view;
@@ -1950,14 +1951,14 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
     break;
   }
 
-  case DescriptorType::StorageImage: {
+  case BindingType::StorageImage: {
     if (desc.imageInfo == nullptr) {
       throw std::runtime_error(
-          "UpdateDescriptorSet: imageInfo is null for StorageImage");
+          "UpdateBindingSet: imageInfo is null for StorageImage");
     }
 
-    const DescriptorImageInfo &imageInfo = *desc.imageInfo;
-    const VulkanImageView &vkImageView = GetImageView(imageInfo.imageView);
+    const BindingImageInfo &imageInfo = *desc.imageInfo;
+    const ImageView &vkImageView = GetImageView(imageInfo.imageView);
 
     vkImageInfo.sampler = VK_NULL_HANDLE;
     vkImageInfo.imageView = vkImageView.view;
@@ -1967,14 +1968,14 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
     break;
   }
 
-  case DescriptorType::StorageBuffer: {
+  case BindingType::StorageBuffer: {
     if (desc.bufferInfo == nullptr) {
       throw std::runtime_error(
-          "UpdateDescriptorSet: bufferInfo is null for StorageBuffer");
+          "UpdateBindingSet: bufferInfo is null for StorageBuffer");
     }
 
-    const DescriptorBufferInfo &bufferInfo = *desc.bufferInfo;
-    const VulkanBuffer &vkBuffer = GetBuffer(bufferInfo.buffer);
+    const BindingBufferInfo &bufferInfo = *desc.bufferInfo;
+    const Buffer &vkBuffer = GetBuffer(bufferInfo.buffer);
 
     vkBufferInfo.buffer = vkBuffer.buffer;
     vkBufferInfo.offset = bufferInfo.offset;
@@ -1986,14 +1987,14 @@ void VulkanDevice::UpdateDescriptorSet(const WriteDescriptorDesc &desc) {
 
   default:
     throw std::runtime_error(
-        "UpdateDescriptorSet: unsupported descriptor type");
+        "UpdateBindingSet: unsupported descriptor type");
   }
 
   vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
 }
 
-const VulkanDescriptorSet &
-VulkanDevice::GetDescriptorSet(DescriptorSetHandle handle) const {
+const BindingSet &
+Device::GetBindingSet(BindingSetHandle handle) const {
   auto it = descriptorSets_.find(handle.id);
   if (it == descriptorSets_.end()) {
     throw std::runtime_error("Invalid shader handle");
@@ -2002,13 +2003,13 @@ VulkanDevice::GetDescriptorSet(DescriptorSetHandle handle) const {
   return it->second;
 }
 
-ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle,
+ImageLayout Device::GetImageLayout(ImageHandle imageHandle,
                                          u32 mipLevel) const {
   if (!imageHandle.IsValid()) {
     throw std::runtime_error("GetImageLayout: invalid image handle");
   }
 
-  const VulkanImage &image = GetImage(imageHandle);
+  const Image &image = GetImage(imageHandle);
 
   if (mipLevel >= image.mipLayouts.size()) {
     throw std::runtime_error("GetImageLayout: mip level out of bounds");
@@ -2017,8 +2018,8 @@ ImageLayout VulkanDevice::GetImageLayout(ImageHandle imageHandle,
   return image.mipLayouts[mipLevel];
 }
 
-FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
-  VL_PROFILE_ZONE_N("VulkanDevice::BeginFrame");
+FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
+  VL_PROFILE_ZONE_N("Device::BeginFrame");
 
   if (!swapchain.IsValid()) {
     throw std::runtime_error("BeginFrame called with invalid swapchain handle");
@@ -2089,7 +2090,7 @@ FrameBeginResult VulkanDevice::BeginFrame(SwapchainHandle swapchain) {
   };
 }
 
-ICommandList &VulkanDevice::GetCommandList() {
+ICommandList &Device::GetCommandList() {
 
   if (!commandLists_[currentFrame_]) {
     throw std::runtime_error("Command list has not been created");
@@ -2098,8 +2099,8 @@ ICommandList &VulkanDevice::GetCommandList() {
   return *commandLists_[currentFrame_];
 }
 
-void VulkanDevice::Submit() {
-  VL_PROFILE_ZONE_N("VulkanDevice::Submit");
+void Device::Submit() {
+  VL_PROFILE_ZONE_N("Device::Submit");
 
   FrameSyncData &frame = frames_[currentFrame_];
   VkCommandBuffer cmd = commandBuffers_[currentFrame_];
@@ -2119,8 +2120,8 @@ void VulkanDevice::Submit() {
            "Failed to submit Vulkan command buffer");
 }
 
-void VulkanDevice::SubmitAndPresent(SwapchainHandle swapchain) {
-  VL_PROFILE_ZONE_N("VulkanDevice::SubmitAndPresent");
+void Device::SubmitAndPresent(SwapchainHandle swapchain) {
+  VL_PROFILE_ZONE_N("Device::SubmitAndPresent");
 
   if (!swapchain.IsValid()) {
     throw std::runtime_error(
@@ -2178,7 +2179,7 @@ void VulkanDevice::SubmitAndPresent(SwapchainHandle swapchain) {
   currentFrame_ = (currentFrame_ + 1) % k_MaxFramesInFlight;
 }
 
-void VulkanDevice::Submit(CommandListHandle handle, VkFence fence) {
+void Device::Submit(CommandListHandle handle, VkFence fence) {
 
   VkCommandBuffer cmd = GetCommandBuffer();
 
@@ -2191,7 +2192,7 @@ void VulkanDevice::Submit(CommandListHandle handle, VkFence fence) {
            "Failed to submit command buffer");
 }
 
-Extent2D VulkanDevice::GetSwapchainDimensions() const {
+Extent2D Device::GetSwapchainDimensions() const {
   return {.width = swapchain_->GetWidth(), .height = swapchain_->GetHeight()};
 }
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

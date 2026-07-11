@@ -3,8 +3,8 @@
 #include <vector>
 
 #include "../core/types.h"
-#include "rhi_handles.h"
-#include "rhi_types.h"
+#include "handles.h"
+#include "types.h"
 
 namespace Velos::RHI {
 enum class VertexInputRate {
@@ -32,7 +32,7 @@ struct PushConstantRangeDesc {
 };
 
 struct PipelineLayoutDesc {
-  const DescriptorSetLayoutHandle *descriptorSetLayouts = nullptr;
+  const BindingLayoutHandle *descriptorSetLayouts = nullptr;
   u32 descriptorSetLayoutCount = 0;
 };
 

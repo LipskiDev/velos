@@ -5,9 +5,9 @@
 #include "imgui_input_bridge.h"
 #include "imgui_renderer.h"
 
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/types.h"
 
 #include <imgui.h>
 
@@ -28,7 +28,7 @@ int main() {
     });
 
     IDevice *device = CreateDevice({
-        .backend = BackendAPI::Vulkan,
+        .graphicsAPI = GraphicsAPI::Vulkan,
         .enableValidation = true,
         .applicationName = "Velos ImGui Demo",
     });

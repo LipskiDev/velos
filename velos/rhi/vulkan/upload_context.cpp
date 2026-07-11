@@ -1,16 +1,17 @@
-#include "vk_upload_context.h"
-#include "rhi/vulkan/vk_command_list.h"
+#include "upload_context.h"
+#include "rhi/vulkan/command_list.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
 static u64 AlignUp(u64 value, u64 alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
-VulkanUploadContext::VulkanUploadContext(VulkanDevice &device, u64 size)
+UploadContext::UploadContext(Device &device, u64 size)
     : device_(device), capacity_(size) {
 
   BufferDesc desc{};
@@ -38,7 +39,7 @@ VulkanUploadContext::VulkanUploadContext(VulkanDevice &device, u64 size)
                                     &commandBuffer_),
            "Failed to allocate upload command buffer");
 
-  cmd_ = std::make_unique<VulkanCommandList>(device_, commandBuffer_);
+  cmd_ = std::make_unique<CommandList>(device_, commandBuffer_);
 
   VkFenceCreateInfo fenceInfo{};
   fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -47,7 +48,7 @@ VulkanUploadContext::VulkanUploadContext(VulkanDevice &device, u64 size)
            "Failed to create upload fence");
 }
 
-VulkanUploadContext::~VulkanUploadContext() {
+UploadContext::~UploadContext() {
   if (fence_ != VK_NULL_HANDLE) {
     vkDestroyFence(device_.GetVkDevice(), fence_, nullptr);
   }
@@ -62,12 +63,12 @@ VulkanUploadContext::~VulkanUploadContext() {
   }
 }
 
-void VulkanUploadContext::Begin() {
+void UploadContext::Begin() {
   head_ = 0;
   cmd_->Begin();
 }
 
-u64 VulkanUploadContext::Allocate(u64 size, u64 alignment) {
+u64 UploadContext::Allocate(u64 size, u64 alignment) {
   u64 aligned = AlignUp(head_, alignment);
   if (aligned + size > capacity_) {
     throw std::runtime_error("UploadContext staging buffer overflow");
@@ -76,7 +77,7 @@ u64 VulkanUploadContext::Allocate(u64 size, u64 alignment) {
   return aligned;
 }
 
-void VulkanUploadContext::UploadBuffer(const BufferUploadDesc &desc) {
+void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
   if (!desc.data || desc.size == 0) {
     return;
   }
@@ -94,7 +95,7 @@ void VulkanUploadContext::UploadBuffer(const BufferUploadDesc &desc) {
                                     .size = desc.size});
 }
 
-void VulkanUploadContext::UploadImage(const ImageUploadDesc &desc,
+void UploadContext::UploadImage(const ImageUploadDesc &desc,
                                       const void *data, u64 dataSize) {
   if (!data || dataSize == 0) {
     return;
@@ -143,7 +144,7 @@ void VulkanUploadContext::UploadImage(const ImageUploadDesc &desc,
   });
 }
 
-void VulkanUploadContext::Flush() {
+void UploadContext::Flush() {
   cmd_->End();
 
   VK_CHECK(vkResetFences(device_.GetVkDevice(), 1, &fence_),
@@ -162,4 +163,4 @@ void VulkanUploadContext::Flush() {
       "Failed to wait for upload fence");
 }
 
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

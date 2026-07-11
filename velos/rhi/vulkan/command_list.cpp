@@ -1,18 +1,19 @@
-#include "rhi/vulkan/vk_command_list.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/vulkan/vk_common.h"
-#include "rhi/vulkan/vk_device.h"
+#include "rhi/vulkan/command_list.h"
+#include "rhi/command_list.h"
+#include "rhi/vulkan/common.h"
+#include "rhi/vulkan/device.h"
 #include "vlpch.h"
 
 #include <stdexcept>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
-VulkanCommandList::VulkanCommandList(VulkanDevice &device,
+CommandList::CommandList(Device &device,
                                      VkCommandBuffer commandBuffer)
     : device_(device), commandBuffer_(commandBuffer) {}
 
-void VulkanCommandList::Begin() {
+void CommandList::Begin() {
   VK_CHECK(vkResetCommandBuffer(commandBuffer_, 0),
            "Failed to reset Vulkan command buffer");
 
@@ -25,12 +26,12 @@ void VulkanCommandList::Begin() {
            "Failed to begin Vulkan command buffer");
 }
 
-void VulkanCommandList::End() {
+void CommandList::End() {
   VK_CHECK(vkEndCommandBuffer(commandBuffer_),
            "Failed to end Vulkan command buffer");
 }
 
-void VulkanCommandList::SetViewport(const Viewport &viewport) {
+void CommandList::SetViewport(const Viewport &viewport) {
   VkViewport vkViewport{};
   vkViewport.x = viewport.x;
   vkViewport.y = viewport.y;
@@ -42,7 +43,7 @@ void VulkanCommandList::SetViewport(const Viewport &viewport) {
   vkCmdSetViewport(commandBuffer_, 0, 1, &vkViewport);
 }
 
-void VulkanCommandList::SetScissor(const Rect2D &scissor) {
+void CommandList::SetScissor(const Rect2D &scissor) {
   VkRect2D vkScissor{};
   vkScissor.offset.x = scissor.offset.x;
   vkScissor.offset.y = scissor.offset.y;
@@ -52,12 +53,12 @@ void VulkanCommandList::SetScissor(const Rect2D &scissor) {
   vkCmdSetScissor(commandBuffer_, 0, 1, &vkScissor);
 }
 
-void VulkanCommandList::Barrier(const BufferBarrier &barrier) {
+void CommandList::Barrier(const BufferBarrier &barrier) {
   PipelineBarrier(std::span<const BufferBarrier>(&barrier, 1), {});
 }
 
-void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
-  const VulkanImage &image = device_.GetImage(barrier.image);
+void CommandList::Barrier(const ImageBarrier &barrier) {
+  const Image &image = device_.GetImage(barrier.image);
 
   VkImageMemoryBarrier vkBarrier{};
   vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -92,7 +93,7 @@ void VulkanCommandList::Barrier(const ImageBarrier &barrier) {
                          barrier.mipLevelCount, barrier.newLayout);
 }
 
-void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
+void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   const bool hasColor = renderingInfo.colorAttachmentCount > 0 &&
                         renderingInfo.colorAttachments != nullptr;
 
@@ -113,7 +114,7 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
     const ColorAttachmentDesc &colorAttachment =
         renderingInfo.colorAttachments[0];
 
-    const VulkanImageView &colorView =
+    const ImageView &colorView =
         device_.GetImageView(colorAttachment.view);
 
     VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -160,7 +161,7 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
   if (hasDepthAttachment) {
     const DepthAttachmentDesc &depthAttachment = *renderingInfo.depthAttachment;
-    const VulkanImageView &depthView =
+    const ImageView &depthView =
         device_.GetImageView(depthAttachment.view);
 
     VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -218,18 +219,18 @@ void VulkanCommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   vkCmdBeginRendering(commandBuffer_, &vkRenderingInfo);
 }
 
-void VulkanCommandList::EndRendering() { vkCmdEndRendering(commandBuffer_); }
+void CommandList::EndRendering() { vkCmdEndRendering(commandBuffer_); }
 
-void VulkanCommandList::BindPipeline(PipelineHandle pipeline) {
-  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+void CommandList::BindPipeline(PipelineHandle pipeline) {
+  const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     vkPipeline.pipeline);
   boundGraphicsPipeline_ = pipeline;
 }
 
-void VulkanCommandList::BindComputePipeline(PipelineHandle pipeline) {
-  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
+void CommandList::BindComputePipeline(PipelineHandle pipeline) {
+  const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
                     vkPipeline.pipeline);
@@ -237,14 +238,14 @@ void VulkanCommandList::BindComputePipeline(PipelineHandle pipeline) {
   boundComputePipeline_ = pipeline;
 }
 
-void VulkanCommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
+void CommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
                                         uint32_t height, uint32_t mipLevels,
                                         uint32_t arrayLayers) {
   if (mipLevels <= 1) {
     return;
   }
 
-  const VulkanImage &image = device_.GetImage(imageHandle);
+  const Image &image = device_.GetImage(imageHandle);
 
   int32_t mipWidth = static_cast<int32_t>(width);
   int32_t mipHeight = static_cast<int32_t>(height);
@@ -278,10 +279,10 @@ void VulkanCommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
   }
 }
 
-void VulkanCommandList::BlitMip(ImageHandle imageHandle, uint32_t width,
+void CommandList::BlitMip(ImageHandle imageHandle, uint32_t width,
                                 uint32_t height, uint32_t srcMip,
                                 uint32_t dstMip, uint32_t arrayLayers) {
-  const VulkanImage &image = device_.GetImage(imageHandle);
+  const Image &image = device_.GetImage(imageHandle);
 
   const int32_t srcWidth =
       std::max<int32_t>(1, static_cast<int32_t>(width >> srcMip));
@@ -314,11 +315,11 @@ void VulkanCommandList::BlitMip(ImageHandle imageHandle, uint32_t width,
                  VK_FILTER_LINEAR);
 }
 
-void VulkanCommandList::BindVertexBuffer(u32 firstSlot,
+void CommandList::BindVertexBuffer(u32 firstSlot,
                                          BufferHandle bufferHandle,
                                          u64 offset) {
 
-  const VulkanBuffer &buffer = device_.GetBuffer(bufferHandle);
+  const Buffer &buffer = device_.GetBuffer(bufferHandle);
 
   if (buffer.buffer == VK_NULL_HANDLE) {
     throw std::runtime_error("BindVertexBuffer: invalid Vulkan buffer");
@@ -339,38 +340,38 @@ void VulkanCommandList::BindVertexBuffer(u32 firstSlot,
   vkCmdBindVertexBuffers(commandBuffer_, firstSlot, 1, &vkBuffer, &vkOffset);
 }
 
-void VulkanCommandList::BindIndexBuffer(BufferHandle buffer,
+void CommandList::BindIndexBuffer(BufferHandle buffer,
                                         IndexType indexType, u64 offset) {
   if (!buffer.IsValid()) {
     throw std::runtime_error("BindIndexBuffer: requires a valid buffer handle");
   }
 
-  const VulkanBuffer &vkBuffer = device_.GetBuffer(buffer);
+  const Buffer &vkBuffer = device_.GetBuffer(buffer);
 
   vkCmdBindIndexBuffer(commandBuffer_, vkBuffer.buffer,
                        static_cast<VkDeviceSize>(offset),
                        ToVkIndexType(indexType));
 }
 
-void VulkanCommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
+void CommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
   throw std::runtime_error("BindUniformBuffer not implemented yet");
 }
 
-void VulkanCommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
+void CommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
                                       const void *data) {
   if (!boundGraphicsPipeline_) {
     throw std::runtime_error(
         "PushConstants called without a bound graphics pipeline");
   }
 
-  const VulkanPipeline &vkPipeline =
+  const Pipeline &vkPipeline =
       device_.GetPipeline(boundGraphicsPipeline_);
 
   vkCmdPushConstants(commandBuffer_, vkPipeline.layout, ToVkShaderStage(stage),
                      offset, size, data);
 }
 
-void VulkanCommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
+void CommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
                                    const BufferCopyRegion &region) {
   VkBuffer srcBuffer = device_.GetBuffer(src).buffer;
   VkBuffer dstBuffer = device_.GetBuffer(dst).buffer;
@@ -383,15 +384,15 @@ void VulkanCommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
   vkCmdCopyBuffer(commandBuffer_, srcBuffer, dstBuffer, 1, &copy);
 }
 
-void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
-                                          DescriptorSetHandle descriptorSet) {
-  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
-  const VulkanDescriptorSet &vkDescriptorSet =
-      device_.GetDescriptorSet(descriptorSet);
+void CommandList::SetBindings(PipelineHandle pipeline, u32 setIndex,
+                                          BindingSetHandle descriptorSet) {
+  const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
+  const BindingSet &vkDescriptorSet =
+      device_.GetBindingSet(descriptorSet);
 
   VkDescriptorSet set = vkDescriptorSet.set;
 
-  // std::cout << "[BindDescriptorSet]\n";
+  // std::cout << "[SetBindings]\n";
   // std::cout << "  pipeline handle: " << pipeline.id << "\n";
   // std::cout << "  descriptor set handle: " << descriptorSet.id << "\n";
   // std::cout << "  VkPipelineLayout: " << vkPipeline.layout << "\n";
@@ -402,32 +403,32 @@ void VulkanCommandList::BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
                           vkPipeline.layout, setIndex, 1, &set, 0, nullptr);
 }
 
-void VulkanCommandList::BindComputeDescriptorSet(PipelineHandle pipeline,
+void CommandList::SetComputeBindings(PipelineHandle pipeline,
                                                  uint32_t setIndex,
-                                                 DescriptorSetHandle set) {
-  const VulkanPipeline &vkPipeline = device_.GetPipeline(pipeline);
-  const VulkanDescriptorSet &vkSet = device_.GetDescriptorSet(set);
+                                                 BindingSetHandle set) {
+  const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
+  const BindingSet &vkSet = device_.GetBindingSet(set);
 
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
                           vkPipeline.layout, setIndex, 1, &vkSet.set, 0,
                           nullptr);
 }
 
-void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
-  const VulkanBuffer &dst = device_.GetBuffer(update.buffer);
+void CommandList::UpdateBuffer(const BufferUpdateDesc &update) {
+  const Buffer &dst = device_.GetBuffer(update.buffer);
 
   if (update.data == nullptr) {
     throw std::runtime_error(
-        "VulkanCommandList::UpdateBuffer: update.data must not be null");
+        "CommandList::UpdateBuffer: update.data must not be null");
   }
 
   if (update.offset + update.size > dst.size) {
     throw std::runtime_error(
-        "VulkanCommandList::UpdateBuffer: write out of bounds");
+        "CommandList::UpdateBuffer: write out of bounds");
   }
 
   if (dst.memoryUsage == MemoryUsage::GPUOnly) {
-    throw std::runtime_error("VulkanCommandList::UpdateBuffer: cannot update "
+    throw std::runtime_error("CommandList::UpdateBuffer: cannot update "
                              "GPUOnly buffer directly");
   }
 
@@ -438,7 +439,7 @@ void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
         vmaMapMemory(device_.GetAllocator(), dst.allocation, &mapped);
     if (result != VK_SUCCESS || mapped == nullptr) {
       throw std::runtime_error(
-          "VulkanCommandList::UpdateBuffer: vmaMapMemory failed");
+          "CommandList::UpdateBuffer: vmaMapMemory failed");
     }
 
     memcpy(static_cast<std::byte *>(mapped) + update.offset, update.data,
@@ -456,7 +457,7 @@ void VulkanCommandList::UpdateBuffer(const BufferUpdateDesc &update) {
                        update.size);
   }
 }
-void VulkanCommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
+void CommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
                                           const BufferImageCopyRegion &region) {
 
   VkBuffer buffer = device_.GetBuffer(src).buffer;
@@ -484,7 +485,7 @@ void VulkanCommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 }
 
-void VulkanCommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
+void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
                                         std::span<const ImageBarrier> images) {
 
   std::vector<VkBufferMemoryBarrier> vkBufferBarriers;
@@ -560,18 +561,18 @@ void VulkanCommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
                            i.newLayout);
   }
 }
-void VulkanCommandList::Draw(u32 vertexCount, u32 instanceCount,
+void CommandList::Draw(u32 vertexCount, u32 instanceCount,
                              u32 firstVertex, u32 baseInstance) {
   vkCmdDraw(commandBuffer_, vertexCount, instanceCount, firstVertex,
             baseInstance);
 }
 
-void VulkanCommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
+void CommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
                                     i32 vertexOffset) {
   vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
-void VulkanCommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
+void CommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   if (!boundComputePipeline_.IsValid()) {
     throw std::runtime_error("Dispatch called without bound compute pipeline");
   }
@@ -583,4 +584,4 @@ void VulkanCommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   vkCmdDispatch(commandBuffer_, x, y, z);
 }
 
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

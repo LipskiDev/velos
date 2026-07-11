@@ -1,17 +1,18 @@
 #pragma once
 
-#include "../rhi_command_list.h"
-#include <rhi/vulkan/vk_common.h>
+#include "../command_list.h"
+#include <rhi/vulkan/common.h>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
-class VulkanDevice;
+class Device;
 
-class VulkanCommandList final : public ICommandList {
+class CommandList final : public ICommandList {
 public:
-  VulkanCommandList(VulkanDevice &device, VkCommandBuffer commandBuffer);
-  explicit VulkanCommandList(VkCommandBuffer commandBuffer);
-  ~VulkanCommandList() override = default;
+  CommandList(Device &device, VkCommandBuffer commandBuffer);
+  explicit CommandList(VkCommandBuffer commandBuffer);
+  ~CommandList() override = default;
 
   void Begin() override;
   void End() override;
@@ -36,10 +37,10 @@ public:
   void BindUniformBuffer(u32 binding, BufferHandle buffer, u64 offset,
                          u64 size) override;
 
-  void BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
-                         DescriptorSetHandle descriptorSet) override;
-  void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
-                                DescriptorSetHandle descriptorSet) override;
+  void SetBindings(PipelineHandle pipeline, u32 setIndex,
+                         BindingSetHandle descriptorSet) override;
+  void SetComputeBindings(PipelineHandle pipeline, u32 setIndex,
+                                BindingSetHandle descriptorSet) override;
 
   void GenerateMipmaps(ImageHandle imageHandle, uint32_t width, uint32_t height,
                        uint32_t mipLevels, uint32_t arrayLayers) override;
@@ -70,9 +71,9 @@ public:
   VkCommandBuffer GetVkCommandBuffer() const { return commandBuffer_; }
 
 private:
-  VulkanDevice &device_;
+  Device &device_;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
   PipelineHandle boundGraphicsPipeline_{};
   PipelineHandle boundComputePipeline_{};
 };
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

@@ -1,8 +1,8 @@
 #include "vlpch.h"
 
-#include "rhi/rhi_device.h"
-#include "rhi/vulkan/vk_common.h"
-#include "rhi/vulkan/vk_swapchain.h"
+#include "rhi/device.h"
+#include "rhi/vulkan/common.h"
+#include "rhi/vulkan/swapchain.h"
 
 #include <GLFW/glfw3.h>
 
@@ -12,7 +12,8 @@
 #include <stdexcept>
 #include <vector>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
 namespace {
 
@@ -65,7 +66,7 @@ VkExtent2D ChooseExtent(const VkSurfaceCapabilitiesKHR &capabilities, u32 width,
 }
 
 } // namespace
-VulkanSwapchain::VulkanSwapchain(VkInstance instance,
+Swapchain::Swapchain(VkInstance instance,
                                  VkPhysicalDevice physicalDevice,
                                  VkDevice device, u32 graphicsQueueFamily,
                                  const SwapchainDesc &desc)
@@ -82,7 +83,7 @@ VulkanSwapchain::VulkanSwapchain(VkInstance instance,
   CreateImageViews();
 }
 
-VulkanSwapchain::~VulkanSwapchain() {
+Swapchain::~Swapchain() {
   DestroySwapchainResources();
 
   if (surface_ != VK_NULL_HANDLE) {
@@ -91,7 +92,7 @@ VulkanSwapchain::~VulkanSwapchain() {
   }
 }
 
-void VulkanSwapchain::CreateSurface(void *windowHandle) {
+void Swapchain::CreateSurface(void *windowHandle) {
   window_ = static_cast<GLFWwindow *>(windowHandle);
   if (!window_) {
     throw std::runtime_error("Swapchain requires a valid GLFW window handle");
@@ -101,7 +102,7 @@ void VulkanSwapchain::CreateSurface(void *windowHandle) {
            "Failed to create GLFW Vulkan surface");
 }
 
-void VulkanSwapchain::CreateSwapchain(const SwapchainDesc &desc) {
+void Swapchain::CreateSwapchain(const SwapchainDesc &desc) {
   VkBool32 presentSupported = VK_FALSE;
   VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_,
                                                 graphicsQueueFamily_, surface_,
@@ -210,7 +211,7 @@ void VulkanSwapchain::CreateSwapchain(const SwapchainDesc &desc) {
            "Failed to get swapchain images");
 }
 
-void VulkanSwapchain::CreateImageViews() {
+void Swapchain::CreateImageViews() {
   images_.clear();
   images_.reserve(rawImages_.size());
 
@@ -230,7 +231,7 @@ void VulkanSwapchain::CreateImageViews() {
     VK_CHECK(vkCreateImageView(device_, &viewInfo, nullptr, &view),
              "Failed to create swapchain image view");
 
-    VulkanSwapchainImage swapImage{};
+    SwapchainImage swapImage{};
     swapImage.image = rawImage;
     swapImage.view = view;
 
@@ -238,7 +239,7 @@ void VulkanSwapchain::CreateImageViews() {
   }
 }
 
-void VulkanSwapchain::DestroySwapchainResources() {
+void Swapchain::DestroySwapchainResources() {
   for (auto &image : images_) {
     if (image.view != VK_NULL_HANDLE) {
       vkDestroyImageView(device_, image.view, nullptr);
@@ -255,4 +256,4 @@ void VulkanSwapchain::DestroySwapchainResources() {
   }
 }
 
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

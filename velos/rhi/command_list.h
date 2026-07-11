@@ -1,9 +1,9 @@
 #pragma once
 
 #include "core/types.h"
-#include "rhi_handles.h"
-#include "rhi_resources.h"
-#include "rhi_types.h"
+#include "handles.h"
+#include "resources.h"
+#include "types.h"
 
 #include <span>
 
@@ -86,10 +86,10 @@ public:
   virtual void BindUniformBuffer(u32 binding, BufferHandle buffer, u64 offset,
                                  u64 size) = 0;
 
-  virtual void BindDescriptorSet(PipelineHandle pipeline, u32 setIndex,
-                                 DescriptorSetHandle descriptorSet) = 0;
-  virtual void BindComputeDescriptorSet(PipelineHandle pipeline, u32 setIndex,
-                                        DescriptorSetHandle descriptorSet) = 0;
+  virtual void SetBindings(PipelineHandle pipeline, u32 setIndex,
+                                 BindingSetHandle descriptorSet) = 0;
+  virtual void SetComputeBindings(PipelineHandle pipeline, u32 setIndex,
+                                        BindingSetHandle descriptorSet) = 0;
 
   virtual void GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
                                uint32_t height, uint32_t mipLevels,

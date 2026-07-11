@@ -22,9 +22,9 @@ struct ShaderTag {};
 struct PipelineTag {};
 struct CommandListTag {};
 struct SwapchainTag {};
-struct DescriptorSetLayoutTag {};
-struct DescriptorPoolTag {};
-struct DescriptorSetTag {};
+struct BindingLayoutTag {};
+struct BindingPoolTag {};
+struct BindingSetTag {};
 
 using BufferHandle = Handle<BufferTag>;
 using SamplerHandle = Handle<SamplerTag>;
@@ -34,8 +34,8 @@ using CommandListHandle = Handle<CommandListTag>;
 using SwapchainHandle = Handle<SwapchainTag>;
 using ImageHandle = Handle<ImageTag>;
 using ImageViewHandle = Handle<ImageViewTag>;
-using DescriptorSetLayoutHandle = Handle<DescriptorSetLayoutTag>;
-using DescriptorPoolHandle = Handle<DescriptorPoolTag>;
-using DescriptorSetHandle = Handle<DescriptorSetTag>;
+using BindingLayoutHandle = Handle<BindingLayoutTag>;
+using BindingPoolHandle = Handle<BindingPoolTag>;
+using BindingSetHandle = Handle<BindingSetTag>;
 
 } // namespace Velos::RHI

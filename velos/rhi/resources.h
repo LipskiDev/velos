@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../core/types.h"
-#include "rhi_handles.h"
-#include "rhi_types.h"
+#include "handles.h"
+#include "types.h"
 #include "shader/shader_compiler.h"
 
 namespace Velos::RHI {
@@ -105,46 +105,46 @@ struct BufferImageCopyRegion {
   ImageAspect aspect = ImageAspect::Color;
 };
 
-struct DescriptorBindingDesc {
+struct BindingDesc {
   u32 binding = 0;
-  DescriptorType type = DescriptorType::UniformBuffer;
+  BindingType type = BindingType::UniformBuffer;
   u32 count = 1;
   ShaderStage visibility = ShaderStage::Vertex;
 };
 
-struct DescriptorSetLayoutDesc {
-  const DescriptorBindingDesc *bindings = nullptr;
+struct BindingLayoutDesc {
+  const BindingDesc *bindings = nullptr;
   u32 bindingCount = 0;
   const char *debugName = nullptr;
 };
 
-struct DescriptorPoolDesc {
-  const DescriptorPoolSize *poolSizes = nullptr;
+struct BindingPoolDesc {
+  const BindingPoolSize *poolSizes = nullptr;
   u32 poolSizeCount = 0;
   u32 maxSets = 0;
   const char *debugName = nullptr;
 };
 
-struct DescriptorBufferInfo {
+struct BindingBufferInfo {
   BufferHandle buffer;
   u64 offset = 0;
   u64 range = 0;
 };
 
-struct DescriptorImageInfo {
+struct BindingImageInfo {
   SamplerHandle sampler;
   ImageViewHandle imageView;
   ImageLayout imageLayout = ImageLayout::ShaderReadOnly;
 };
 
-struct WriteDescriptorDesc {
-  DescriptorSetHandle dstSet;
+struct BindingWriteDesc {
+  BindingSetHandle dstSet;
   u32 binding = 0;
   u32 arrayElement = 0;
-  DescriptorType type = DescriptorType::UniformBuffer;
+  BindingType type = BindingType::UniformBuffer;
 
-  const DescriptorBufferInfo *bufferInfo = nullptr;
-  const DescriptorImageInfo *imageInfo = nullptr;
+  const BindingBufferInfo *bufferInfo = nullptr;
+  const BindingImageInfo *imageInfo = nullptr;
   u32 descriptorCount = 1;
 };
 }; // namespace Velos::RHI

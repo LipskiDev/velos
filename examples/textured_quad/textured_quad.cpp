@@ -1,8 +1,8 @@
 #include "core/window.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/pipeline.h"
+#include "rhi/types.h"
 #include "shader/shader_compiler.h"
 
 #include <core/application.h>
@@ -38,7 +38,7 @@ int main() {
 
   std::cout << "Creating device\n";
   IDevice *device = CreateDevice({
-      .backend = BackendAPI::Vulkan,
+      .graphicsAPI = GraphicsAPI::Vulkan,
       .enableValidation = true,
       .applicationName = "Velos Textured Quad",
   });
@@ -144,30 +144,30 @@ int main() {
   });
 
   std::cout << "Creating descriptor set layout\n";
-  DescriptorBindingDesc bindings[] = {
+  BindingDesc bindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  DescriptorSetLayoutHandle setLayout = device->CreateDescriptorSetLayout({
+  BindingLayoutHandle setLayout = device->CreateBindingLayout({
       .bindings = bindings,
       .bindingCount = 1,
       .debugName = "Blending Test Set Layout",
   });
 
   std::cout << "Creating descriptor pool\n";
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
   };
 
-  DescriptorPoolHandle descriptorPool = device->CreateDescriptorPool({
+  BindingPoolHandle descriptorPool = device->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
@@ -175,20 +175,20 @@ int main() {
   });
 
   std::cout << "Allocating descriptor set\n";
-  DescriptorSetHandle descriptorSet = device->AllocateDescriptorSet(
+  BindingSetHandle descriptorSet = device->AllocateBindingSet(
       descriptorPool, setLayout, "Blending Test Set");
 
   std::cout << "Updating descriptor set\n";
-  DescriptorImageInfo imageInfo{};
+  BindingImageInfo imageInfo{};
   imageInfo.sampler = sampler;
   imageInfo.imageView = textureView;
   imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device->UpdateDescriptorSet({
+  device->UpdateBindingSet({
       .dstSet = descriptorSet,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &imageInfo,
       .descriptorCount = 1,
@@ -241,7 +241,7 @@ int main() {
                      }},
   };
 
-  DescriptorSetLayoutHandle setLayouts[] = {setLayout};
+  BindingLayoutHandle setLayouts[] = {setLayout};
 
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = vertexShader;
@@ -383,7 +383,7 @@ int main() {
 
     cmd.BeginRendering(renderingInfo);
     cmd.BindPipeline(pipeline);
-    cmd.BindDescriptorSet(pipeline, 0, descriptorSet);
+    cmd.SetBindings(pipeline, 0, descriptorSet);
     cmd.BindVertexBuffer(0, vertexBuffer, 0);
     cmd.BindIndexBuffer(indexBuffer, IndexType::U16, 0);
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(glm::mat4), &mvp);
@@ -408,8 +408,8 @@ int main() {
   device->DestroyPipeline(pipeline);
   device->DestroyShader(fragmentShader);
   device->DestroyShader(vertexShader);
-  device->DestroyDescriptorPool(descriptorPool);
-  device->DestroyDescriptorSetLayout(setLayout);
+  device->DestroyBindingPool(descriptorPool);
+  device->DestroyBindingLayout(setLayout);
   device->DestroySampler(sampler);
   device->DestroyImageView(textureView);
   device->DestroyImage(textureImage);

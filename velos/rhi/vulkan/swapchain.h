@@ -1,25 +1,26 @@
 #pragma once
 
-#include "rhi/rhi_resources.h"
+#include "rhi/resources.h"
 #include "types.h"
 #include <vulkan/vulkan_core.h>
 struct GLFWwindow;
 
-namespace Velos::RHI {
-struct VulkanSwapchainImage {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
+struct SwapchainImage {
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
 };
 
-class VulkanSwapchain {
+class Swapchain {
 public:
-  VulkanSwapchain(VkInstance instance, VkPhysicalDevice physicalDevice,
+  Swapchain(VkInstance instance, VkPhysicalDevice physicalDevice,
                   VkDevice device, u32 graphicsQueueFamily,
                   const SwapchainDesc &desc);
-  ~VulkanSwapchain();
+  ~Swapchain();
 
-  VulkanSwapchain(const VulkanSwapchain &) = delete;
-  VulkanSwapchain &operator=(const VulkanSwapchain &) = delete;
+  Swapchain(const Swapchain &) = delete;
+  Swapchain &operator=(const Swapchain &) = delete;
 
   VkSurfaceKHR GetSurface() const { return surface_; }
   VkSwapchainKHR GetVkSwapchain() const { return swapchain_; }
@@ -28,7 +29,7 @@ public:
   u32 GetHeight() const { return height_; }
 
   u32 GetImageCount() const { return static_cast<u32>(images_.size()); }
-  const VulkanSwapchainImage &GetImage(u32 index) const {
+  const SwapchainImage &GetImage(u32 index) const {
     return images_[index];
   }
 
@@ -57,6 +58,6 @@ private:
   u32 height_ = 0;
 
   std::vector<VkImage> rawImages_;
-  std::vector<VulkanSwapchainImage> images_;
+  std::vector<SwapchainImage> images_;
 };
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

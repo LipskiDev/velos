@@ -1,13 +1,14 @@
 #pragma once
 
-#include "rhi/rhi_upload_context.h"
-#include "rhi/vulkan/vk_device.h"
-namespace Velos::RHI {
+#include "rhi/upload_context.h"
+#include "rhi/vulkan/device.h"
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
-class VulkanUploadContext final : public IUploadContext {
+class UploadContext final : public IUploadContext {
 public:
-  VulkanUploadContext(VulkanDevice &device, u64 size);
-  ~VulkanUploadContext() override;
+  UploadContext(Device &device, u64 size);
+  ~UploadContext() override;
 
   void Begin() override;
   void UploadBuffer(const BufferUploadDesc &desc) override;
@@ -19,7 +20,7 @@ private:
   u64 Allocate(u64 size, u64 alignment);
 
 private:
-  VulkanDevice &device_;
+  Device &device_;
 
   BufferHandle stagingBuffer_{};
   u8 *mappedPtr_ = nullptr;
@@ -27,9 +28,9 @@ private:
   u64 head_ = 0;
 
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
-  std::unique_ptr<VulkanCommandList> cmd_;
+  std::unique_ptr<CommandList> cmd_;
 
   VkFence fence_ = VK_NULL_HANDLE;
 };
 
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

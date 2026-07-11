@@ -1,26 +1,27 @@
 #pragma once
 
-#include <rhi/vulkan/vk_profiler.h>
+#include <rhi/vulkan/profiler.h>
 
 #include <unordered_map>
 #include <vk_mem_alloc.h>
 
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_types.h"
-#include "rhi/vulkan/vk_profiler.h"
-#include "rhi/vulkan/vk_swapchain.h"
+#include "rhi/device.h"
+#include "rhi/types.h"
+#include "rhi/vulkan/profiler.h"
+#include "rhi/vulkan/swapchain.h"
 #include "shader/shader_compiler.h"
 
-namespace Velos::RHI {
-class VulkanCommandList;
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
+class CommandList;
 
-struct VulkanShader {
+struct Shader {
   VkShaderModule module = VK_NULL_HANDLE;
   ShaderStage stage = ShaderStage::None;
   ShaderReflectionData reflection;
 };
 
-struct VulkanPipeline {
+struct Pipeline {
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipelineLayout layout = VK_NULL_HANDLE;
 };
@@ -32,7 +33,7 @@ struct VulkanTexture {
   bool owned = false;
 };
 
-struct VulkanImage {
+struct Image {
   VkImage image = VK_NULL_HANDLE;
   VkDeviceMemory memory = VK_NULL_HANDLE;
 
@@ -50,7 +51,7 @@ struct VulkanImage {
   bool owned = true;
 };
 
-struct VulkanImageView {
+struct ImageView {
   VkImageView view = VK_NULL_HANDLE;
   ImageHandle image;
   Format format = Format::Undefined;
@@ -59,7 +60,7 @@ struct VulkanImageView {
   bool owned = true;
 };
 
-struct VulkanBuffer {
+struct Buffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
   VmaAllocationInfo allocationInfo{};
@@ -71,32 +72,32 @@ struct VulkanBuffer {
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
 };
 
-struct VulkanSampler {
+struct Sampler {
   VkSampler sampler = VK_NULL_HANDLE;
 };
 
-struct VulkanDescriptorSetLayout {
+struct BindingLayout {
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
 };
 
-struct VulkanDescriptorPool {
+struct BindingPool {
   VkDescriptorPool pool = VK_NULL_HANDLE;
 };
 
-struct VulkanDescriptorSet {
+struct BindingSet {
   VkDescriptorSet set = VK_NULL_HANDLE;
-  DescriptorSetLayoutHandle layout;
-  DescriptorPoolHandle pool;
+  BindingLayoutHandle layout;
+  BindingPoolHandle pool;
 };
 
-class VulkanDevice final : public IDevice {
+class Device final : public IDevice {
 public:
-  explicit VulkanDevice(const DeviceDesc &desc);
-  ~VulkanDevice() override;
+  explicit Device(const DeviceDesc &desc);
+  ~Device() override;
 
   void CreateAllocator();
 
-  BackendAPI GetBackend() const override;
+  GraphicsAPI GetBackend() const override;
 
   SwapchainHandle CreateSwapchain(const SwapchainDesc &desc) override;
   void DestroySwapchain(SwapchainHandle handle) override;
@@ -104,52 +105,52 @@ public:
 
   BufferHandle CreateBuffer(const BufferDesc &desc) override;
   void DestroyBuffer(BufferHandle handle) override;
-  const VulkanBuffer &GetBuffer(BufferHandle handle) const;
+  const Buffer &GetBuffer(BufferHandle handle) const;
   u64 GetBufferDeviceAddress(BufferHandle handle) const override;
 
   ImageHandle CreateImage(const ImageDesc &desc) override;
   void DestroyImage(ImageHandle handle) override;
-  const VulkanImage &GetImage(ImageHandle handle) const;
+  const Image &GetImage(ImageHandle handle) const;
   void SetImageLayout(ImageHandle handle, u32 baseMipLevel, u32 mipLevelCount,
                       ImageLayout layout);
 
   ImageViewHandle CreateImageView(const ImageViewDesc &desc) override;
   void DestroyImageView(ImageViewHandle view) override;
-  const VulkanImageView &GetImageView(ImageViewHandle handle) const;
+  const ImageView &GetImageView(ImageViewHandle handle) const;
 
   SamplerHandle CreateSampler(const SamplerDesc &desc) override;
   void DestroySampler(SamplerHandle handle) override;
-  const VulkanSampler &GetSampler(SamplerHandle handle) const;
+  const Sampler &GetSampler(SamplerHandle handle) const;
 
   ShaderHandle CreateShader(const ShaderDesc &desc) override;
   void DestroyShader(ShaderHandle handle) override;
-  const VulkanShader &GetShader(ShaderHandle handle) const;
+  const Shader &GetShader(ShaderHandle handle) const;
 
   PipelineHandle
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
   PipelineHandle
   CreateComputePipeline(const ComputePipelineDesc &desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
-  const VulkanPipeline &GetPipeline(PipelineHandle handle) const;
+  const Pipeline &GetPipeline(PipelineHandle handle) const;
 
-  DescriptorSetLayoutHandle
-  CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) override;
-  void DestroyDescriptorSetLayout(DescriptorSetLayoutHandle handle) override;
-  const VulkanDescriptorSetLayout &
-  GetDescriptorSetLayout(DescriptorSetLayoutHandle handle) const;
+  BindingLayoutHandle
+  CreateBindingLayout(const BindingLayoutDesc &desc) override;
+  void DestroyBindingLayout(BindingLayoutHandle handle) override;
+  const BindingLayout &
+  GetBindingLayout(BindingLayoutHandle handle) const;
 
-  DescriptorPoolHandle
-  CreateDescriptorPool(const DescriptorPoolDesc &desc) override;
-  void DestroyDescriptorPool(DescriptorPoolHandle handle) override;
-  const VulkanDescriptorPool &
-  GetDescriptorPool(DescriptorPoolHandle handle) const;
-  DescriptorSetHandle
-  AllocateDescriptorSet(DescriptorPoolHandle poolHandle,
-                        DescriptorSetLayoutHandle layoutHandle,
+  BindingPoolHandle
+  CreateBindingPool(const BindingPoolDesc &desc) override;
+  void DestroyBindingPool(BindingPoolHandle handle) override;
+  const BindingPool &
+  GetBindingPool(BindingPoolHandle handle) const;
+  BindingSetHandle
+  AllocateBindingSet(BindingPoolHandle poolHandle,
+                        BindingLayoutHandle layoutHandle,
                         const char *debugName) override;
 
-  void UpdateDescriptorSet(const WriteDescriptorDesc &desc) override;
-  const VulkanDescriptorSet &GetDescriptorSet(DescriptorSetHandle handle) const;
+  void UpdateBindingSet(const BindingWriteDesc &desc) override;
+  const BindingSet &GetBindingSet(BindingSetHandle handle) const;
 
   ImageLayout GetImageLayout(ImageHandle imageHandle, u32 mipLevel) const;
 
@@ -226,10 +227,10 @@ private:
   VkCommandPool uploadCommandPool_ = VK_NULL_HANDLE;
 
   std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
-  std::array<std::unique_ptr<VulkanCommandList>, k_MaxFramesInFlight>
+  std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
       commandLists_;
 
-  std::unique_ptr<VulkanSwapchain> swapchain_;
+  std::unique_ptr<Swapchain> swapchain_;
   std::vector<ImageHandle> swapchainImageHandles_;
   std::vector<ImageViewHandle> swapchainImageViewHandles_;
 
@@ -247,30 +248,30 @@ private:
 
 private:
   u32 nextShaderHandle_ = 1;
-  std::unordered_map<u32, VulkanShader> shaders_;
+  std::unordered_map<u32, Shader> shaders_;
 
   u32 nextPipelineHandle_ = 1;
-  std::unordered_map<u32, VulkanPipeline> pipelines_;
+  std::unordered_map<u32, Pipeline> pipelines_;
 
   u32 nextBufferHandle_ = 1;
-  std::unordered_map<u32, VulkanBuffer> buffers_;
+  std::unordered_map<u32, Buffer> buffers_;
 
   u32 nextImageHandle_ = 1;
-  std::unordered_map<u32, VulkanImage> images_;
+  std::unordered_map<u32, Image> images_;
 
   u32 nextImageViewHandle_ = 1;
-  std::unordered_map<u32, VulkanImageView> imageViews_;
+  std::unordered_map<u32, ImageView> imageViews_;
 
   u32 nextSamplerHandle_ = 1;
-  std::unordered_map<u32, VulkanSampler> samplers_;
+  std::unordered_map<u32, Sampler> samplers_;
 
-  u32 nextDescriptorSetLayoutHandle_ = 1;
-  std::unordered_map<u32, VulkanDescriptorSetLayout> descriptorSetLayouts_;
+  u32 nextBindingLayoutHandle_ = 1;
+  std::unordered_map<u32, BindingLayout> descriptorSetLayouts_;
 
-  u32 nextDescriptorPoolHandle_ = 1;
-  std::unordered_map<u32, VulkanDescriptorPool> descriptorPools_;
+  u32 nextBindingPoolHandle_ = 1;
+  std::unordered_map<u32, BindingPool> descriptorPools_;
 
-  u32 nextDescriptorSetHandle_ = 1;
-  std::unordered_map<u32, VulkanDescriptorSet> descriptorSets_;
+  u32 nextBindingSetHandle_ = 1;
+  std::unordered_map<u32, BindingSet> descriptorSets_;
 };
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

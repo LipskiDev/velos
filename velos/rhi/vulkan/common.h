@@ -1,14 +1,15 @@
 #pragma once
 
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_types.h"
+#include "rhi/pipeline.h"
+#include "rhi/types.h"
 #include <volk.h>
 
 #include <vk_mem_alloc.h>
 
 #include <stdexcept>
 
-namespace Velos::RHI {
+namespace Velos::Vulkan {
+using namespace Velos::RHI;
 
 inline VkResult setObjectDebugName(VkDevice device, VkObjectType type,
                                    uint64_t handle, const char *name) {
@@ -360,15 +361,15 @@ inline VkSamplerAddressMode ToVkSamplerAddressMode(SamplerAddressMode mode) {
   }
 }
 
-inline VkDescriptorType ToVkDescriptorType(DescriptorType type) {
+inline VkDescriptorType ToVkDescriptorType(BindingType type) {
   switch (type) {
-  case DescriptorType::UniformBuffer:
+  case BindingType::UniformBuffer:
     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  case DescriptorType::CombinedImageSampler:
+  case BindingType::CombinedImageSampler:
     return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  case DescriptorType::StorageImage:
+  case BindingType::StorageImage:
     return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  case DescriptorType::StorageBuffer:
+  case BindingType::StorageBuffer:
     return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   default:
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
@@ -509,7 +510,7 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   throw std::runtime_error("Unsupported ResourceState");
 }
 
-inline VkPipelineStageFlags ToVkPipelineStage(ResourceState state) {
+inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state) {
   switch (state) {
   case ResourceState::Undefined:
     return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -580,7 +581,7 @@ inline VkAccessFlags ToVkAccessFlags(ImageLayout layout) {
   }
 }
 
-inline VkPipelineStageFlags ToVkPipelineStage(ImageLayout layout) {
+inline VkPipelineStageFlags ToVkExecutionStage(ImageLayout layout) {
   switch (layout) {
   case ImageLayout::Undefined:
     return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -616,10 +617,10 @@ struct VulkanBarrierInfo {
 };
 
 inline VulkanBarrierInfo GetBufferBarrierInfo(ResourceState state) {
-  return VulkanBarrierInfo{ToVkAccessFlags(state), ToVkPipelineStage(state)};
+  return VulkanBarrierInfo{ToVkAccessFlags(state), ToVkExecutionStage(state)};
 }
 
 inline VulkanBarrierInfo GetImageBarrierInfo(ImageLayout layout) {
-  return VulkanBarrierInfo{ToVkAccessFlags(layout), ToVkPipelineStage(layout)};
+  return VulkanBarrierInfo{ToVkAccessFlags(layout), ToVkExecutionStage(layout)};
 }
-} // namespace Velos::RHI
+} // namespace Velos::Vulkan

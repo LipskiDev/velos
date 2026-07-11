@@ -83,16 +83,6 @@ enum class BufferUsage : u32 {
   ShaderDeviceAddress = 1 << 6
 };
 
-enum class TextureUsage : u32 {
-  None = 0,
-  Sampled = 1 << 0,
-  ColorAttachment = 1 << 1,
-  DepthStencil = 1 << 2,
-  TransferSrc = 1 << 3,
-  TransferDst = 1 << 4,
-  Storage = 1 << 5,
-};
-
 enum class ImageUsage : u32 {
   None = 0,
   TransferSrc = 1 << 0,
@@ -114,7 +104,7 @@ enum class ImageLayout {
   General,
 };
 
-enum class PipelineStage {
+enum class ExecutionStage {
   TopOfPipe,
   Transfer,
   VertexShader,
@@ -123,7 +113,7 @@ enum class PipelineStage {
   BottomOfPipe,
 };
 
-enum class AccessFlags {
+enum class MemoryAccess {
   None,
   TransferRead,
   TransferWrite,
@@ -193,7 +183,7 @@ enum class SamplerAddressMode {
   ClampToEdge,
 };
 
-enum class DescriptorType {
+enum class BindingType {
   UniformBuffer,
   CombinedImageSampler,
   StorageBuffer,
@@ -279,8 +269,8 @@ struct ClearDepthStencil {
   u32 stencil = 0;
 };
 
-struct DescriptorPoolSize {
-  DescriptorType type = DescriptorType::UniformBuffer;
+struct BindingPoolSize {
+  BindingType type = BindingType::UniformBuffer;
   u32 count = 0;
 };
 

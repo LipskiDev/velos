@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rhi/rhi_handles.h"
-#include "rhi_types.h"
+#include "rhi/handles.h"
+#include "types.h"
 
 namespace Velos::RHI {
 

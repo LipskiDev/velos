@@ -1,8 +1,8 @@
 #include "core/window.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/pipeline.h"
+#include "rhi/types.h"
 #include "shader/shader_compiler.h"
 
 #include <core/application.h>
@@ -27,7 +27,7 @@ int main() {
 
   std::cout << "Creating device\n";
   IDevice *device = CreateDevice({
-      .backend = BackendAPI::Vulkan,
+      .graphicsAPI = GraphicsAPI::Vulkan,
       .enableValidation = true,
       .applicationName = "Velos Triangle",
   });

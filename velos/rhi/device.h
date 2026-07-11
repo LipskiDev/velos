@@ -1,23 +1,23 @@
 
 #pragma once
 
-#include "rhi/rhi_upload_context.h"
-#include "rhi_command_list.h"
-#include "rhi_handles.h"
-#include "rhi_pipeline.h"
-#include "rhi_resources.h"
-#include "rhi_types.h"
+#include "rhi/upload_context.h"
+#include "command_list.h"
+#include "handles.h"
+#include "pipeline.h"
+#include "resources.h"
+#include "types.h"
 #include <memory>
 
 namespace Velos::RHI {
-enum class BackendAPI {
+enum class GraphicsAPI {
   Vulkan,
   // D3D12,
   // Metal
 };
 
 struct DeviceDesc {
-  BackendAPI backend = BackendAPI::Vulkan;
+  GraphicsAPI graphicsAPI = GraphicsAPI::Vulkan;
   bool enableValidation = true;
   const char *applicationName = "Velos";
 };
@@ -36,7 +36,7 @@ class IDevice {
 public:
   virtual ~IDevice() = default;
 
-  virtual BackendAPI GetBackend() const = 0;
+  virtual GraphicsAPI GetBackend() const = 0;
 
   virtual SwapchainHandle CreateSwapchain(const SwapchainDesc &desc) = 0;
   virtual void DestroySwapchain(SwapchainHandle handle) = 0;
@@ -65,19 +65,19 @@ public:
   CreateComputePipeline(const ComputePipelineDesc &desc) = 0;
   virtual void DestroyPipeline(PipelineHandle handle) = 0;
 
-  virtual DescriptorSetLayoutHandle
-  CreateDescriptorSetLayout(const DescriptorSetLayoutDesc &desc) = 0;
-  virtual void DestroyDescriptorSetLayout(DescriptorSetLayoutHandle handle) = 0;
+  virtual BindingLayoutHandle
+  CreateBindingLayout(const BindingLayoutDesc &desc) = 0;
+  virtual void DestroyBindingLayout(BindingLayoutHandle handle) = 0;
 
-  virtual DescriptorPoolHandle
-  CreateDescriptorPool(const DescriptorPoolDesc &desc) = 0;
-  virtual void DestroyDescriptorPool(DescriptorPoolHandle handle) = 0;
-  virtual DescriptorSetHandle
-  AllocateDescriptorSet(DescriptorPoolHandle pool,
-                        DescriptorSetLayoutHandle layout,
+  virtual BindingPoolHandle
+  CreateBindingPool(const BindingPoolDesc &desc) = 0;
+  virtual void DestroyBindingPool(BindingPoolHandle handle) = 0;
+  virtual BindingSetHandle
+  AllocateBindingSet(BindingPoolHandle pool,
+                        BindingLayoutHandle layout,
                         const char *debugName = nullptr) = 0;
 
-  virtual void UpdateDescriptorSet(const WriteDescriptorDesc &desc) = 0;
+  virtual void UpdateBindingSet(const BindingWriteDesc &desc) = 0;
 
   virtual ImageLayout GetImageLayout(ImageHandle image, u32 mipLevel) const = 0;
 

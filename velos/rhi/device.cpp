@@ -1,14 +1,14 @@
-#include "rhi_device.h"
-#include "vulkan/vk_device.h"
+#include "device.h"
+#include "vulkan/device.h"
 
 #include <stdexcept>
 
 namespace Velos::RHI {
 
 IDevice *CreateDevice(const DeviceDesc &desc) {
-  switch (desc.backend) {
-  case BackendAPI::Vulkan:
-    return new VulkanDevice(desc);
+  switch (desc.graphicsAPI) {
+  case GraphicsAPI::Vulkan:
+    return new Vulkan::Device(desc);
 
   default:
     throw std::runtime_error("Unsupported RHI backend");
