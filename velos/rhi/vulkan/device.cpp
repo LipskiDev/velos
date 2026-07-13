@@ -317,9 +317,12 @@ bool HasRequiredExtensions(VkPhysicalDevice device) {
 bool HasRequiredFeatures(VkPhysicalDevice device) {
   VkPhysicalDeviceFeatures features{};
   VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
+  VkPhysicalDeviceDescriptorIndexingFeatures di{};
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
 
   bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+  bda.pNext = &di;
+  di.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 
   vulkan13Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -332,8 +335,13 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
   vkGetPhysicalDeviceFeatures2(device, &features2);
 
   return vulkan13Features.dynamicRendering == VK_TRUE &&
-         vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
-         bda.bufferDeviceAddress == VK_TRUE;
+      vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
+      bda.bufferDeviceAddress == VK_TRUE &&
+      di.descriptorBindingPartiallyBound == VK_TRUE &&
+      di.runtimeDescriptorArray == VK_TRUE &&
+      di.shaderSampledImageArrayNonUniformIndexing == VK_TRUE &&
+      di.descriptorBindingVariableDescriptorCount == VK_TRUE &&
+      di.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE;
 }
 
 u32 ScoreGPU(VkPhysicalDevice device) {
@@ -450,7 +458,15 @@ void Device::CreateLogicalDevice() {
   VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
   bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
   bda.bufferDeviceAddress = VK_TRUE;
-  bda.pNext = nullptr;
+
+  VkPhysicalDeviceDescriptorIndexingFeatures di{};
+  di.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  di.descriptorBindingPartiallyBound = VK_TRUE;
+  di.runtimeDescriptorArray = VK_TRUE;
+  di.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+  di.descriptorBindingVariableDescriptorCount = VK_TRUE;
+  di.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+  bda.pNext = &di;
 
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
   vulkan13Features.sType =
@@ -1740,11 +1756,15 @@ const Pipeline &Device::GetPipeline(PipelineHandle handle) const {
 BindingLayoutHandle
 Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   std::vector<VkDescriptorSetLayoutBinding> vkBindings;
+  std::vector<VkDescriptorBindingFlags> vkBindingFlags;
   vkBindings.reserve(desc.bindingCount);
+  vkBindingFlags.reserve(desc.bindingCount);
+
+  bool usesUpdateAfterBind = false;
+  bool usesBindingFlags = false;
 
   for (u32 i = 0; i < desc.bindingCount; ++i) {
     const BindingDesc &binding = desc.bindings[i];
-
     VkDescriptorSetLayoutBinding vkBinding{};
     vkBinding.binding = binding.binding;
     vkBinding.descriptorType = ToVkDescriptorType(binding.type);
@@ -1753,12 +1773,43 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
     vkBinding.pImmutableSamplers = nullptr;
 
     vkBindings.push_back(vkBinding);
+
+    VkDescriptorBindingFlags flags = 0;
+
+    if (HasFlag(binding.flags, BindingFlags::PartiallyBound)) {
+        flags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    }
+
+    if (HasFlag(binding.flags, BindingFlags::VariableCount)) {
+        flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    }
+
+    if (HasFlag(binding.flags, BindingFlags::UpdateAfterBind)) {
+        flags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+        usesUpdateAfterBind = true;
+    }
+
+    usesBindingFlags |= flags != 0;
+    vkBindingFlags.push_back(flags);
   }
+
+  VkDescriptorSetLayoutBindingFlagsCreateInfo fci{};
+  fci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+  fci.bindingCount = static_cast<u32>(vkBindingFlags.size());
+  fci.pBindingFlags = vkBindingFlags.data();
 
   VkDescriptorSetLayoutCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   createInfo.bindingCount = static_cast<u32>(vkBindings.size());
   createInfo.pBindings = vkBindings.data();
+
+  if (usesBindingFlags) {
+      createInfo.pNext = &fci;
+  }
+
+  if (usesUpdateAfterBind) {
+      createInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  }
 
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VK_CHECK(
@@ -1768,7 +1819,7 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   const u32 handleId = nextBindingLayoutHandle_++;
 
   descriptorSetLayouts_.emplace(handleId,
-                                BindingLayout{.layout = layout});
+                                BindingLayout{.layout = layout, .usesUpdateAfterBind = usesUpdateAfterBind});
 
   return BindingLayoutHandle{handleId};
 }
@@ -1821,14 +1872,17 @@ Device::CreateBindingPool(const BindingPoolDesc &desc) {
   createInfo.poolSizeCount = static_cast<u32>(vkPoolSizes.size());
   createInfo.pPoolSizes = vkPoolSizes.data();
   createInfo.maxSets = desc.maxSets;
-  createInfo.flags = 0;
+  if (HasFlag(desc.flags, BindingPoolFlags::UpdateAfterBind)) {
+      createInfo.flags |=
+          VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+  }
 
   VkDescriptorPool pool = VK_NULL_HANDLE;
   VK_CHECK(vkCreateDescriptorPool(device_, &createInfo, nullptr, &pool),
            "vkCreateDescriptorPool: failed to create Descriptor Pool");
   const u32 handleId = nextBindingPoolHandle_++;
 
-  descriptorPools_.emplace(handleId, BindingPool{.pool = pool});
+  descriptorPools_.emplace(handleId, BindingPool{.pool = pool, .supportsUpdateAfterBind = HasFlag(desc.flags, BindingPoolFlags::UpdateAfterBind)});
 
   return BindingPoolHandle{handleId};
 }
@@ -1870,17 +1924,29 @@ Device::GetBindingPool(BindingPoolHandle handle) const {
 }
 
 BindingSetHandle
-Device::AllocateBindingSet(BindingPoolHandle poolHandle,
-                                    BindingLayoutHandle layoutHandle,
-                                    const char *debugName) {
-  BindingPool &vkPool = descriptorPools_[poolHandle.id];
-  BindingLayout &vkLayout = descriptorSetLayouts_[layoutHandle.id];
+Device::AllocateBindingSet(const BindingSetAllocationDesc& desc) {
+  const BindingPool &vkPool = GetBindingPool(desc.pool);
+  const BindingLayout &vkLayout = GetBindingLayout(desc.layout);
+
+  if (vkLayout.usesUpdateAfterBind && !vkPool.supportsUpdateAfterBind) {
+      throw std::runtime_error("Update-after-bind layout requires compatible binding pool");
+  }
 
   VkDescriptorSetAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   allocInfo.descriptorPool = vkPool.pool;
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &vkLayout.layout;
+
+  VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
+  if (desc.variableBindingCount > 0) {
+      countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+      countInfo.descriptorSetCount = 1;
+      countInfo.pDescriptorCounts = &desc.variableBindingCount;
+
+      allocInfo.pNext = &countInfo;
+  }
+
 
   VkDescriptorSet set = VK_NULL_HANDLE;
   VK_CHECK(vkAllocateDescriptorSets(device_, &allocInfo, &set),
@@ -1889,8 +1955,8 @@ Device::AllocateBindingSet(BindingPoolHandle poolHandle,
   u32 handleId = nextBindingSetHandle_++;
   descriptorSets_.emplace(handleId, BindingSet{
                                         .set = set,
-                                        .layout = layoutHandle,
-                                        .pool = poolHandle,
+                                        .layout = desc.layout,
+                                        .pool = desc.pool,
                                     });
 
   return BindingSetHandle{handleId};
@@ -1902,7 +1968,12 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
         "UpdateBindingSet: invalid destination descriptor set");
   }
 
-  BindingSet &vkSet = descriptorSets_[desc.dstSet.id];
+  if (desc.descriptorCount == 0) {
+    throw std::runtime_error(
+        "UpdateBindingSet: descriptorCount must be greater than zero");
+  }
+
+  const BindingSet& vkSet = GetBindingSet(desc.dstSet);
 
   VkWriteDescriptorSet write{};
   write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1912,8 +1983,10 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
   write.descriptorCount = desc.descriptorCount;
   write.descriptorType = ToVkDescriptorType(desc.type);
 
-  VkDescriptorBufferInfo vkBufferInfo{};
-  VkDescriptorImageInfo vkImageInfo{};
+  std::vector<VkDescriptorBufferInfo> vkBufferInfos{};
+  std::vector<VkDescriptorImageInfo> vkImageInfos{};
+  vkBufferInfos.resize(desc.descriptorCount);
+  vkImageInfos.resize(desc.descriptorCount);
 
   switch (desc.type) {
   case BindingType::UniformBuffer: {
@@ -1922,14 +1995,16 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: bufferInfo is null for UniformBuffer");
     }
 
-    const BindingBufferInfo &bufferInfo = *desc.bufferInfo;
-    const Buffer &vkBuffer = GetBuffer(bufferInfo.buffer);
+    for (u32 i = 0; i < desc.descriptorCount; i++) {
+        const BindingBufferInfo& bufferInfo = desc.bufferInfo[i];
+        vkBufferInfos[i] = {
+            .buffer = GetBuffer(bufferInfo.buffer).buffer,
+            .offset = bufferInfo.offset,
+            .range = bufferInfo.range,
+        };
+    }
 
-    vkBufferInfo.buffer = vkBuffer.buffer;
-    vkBufferInfo.offset = bufferInfo.offset;
-    vkBufferInfo.range = bufferInfo.range;
-
-    write.pBufferInfo = &vkBufferInfo;
+    write.pBufferInfo = vkBufferInfos.data();
     break;
   }
 
@@ -1939,15 +2014,16 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: imageInfo is null for CombinedImageSampler");
     }
 
-    const BindingImageInfo &imageInfo = *desc.imageInfo;
-    const Sampler &vkSampler = GetSampler(imageInfo.sampler);
-    const ImageView &vkImageView = GetImageView(imageInfo.imageView);
+    for (u32 i = 0; i < desc.descriptorCount; i++) {
+        const BindingImageInfo& imageInfo = desc.imageInfo[i];
+        vkImageInfos[i] = {
+            .sampler = GetSampler(imageInfo.sampler).sampler,
+            .imageView = GetImageView(imageInfo.imageView).view,
+            .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
+        };
+    }
 
-    vkImageInfo.sampler = vkSampler.sampler;
-    vkImageInfo.imageView = vkImageView.view;
-    vkImageInfo.imageLayout = ToVkImageLayout(imageInfo.imageLayout);
-
-    write.pImageInfo = &vkImageInfo;
+    write.pImageInfo = vkImageInfos.data();
     break;
   }
 
@@ -1957,14 +2033,18 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: imageInfo is null for StorageImage");
     }
 
-    const BindingImageInfo &imageInfo = *desc.imageInfo;
-    const ImageView &vkImageView = GetImageView(imageInfo.imageView);
 
-    vkImageInfo.sampler = VK_NULL_HANDLE;
-    vkImageInfo.imageView = vkImageView.view;
-    vkImageInfo.imageLayout = ToVkImageLayout(imageInfo.imageLayout);
+    for (u32 i = 0; i < desc.descriptorCount; i++) {
+        const BindingImageInfo& imageInfo = desc.imageInfo[i];
+        const ImageView& vkImageView = GetImageView(imageInfo.imageView);
+        vkImageInfos[i] = {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = vkImageView.view,
+            .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
+        };
+    }
 
-    write.pImageInfo = &vkImageInfo;
+    write.pImageInfo = vkImageInfos.data();
     break;
   }
 
@@ -1974,14 +2054,18 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: bufferInfo is null for StorageBuffer");
     }
 
-    const BindingBufferInfo &bufferInfo = *desc.bufferInfo;
-    const Buffer &vkBuffer = GetBuffer(bufferInfo.buffer);
 
-    vkBufferInfo.buffer = vkBuffer.buffer;
-    vkBufferInfo.offset = bufferInfo.offset;
-    vkBufferInfo.range = bufferInfo.range;
+    for (u32 i = 0; i < desc.descriptorCount; i++) {
+        const BindingBufferInfo& bufferInfo = desc.bufferInfo[i];
+        vkBufferInfos[i] = {
+            .buffer = GetBuffer(bufferInfo.buffer).buffer,
+            .offset = bufferInfo.offset,
+            .range = bufferInfo.range,
+        };
+    }
 
-    write.pBufferInfo = &vkBufferInfo;
+    write.pBufferInfo = vkBufferInfos.data();
+
     break;
   }
 
@@ -1997,7 +2081,7 @@ const BindingSet &
 Device::GetBindingSet(BindingSetHandle handle) const {
   auto it = descriptorSets_.find(handle.id);
   if (it == descriptorSets_.end()) {
-    throw std::runtime_error("Invalid shader handle");
+    throw std::runtime_error("Invalid binding set handle");
   }
 
   return it->second;

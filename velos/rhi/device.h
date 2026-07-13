@@ -73,9 +73,7 @@ public:
   CreateBindingPool(const BindingPoolDesc &desc) = 0;
   virtual void DestroyBindingPool(BindingPoolHandle handle) = 0;
   virtual BindingSetHandle
-  AllocateBindingSet(BindingPoolHandle pool,
-                        BindingLayoutHandle layout,
-                        const char *debugName = nullptr) = 0;
+  AllocateBindingSet(const BindingSetAllocationDesc& desc) = 0;
 
   virtual void UpdateBindingSet(const BindingWriteDesc &desc) = 0;
 

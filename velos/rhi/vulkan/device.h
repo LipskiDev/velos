@@ -78,10 +78,12 @@ struct Sampler {
 
 struct BindingLayout {
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+  bool usesUpdateAfterBind = false;
 };
 
 struct BindingPool {
   VkDescriptorPool pool = VK_NULL_HANDLE;
+  bool supportsUpdateAfterBind = false;
 };
 
 struct BindingSet {
@@ -145,9 +147,7 @@ public:
   const BindingPool &
   GetBindingPool(BindingPoolHandle handle) const;
   BindingSetHandle
-  AllocateBindingSet(BindingPoolHandle poolHandle,
-                        BindingLayoutHandle layoutHandle,
-                        const char *debugName) override;
+  AllocateBindingSet(const BindingSetAllocationDesc& desc) override;
 
   void UpdateBindingSet(const BindingWriteDesc &desc) override;
   const BindingSet &GetBindingSet(BindingSetHandle handle) const;

@@ -105,11 +105,31 @@ struct BufferImageCopyRegion {
   ImageAspect aspect = ImageAspect::Color;
 };
 
+enum class BindingFlags : u32 {
+	None = 0,
+	PartiallyBound = 1 << 0,
+	UpdateAfterBind = 1 << 1,
+	VariableCount = 1 << 2,
+};
+
+enum class BindingPoolFlags : u32 {
+	None = 0,
+	UpdateAfterBind = 1 << 0
+};
+
 struct BindingDesc {
   u32 binding = 0;
   BindingType type = BindingType::UniformBuffer;
   u32 count = 1;
   ShaderStage visibility = ShaderStage::Vertex;
+  BindingFlags flags = BindingFlags::None;
+};
+
+struct BindingSetAllocationDesc {
+	BindingPoolHandle pool;
+	BindingLayoutHandle layout;
+	u32 variableBindingCount = 0;
+	const char* debugName = nullptr;
 };
 
 struct BindingLayoutDesc {
@@ -122,6 +142,7 @@ struct BindingPoolDesc {
   const BindingPoolSize *poolSizes = nullptr;
   u32 poolSizeCount = 0;
   u32 maxSets = 0;
+  BindingPoolFlags flags = BindingPoolFlags::None;
   const char *debugName = nullptr;
 };
 
