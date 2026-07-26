@@ -956,6 +956,35 @@ u64 Device::GetBufferDeviceAddress(BufferHandle handle) const {
   return static_cast<u64>(buffer.deviceAddress);
 }
 
+void *Device::MapBuffer(BufferHandle handle) {
+  const Buffer &buffer = GetBuffer(handle);
+  if (buffer.memoryUsage == MemoryUsage::GPUOnly) {
+    throw std::runtime_error("MapBuffer: GPUOnly buffers are not host visible");
+  }
+
+  void *data = nullptr;
+  const VkResult result = vmaMapMemory(allocator_, buffer.allocation, &data);
+  if (result != VK_SUCCESS || data == nullptr) {
+    throw std::runtime_error("MapBuffer: vmaMapMemory failed");
+  }
+
+  if (buffer.memoryUsage == MemoryUsage::GPUToCPU) {
+    vmaInvalidateAllocation(allocator_, buffer.allocation, 0, buffer.size);
+  }
+  return data;
+}
+
+void Device::UnmapBuffer(BufferHandle handle) {
+  const Buffer &buffer = GetBuffer(handle);
+  if (buffer.memoryUsage == MemoryUsage::GPUOnly) {
+    throw std::runtime_error("UnmapBuffer: GPUOnly buffers are not host visible");
+  }
+  if (buffer.memoryUsage == MemoryUsage::CPUToGPU) {
+    vmaFlushAllocation(allocator_, buffer.allocation, 0, buffer.size);
+  }
+  vmaUnmapMemory(allocator_, buffer.allocation);
+}
+
 ImageHandle Device::CreateImage(const ImageDesc &desc) {
   VL_PROFILE_ZONE_N("Device::CreateImage");
 
@@ -1917,7 +1946,7 @@ const BindingPool &
 Device::GetBindingPool(BindingPoolHandle handle) const {
   auto it = descriptorPools_.find(handle.id);
   if (it == descriptorPools_.end()) {
-    throw std::runtime_error("Invalid shader handle");
+    throw std::runtime_error("Invalid binding pool handle");
   }
 
   return it->second;

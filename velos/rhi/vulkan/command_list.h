@@ -56,6 +56,8 @@ public:
 
   void CopyBufferToImage(BufferHandle src, ImageHandle dst,
                          const BufferImageCopyRegion &region) override;
+  void CopyImageToBuffer(ImageHandle src, BufferHandle dst,
+                         const BufferImageCopyRegion &region) override;
 
   void PipelineBarrier(std::span<const BufferBarrier> buffers,
                        std::span<const ImageBarrier> images) override;

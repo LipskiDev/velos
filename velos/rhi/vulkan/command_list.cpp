@@ -460,8 +460,15 @@ void CommandList::UpdateBuffer(const BufferUpdateDesc &update) {
 void CommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
                                           const BufferImageCopyRegion &region) {
 
-  VkBuffer buffer = device_.GetBuffer(src).buffer;
-  VkImage image = device_.GetImage(dst).image;
+  const Buffer &source = device_.GetBuffer(src);
+  const Image &destination = device_.GetImage(dst);
+  if (!HasFlag(source.usage, BufferUsage::TransferSrc))
+    throw std::runtime_error("CopyBufferToImage: source requires TransferSrc usage");
+  if (!HasFlag(destination.usage, ImageUsage::TransferDst))
+    throw std::runtime_error("CopyBufferToImage: destination requires TransferDst usage");
+  if (region.mipLevel >= destination.mipLevels ||
+      region.baseArrayLayer + region.layerCount > destination.arrayLayers)
+    throw std::runtime_error("CopyBufferToImage: image subresource is out of bounds");
 
   VkBufferImageCopy copy{};
 
@@ -481,8 +488,39 @@ void CommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
   copy.imageExtent = {region.imageExtent.width, region.imageExtent.height,
                       region.imageExtent.depth};
 
-  vkCmdCopyBufferToImage(commandBuffer_, buffer, image,
+  vkCmdCopyBufferToImage(commandBuffer_, source.buffer, destination.image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+}
+
+void CommandList::CopyImageToBuffer(ImageHandle src, BufferHandle dst,
+                                    const BufferImageCopyRegion &region) {
+  const Image &source = device_.GetImage(src);
+  const Buffer &destination = device_.GetBuffer(dst);
+  if (!HasFlag(source.usage, ImageUsage::TransferSrc))
+    throw std::runtime_error("CopyImageToBuffer: source requires TransferSrc usage");
+  if (!HasFlag(destination.usage, BufferUsage::TransferDst))
+    throw std::runtime_error("CopyImageToBuffer: destination requires TransferDst usage");
+  if (region.mipLevel >= source.mipLevels ||
+      region.baseArrayLayer + region.layerCount > source.arrayLayers)
+    throw std::runtime_error("CopyImageToBuffer: image subresource is out of bounds");
+
+  VkBufferImageCopy copy{};
+  copy.bufferOffset = region.bufferOffset;
+  copy.bufferRowLength = region.bufferRowLength;
+  copy.bufferImageHeight = region.bufferImageHeight;
+  copy.imageSubresource.aspectMask = ToVkImageAspect(region.aspect);
+  copy.imageSubresource.mipLevel = region.mipLevel;
+  copy.imageSubresource.baseArrayLayer = region.baseArrayLayer;
+  copy.imageSubresource.layerCount = region.layerCount;
+  copy.imageOffset = {static_cast<int32_t>(region.imageOffset.x),
+                      static_cast<int32_t>(region.imageOffset.y),
+                      static_cast<int32_t>(region.imageOffset.z)};
+  copy.imageExtent = {region.imageExtent.width, region.imageExtent.height,
+                      region.imageExtent.depth};
+
+  vkCmdCopyImageToBuffer(commandBuffer_, source.image,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         destination.buffer, 1, &copy);
 }
 
 void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,

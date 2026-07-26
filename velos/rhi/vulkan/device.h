@@ -2,6 +2,7 @@
 
 #include <rhi/vulkan/profiler.h>
 
+#include <array>
 #include <unordered_map>
 #include <vk_mem_alloc.h>
 
@@ -109,6 +110,8 @@ public:
   void DestroyBuffer(BufferHandle handle) override;
   const Buffer &GetBuffer(BufferHandle handle) const;
   u64 GetBufferDeviceAddress(BufferHandle handle) const override;
+  void *MapBuffer(BufferHandle handle) override;
+  void UnmapBuffer(BufferHandle handle) override;
 
   ImageHandle CreateImage(const ImageDesc &desc) override;
   void DestroyImage(ImageHandle handle) override;

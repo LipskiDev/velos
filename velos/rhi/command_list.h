@@ -107,6 +107,8 @@ public:
 
   virtual void CopyBufferToImage(BufferHandle src, ImageHandle dst,
                                  const BufferImageCopyRegion &region) = 0;
+  virtual void CopyImageToBuffer(ImageHandle src, BufferHandle dst,
+                                 const BufferImageCopyRegion &region) = 0;
 
   virtual void PipelineBarrier(std::span<const BufferBarrier> buffers,
                                std::span<const ImageBarrier> images) = 0;
