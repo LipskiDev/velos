@@ -138,6 +138,9 @@ inline VkBufferUsageFlags ToVkBufferUsageFlags(BufferUsage usage) {
   if (HasFlag(usage, BufferUsage::ShaderDeviceAddress)) {
     flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
+  if (HasFlag(usage, BufferUsage::Indirect)) {
+    flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+  }
 
   return flags;
 }
@@ -507,6 +510,9 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
 
   case ResourceState::DepthRead:
     return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
+  case ResourceState::IndirectArgument:
+    return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
   }
 
   throw std::runtime_error("Unsupported ResourceState");
@@ -544,6 +550,9 @@ inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state) {
   case ResourceState::DepthRead:
     return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+  case ResourceState::IndirectArgument:
+      return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
 
   case ResourceState::Present:
     return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;

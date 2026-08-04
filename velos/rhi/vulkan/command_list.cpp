@@ -31,6 +31,33 @@ void CommandList::End() {
            "Failed to end Vulkan command buffer");
 }
 
+void CommandList::ResetQueryPool(QueryPoolHandle pool, u32 firstQuery,
+                                 u32 queryCount) {
+  const QueryPool &queryPool = device_.GetQueryPool(pool);
+  if (firstQuery + queryCount > queryPool.queryCount) {
+    throw std::runtime_error("ResetQueryPool: query range out of bounds");
+  }
+  vkCmdResetQueryPool(commandBuffer_, queryPool.pool, firstQuery, queryCount);
+}
+
+void CommandList::WriteTimestamp(QueryPoolHandle pool, u32 queryIndex,
+                                 ShaderStage completedStage) {
+  const QueryPool &queryPool = device_.GetQueryPool(pool);
+  if (queryIndex >= queryPool.queryCount) {
+    throw std::runtime_error("WriteTimestamp: query index out of bounds");
+  }
+
+  VkPipelineStageFlagBits stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+  if (HasFlag(completedStage, ShaderStage::Compute)) {
+    stage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+  } else if (HasFlag(completedStage, ShaderStage::Fragment)) {
+    stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (HasFlag(completedStage, ShaderStage::Vertex)) {
+    stage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+  }
+  vkCmdWriteTimestamp(commandBuffer_, stage, queryPool.pool, queryIndex);
+}
+
 void CommandList::SetViewport(const Viewport &viewport) {
   VkViewport vkViewport{};
   vkViewport.x = viewport.x;
@@ -359,13 +386,20 @@ void CommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
 
 void CommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
                                       const void *data) {
-  if (!boundGraphicsPipeline_) {
-    throw std::runtime_error(
-        "PushConstants called without a bound graphics pipeline");
+  PipelineHandle pipeline{};
+
+  if (stage == ShaderStage::Compute) {
+    pipeline = boundComputePipeline_;
+  } else {
+    pipeline = boundGraphicsPipeline_;
   }
 
-  const Pipeline &vkPipeline =
-      device_.GetPipeline(boundGraphicsPipeline_);
+  if (!pipeline.IsValid()) {
+    throw std::runtime_error(
+        "PushConstants called without a compatible bound pipeline");
+  }
+
+  const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
 
   vkCmdPushConstants(commandBuffer_, vkPipeline.layout, ToVkShaderStage(stage),
                      offset, size, data);
@@ -606,9 +640,40 @@ void CommandList::Draw(u32 vertexCount, u32 instanceCount,
 }
 
 void CommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
-                                    i32 vertexOffset) {
-  vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset, 0);
+                              i32 vertexOffset, u32 baseInstance) {
+  vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset,
+                   baseInstance);
 }
+
+
+void CommandList::DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride)
+{
+    Buffer vkBuffer = device_.GetBuffer(buffer);
+
+    if (!HasFlag(vkBuffer.usage, BufferUsage::Indirect)) {
+        throw std::runtime_error("Buffer does not have Indirect BufferUsage flag");
+    }
+
+    vkCmdDrawIndexedIndirect(commandBuffer_, vkBuffer.buffer, offset, drawCount, stride);
+}
+
+void CommandList::DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
+                                           BufferHandle countBuffer, u64 countOffset,
+                                           u32 maxDrawCount, u32 stride) {
+  Buffer vkBuffer = device_.GetBuffer(buffer);
+  Buffer vkCountBuffer = device_.GetBuffer(countBuffer);
+
+  if (!HasFlag(vkBuffer.usage, BufferUsage::Indirect) ||
+      !HasFlag(vkCountBuffer.usage, BufferUsage::Indirect)) {
+    throw std::runtime_error(
+        "DrawIndexedIndirectCount buffers require Indirect BufferUsage");
+  }
+
+  vkCmdDrawIndexedIndirectCount(commandBuffer_, vkBuffer.buffer, offset,
+                                vkCountBuffer.buffer, countOffset, maxDrawCount,
+                                stride);
+}
+
 
 void CommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   if (!boundComputePipeline_.IsValid()) {
@@ -620,6 +685,21 @@ void CommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   }
 
   vkCmdDispatch(commandBuffer_, x, y, z);
+}
+
+void CommandList::DispatchIndirect(BufferHandle buffer, u64 offset) {
+  if (!boundComputePipeline_.IsValid()) {
+    throw std::runtime_error(
+        "DispatchIndirect called without bound compute pipeline");
+  }
+
+  Buffer vkBuffer = device_.GetBuffer(buffer);
+  if (!HasFlag(vkBuffer.usage, BufferUsage::Indirect)) {
+    throw std::runtime_error(
+        "DispatchIndirect buffer requires Indirect BufferUsage");
+  }
+
+  vkCmdDispatchIndirect(commandBuffer_, vkBuffer.buffer, offset);
 }
 
 } // namespace Velos::Vulkan

@@ -24,6 +24,10 @@ public:
   void Barrier(const ImageBarrier &barrier) override;
 
   void UpdateBuffer(const BufferUpdateDesc &update) override;
+  void ResetQueryPool(QueryPoolHandle pool, u32 firstQuery,
+                      u32 queryCount) override;
+  void WriteTimestamp(QueryPoolHandle pool, u32 queryIndex,
+                      ShaderStage completedStage) override;
 
   void BeginRendering(const RenderingInfo &renderingInfo) override;
   void EndRendering() override;
@@ -65,10 +69,15 @@ public:
   void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
             u32 baseInstance = 0) override;
   void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
-                   i32 vertexOffset = 0) override;
+                   i32 vertexOffset = 0, u32 baseInstance = 0) override;
+  void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) override;
+  void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
+                                BufferHandle countBuffer, u64 countOffset,
+                                u32 maxDrawCount, u32 stride) override;
 
   void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
                 uint32_t groupCountZ) override;
+  void DispatchIndirect(BufferHandle buffer, u64 offset) override;
 
   VkCommandBuffer GetVkCommandBuffer() const { return commandBuffer_; }
 

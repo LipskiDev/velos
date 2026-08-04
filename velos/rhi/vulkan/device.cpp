@@ -9,6 +9,7 @@
 #include "rhi/vulkan/upload_context.h"
 #include "vlpch.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
@@ -109,6 +110,13 @@ Device::~Device() {
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
 
+    for (auto &[id, queryPool] : queryPools_) {
+      if (queryPool.pool != VK_NULL_HANDLE) {
+        vkDestroyQueryPool(device_, queryPool.pool, nullptr);
+      }
+    }
+    queryPools_.clear();
+
     for (auto &[id, pipeline] : pipelines_) {
       if (pipeline.pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device_, pipeline.pipeline, nullptr);
@@ -172,6 +180,69 @@ Device::~Device() {
     vkDestroyInstance(instance_, nullptr);
     instance_ = VK_NULL_HANDLE;
   }
+}
+
+QueryPoolHandle
+Device::CreateTimestampQueryPool(const QueryPoolDesc &desc) {
+  if (desc.queryCount == 0) {
+    throw std::runtime_error(
+        "CreateTimestampQueryPool: queryCount must be greater than zero");
+  }
+
+  VkQueryPoolCreateInfo createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+  createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+  createInfo.queryCount = desc.queryCount;
+
+  QueryPool queryPool{};
+  queryPool.queryCount = desc.queryCount;
+  VK_CHECK(vkCreateQueryPool(device_, &createInfo, nullptr, &queryPool.pool),
+           "Failed to create timestamp query pool");
+
+  const QueryPoolHandle handle{nextQueryPoolHandle_++};
+  queryPools_.emplace(handle.id, queryPool);
+  return handle;
+}
+
+void Device::DestroyQueryPool(QueryPoolHandle handle) {
+  const auto it = queryPools_.find(handle.id);
+  if (it == queryPools_.end()) {
+    return;
+  }
+  if (it->second.pool != VK_NULL_HANDLE) {
+    vkDestroyQueryPool(device_, it->second.pool, nullptr);
+  }
+  queryPools_.erase(it);
+}
+
+const QueryPool &Device::GetQueryPool(QueryPoolHandle handle) const {
+  const auto it = queryPools_.find(handle.id);
+  if (it == queryPools_.end()) {
+    throw std::runtime_error("Invalid query pool handle");
+  }
+  return it->second;
+}
+
+bool Device::GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
+                                      u32 queryCount, u64 *results) {
+  const QueryPool &queryPool = GetQueryPool(handle);
+  if (!results || firstQuery + queryCount > queryPool.queryCount) {
+    throw std::runtime_error("GetTimestampQueryResults: invalid range");
+  }
+
+  const VkResult result = vkGetQueryPoolResults(
+      device_, queryPool.pool, firstQuery, queryCount,
+      static_cast<size_t>(queryCount) * sizeof(u64), results, sizeof(u64),
+      VK_QUERY_RESULT_64_BIT);
+  if (result == VK_NOT_READY) {
+    return false;
+  }
+  VK_CHECK(result, "Failed to read timestamp query results");
+  return true;
+}
+
+double Device::GetTimestampPeriodNanoseconds() const {
+  return static_cast<double>(physicalDeviceProperties_.limits.timestampPeriod);
 }
 
 void Device::CreateAllocator() {
@@ -316,17 +387,20 @@ bool HasRequiredExtensions(VkPhysicalDevice device) {
 
 bool HasRequiredFeatures(VkPhysicalDevice device) {
   VkPhysicalDeviceFeatures features{};
-  VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
-  VkPhysicalDeviceDescriptorIndexingFeatures di{};
+  VkPhysicalDeviceVulkan11Features vulkan11Features{};
+  VkPhysicalDeviceVulkan12Features vulkan12Features{};
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
 
-  bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-  bda.pNext = &di;
-  di.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  vulkan11Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+
+  vulkan12Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+  vulkan12Features.pNext = &vulkan11Features;
 
   vulkan13Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-  vulkan13Features.pNext = &bda;
+  vulkan13Features.pNext = &vulkan12Features;
 
   VkPhysicalDeviceFeatures2 features2{};
   features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -336,12 +410,15 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
 
   return vulkan13Features.dynamicRendering == VK_TRUE &&
       vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
-      bda.bufferDeviceAddress == VK_TRUE &&
-      di.descriptorBindingPartiallyBound == VK_TRUE &&
-      di.runtimeDescriptorArray == VK_TRUE &&
-      di.shaderSampledImageArrayNonUniformIndexing == VK_TRUE &&
-      di.descriptorBindingVariableDescriptorCount == VK_TRUE &&
-      di.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE;
+      vulkan12Features.drawIndirectCount == VK_TRUE &&
+      vulkan11Features.shaderDrawParameters == VK_TRUE &&
+      features2.features.multiDrawIndirect == VK_TRUE &&
+      vulkan12Features.bufferDeviceAddress == VK_TRUE &&
+      vulkan12Features.descriptorBindingPartiallyBound == VK_TRUE &&
+      vulkan12Features.runtimeDescriptorArray == VK_TRUE &&
+      vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE &&
+      vulkan12Features.descriptorBindingVariableDescriptorCount == VK_TRUE &&
+      vulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE;
 }
 
 u32 ScoreGPU(VkPhysicalDevice device) {
@@ -453,27 +530,33 @@ void Device::CreateLogicalDevice() {
   queueCreateInfo.queueCount = 1;
   queueCreateInfo.pQueuePriorities = &queuePriority;
 
+
   VkPhysicalDeviceFeatures deviceFeatures{};
+  deviceFeatures.multiDrawIndirect = VK_TRUE;
 
-  VkPhysicalDeviceBufferDeviceAddressFeatures bda{};
-  bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-  bda.bufferDeviceAddress = VK_TRUE;
+  VkPhysicalDeviceVulkan11Features vulkan11Features{};
+  vulkan11Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+  vulkan11Features.shaderDrawParameters = VK_TRUE;
 
-  VkPhysicalDeviceDescriptorIndexingFeatures di{};
-  di.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-  di.descriptorBindingPartiallyBound = VK_TRUE;
-  di.runtimeDescriptorArray = VK_TRUE;
-  di.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-  di.descriptorBindingVariableDescriptorCount = VK_TRUE;
-  di.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-  bda.pNext = &di;
+  VkPhysicalDeviceVulkan12Features vulkan12Features{};
+  vulkan12Features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+  vulkan12Features.drawIndirectCount = VK_TRUE;
+  vulkan12Features.bufferDeviceAddress = VK_TRUE;
+  vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+  vulkan12Features.runtimeDescriptorArray = VK_TRUE;
+  vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+  vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+  vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+  vulkan12Features.pNext = &vulkan11Features;
 
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
   vulkan13Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
   vulkan13Features.dynamicRendering = VK_TRUE;
   vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
-  vulkan13Features.pNext = &bda;
+  vulkan13Features.pNext = &vulkan12Features;
 
   const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -570,7 +653,6 @@ void Device::CreateSwapchainSyncObjects() {
 
   const u32 imageCount = swapchain_->GetImageCount();
 
-  swapchainImagesInFlight_.assign(imageCount, VK_NULL_HANDLE);
   swapchainRenderFinishedSemaphores_.resize(imageCount, VK_NULL_HANDLE);
 
   VkSemaphoreCreateInfo semaphoreInfo{};
@@ -591,7 +673,6 @@ void Device::DestroySwapchainSyncObjects() {
   }
 
   swapchainRenderFinishedSemaphores_.clear();
-  swapchainImagesInFlight_.clear();
 }
 
 void Device::CollectGarbage() {
@@ -2133,6 +2214,11 @@ ImageLayout Device::GetImageLayout(ImageHandle imageHandle,
 
 FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
   VL_PROFILE_ZONE_N("Device::BeginFrame");
+  using FrameClock = std::chrono::steady_clock;
+  const auto elapsedMilliseconds = [](FrameClock::time_point start) {
+    return std::chrono::duration<float, std::milli>(FrameClock::now() - start)
+        .count();
+  };
 
   if (!swapchain.IsValid()) {
     throw std::runtime_error("BeginFrame called with invalid swapchain handle");
@@ -2144,21 +2230,28 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
 
   const u32 frameIndex = currentFrame_;
   FrameSyncData &frame = frames_[frameIndex];
+  float frameFenceWaitMs = 0.0f;
+  float acquireImageMs = 0.0f;
+  float imageFenceWaitMs = 0.0f;
 
   {
     VL_PROFILE_ZONE_N("BeginFrame.WaitForFrameFence");
+    const auto waitStart = FrameClock::now();
     VK_CHECK(
         vkWaitForFences(device_, 1, &frame.inFlightFence, VK_TRUE, UINT64_MAX),
         "Failed to wait for frame fence");
+    frameFenceWaitMs = elapsedMilliseconds(waitStart);
   }
 
   u32 imageIndex = 0;
   VkResult result;
   {
     VL_PROFILE_ZONE_N("BeginFrame.AcquireNextImage");
+    const auto acquireStart = FrameClock::now();
     result = vkAcquireNextImageKHR(device_, swapchain_->GetVkSwapchain(),
                                    UINT64_MAX, frame.imageAvailableSemaphore,
                                    VK_NULL_HANDLE, &imageIndex);
+    acquireImageMs = elapsedMilliseconds(acquireStart);
   }
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -2169,21 +2262,15 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
         .backbufferIndex = 0,
         .success = false,
         .frameIndex = frameIndex,
+        .frameFenceWaitMs = frameFenceWaitMs,
+        .acquireImageMs = acquireImageMs,
+        .imageFenceWaitMs = imageFenceWaitMs,
     };
   }
 
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     VK_CHECK(result, "Failed to acquire next swapchain image");
   }
-
-  if (swapchainImagesInFlight_[imageIndex] != VK_NULL_HANDLE) {
-    VL_PROFILE_ZONE_N("BeginFrame.WaitForSwapchainImageFence");
-    VK_CHECK(vkWaitForFences(device_, 1, &swapchainImagesInFlight_[imageIndex],
-                             VK_TRUE, UINT64_MAX),
-             "Failed to wait for swapchain image fence");
-  }
-
-  swapchainImagesInFlight_[imageIndex] = frame.inFlightFence;
 
   VK_CHECK(vkResetFences(device_, 1, &frame.inFlightFence),
            "Failed to reset frame fence");
@@ -2200,6 +2287,10 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
       .backbufferIndex = imageIndex,
       .success = true,
       .frameIndex = frameIndex,
+      .imageIndex = imageIndex,
+      .frameFenceWaitMs = frameFenceWaitMs,
+      .acquireImageMs = acquireImageMs,
+      .imageFenceWaitMs = imageFenceWaitMs,
   };
 }
 

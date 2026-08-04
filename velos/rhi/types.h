@@ -80,7 +80,8 @@ enum class BufferUsage : u32 {
   Storage = 1 << 3,
   TransferSrc = 1 << 4,
   TransferDst = 1 << 5,
-  ShaderDeviceAddress = 1 << 6
+  ShaderDeviceAddress = 1 << 6,
+  Indirect = 1 << 7
 };
 
 enum class ImageUsage : u32 {
@@ -168,6 +169,8 @@ enum class ResourceState {
   RenderTarget,
   DepthWrite,
   DepthRead,
+
+  IndirectArgument,
 
   // Present
   Present,

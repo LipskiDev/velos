@@ -93,6 +93,11 @@ struct BindingSet {
   BindingPoolHandle pool;
 };
 
+struct QueryPool {
+  VkQueryPool pool = VK_NULL_HANDLE;
+  u32 queryCount = 0;
+};
+
 class Device final : public IDevice {
 public:
   explicit Device(const DeviceDesc &desc);
@@ -154,6 +159,15 @@ public:
 
   void UpdateBindingSet(const BindingWriteDesc &desc) override;
   const BindingSet &GetBindingSet(BindingSetHandle handle) const;
+
+  QueryPoolHandle
+  CreateTimestampQueryPool(const QueryPoolDesc &desc) override;
+  void DestroyQueryPool(QueryPoolHandle handle) override;
+  bool GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
+                                u32 queryCount, u64 *results) override;
+  double GetTimestampPeriodNanoseconds() const override;
+  u32 GetCurrentFrameIndex() const override { return currentFrame_; }
+  const QueryPool &GetQueryPool(QueryPoolHandle handle) const;
 
   ImageLayout GetImageLayout(ImageHandle imageHandle, u32 mipLevel) const;
 
@@ -246,7 +260,6 @@ private:
   };
 
   std::array<FrameSyncData, k_MaxFramesInFlight> frames_;
-  std::vector<VkFence> swapchainImagesInFlight_;
   std::vector<VkSemaphore> swapchainRenderFinishedSemaphores_;
 
 private:
@@ -276,5 +289,8 @@ private:
 
   u32 nextBindingSetHandle_ = 1;
   std::unordered_map<u32, BindingSet> descriptorSets_;
+
+  u32 nextQueryPoolHandle_ = 1;
+  std::unordered_map<u32, QueryPool> queryPools_;
 };
 } // namespace Velos::Vulkan

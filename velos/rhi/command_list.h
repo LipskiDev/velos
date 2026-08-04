@@ -58,6 +58,24 @@ struct BufferBinding {
   u64 size = 0;
 };
 
+struct DrawIndexedIndirectCommand {
+    u32 indexCount;
+    u32 instanceCount;
+    u32 firstIndex;
+    i32 vertexOffset;
+    u32 firstInstance;
+};
+
+static_assert(sizeof(DrawIndexedIndirectCommand) == 20);
+
+struct DispatchIndirectCommand {
+  u32 groupCountX;
+  u32 groupCountY;
+  u32 groupCountZ;
+};
+
+static_assert(sizeof(DispatchIndirectCommand) == 12);
+
 class ICommandList {
 public:
   virtual ~ICommandList() = default;
@@ -72,6 +90,10 @@ public:
   virtual void Barrier(const ImageBarrier &barrier) = 0;
 
   virtual void UpdateBuffer(const BufferUpdateDesc &update) = 0;
+  virtual void ResetQueryPool(QueryPoolHandle pool, u32 firstQuery,
+                              u32 queryCount) = 0;
+  virtual void WriteTimestamp(QueryPoolHandle pool, u32 queryIndex,
+                              ShaderStage completedStage) = 0;
 
   virtual void BeginRendering(const RenderingInfo &renderingInfo) = 0;
   virtual void EndRendering() = 0;
@@ -116,9 +138,15 @@ public:
   virtual void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
                     u32 baseInstance = 0) = 0;
   virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
-                           i32 vertexOffset = 0) = 0;
+                           i32 vertexOffset = 0,
+                           u32 baseInstance = 0) = 0;
+  virtual void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) = 0;
+  virtual void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
+                                        BufferHandle countBuffer, u64 countOffset,
+                                        u32 maxDrawCount, u32 stride) = 0;
 
   virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
                         uint32_t groupCountZ) = 0;
+  virtual void DispatchIndirect(BufferHandle buffer, u64 offset) = 0;
 };
 } // namespace Velos::RHI

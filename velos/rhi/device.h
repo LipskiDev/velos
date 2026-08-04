@@ -28,8 +28,11 @@ struct FrameBeginResult {
   ImageHandle backbufferImage{};
   u32 backbufferIndex = 0;
   bool success = false;
-  uint32_t frameIndex;
-  uint32_t imageIndex;
+  uint32_t frameIndex = 0;
+  uint32_t imageIndex = 0;
+  float frameFenceWaitMs = 0.0f;
+  float acquireImageMs = 0.0f;
+  float imageFenceWaitMs = 0.0f;
 };
 
 class IDevice {
@@ -78,6 +81,14 @@ public:
   AllocateBindingSet(const BindingSetAllocationDesc& desc) = 0;
 
   virtual void UpdateBindingSet(const BindingWriteDesc &desc) = 0;
+
+  virtual QueryPoolHandle CreateTimestampQueryPool(
+      const QueryPoolDesc &desc) = 0;
+  virtual void DestroyQueryPool(QueryPoolHandle handle) = 0;
+  virtual bool GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
+                                        u32 queryCount, u64 *results) = 0;
+  virtual double GetTimestampPeriodNanoseconds() const = 0;
+  virtual u32 GetCurrentFrameIndex() const = 0;
 
   virtual ImageLayout GetImageLayout(ImageHandle image, u32 mipLevel) const = 0;
 

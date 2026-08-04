@@ -4,7 +4,7 @@
 
 namespace Velos::RHI {
 
-static constexpr u32 kInvalidHandle = 0;
+static constexpr u32 kInvalidHandle = -1;
 
 template <typename Tag> struct Handle {
   u32 id = kInvalidHandle;
@@ -25,6 +25,7 @@ struct SwapchainTag {};
 struct BindingLayoutTag {};
 struct BindingPoolTag {};
 struct BindingSetTag {};
+struct QueryPoolTag {};
 
 using BufferHandle = Handle<BufferTag>;
 using SamplerHandle = Handle<SamplerTag>;
@@ -37,5 +38,6 @@ using ImageViewHandle = Handle<ImageViewTag>;
 using BindingLayoutHandle = Handle<BindingLayoutTag>;
 using BindingPoolHandle = Handle<BindingPoolTag>;
 using BindingSetHandle = Handle<BindingSetTag>;
+using QueryPoolHandle = Handle<QueryPoolTag>;
 
 } // namespace Velos::RHI

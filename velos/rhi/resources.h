@@ -14,6 +14,11 @@ struct BufferDesc {
   const char *debugName = nullptr;
 };
 
+struct QueryPoolDesc {
+  u32 queryCount = 0;
+  const char *debugName = nullptr;
+};
+
 struct ImageDesc {
   u32 width = 1;
   u32 height = 1;
