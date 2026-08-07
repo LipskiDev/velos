@@ -1427,7 +1427,8 @@ ShaderHandle Device::CreateShader(const ShaderDesc &desc) {
   const u32 handleId = nextShaderHandle_++;
   shaders_.emplace(handleId, Shader{.module = shaderModule,
                                           .stage = desc.stage,
-                                          .reflection = desc.reflection});
+                                          .reflection = desc.reflection,
+                                          .entryPoint = desc.entryPoint});
 
   return ShaderHandle{handleId};
 }
@@ -1480,12 +1481,12 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   shaderStages[0].module = vs.module;
-  shaderStages[0].pName = "main";
+  shaderStages[0].pName = vs.entryPoint.c_str();
 
   shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shaderStages[1].module = fs.module;
-  shaderStages[1].pName = "main";
+  shaderStages[1].pName = fs.entryPoint.c_str();
 
   std::vector<VkVertexInputBindingDescription> bindings;
   bindings.reserve(desc.vertexLayouts.size());

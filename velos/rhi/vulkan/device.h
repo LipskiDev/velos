@@ -20,6 +20,7 @@ struct Shader {
   VkShaderModule module = VK_NULL_HANDLE;
   ShaderStage stage = ShaderStage::None;
   ShaderReflectionData reflection;
+  std::string entryPoint = "main";
 };
 
 struct Pipeline {
