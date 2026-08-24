@@ -417,8 +417,10 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
       vulkan12Features.descriptorBindingPartiallyBound == VK_TRUE &&
       vulkan12Features.runtimeDescriptorArray == VK_TRUE &&
       vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE &&
+      vulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE &&
+      vulkan12Features.descriptorBindingStorageImageUpdateAfterBind == VK_TRUE &&
       vulkan12Features.descriptorBindingVariableDescriptorCount == VK_TRUE &&
-      vulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE;
+      vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
 }
 
 u32 ScoreGPU(VkPhysicalDevice device) {
@@ -549,6 +551,7 @@ void Device::CreateLogicalDevice() {
   vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
   vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
   vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+  vulkan12Features.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
   vulkan12Features.pNext = &vulkan11Features;
 
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
@@ -1866,6 +1869,11 @@ const Pipeline &Device::GetPipeline(PipelineHandle handle) const {
 
 BindingLayoutHandle
 Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
+  if (desc.bindingCount > 0 && desc.bindings == nullptr) {
+    throw std::runtime_error(
+        "CreateBindingLayout: bindings is null when bindingCount is non-zero");
+  }
+
   std::vector<VkDescriptorSetLayoutBinding> vkBindings;
   std::vector<VkDescriptorBindingFlags> vkBindingFlags;
   vkBindings.reserve(desc.bindingCount);
@@ -1873,9 +1881,57 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
 
   bool usesUpdateAfterBind = false;
   bool usesBindingFlags = false;
+  std::unordered_map<u32, BindingLayout::BindingMetadata> bindingMetadata;
+  bindingMetadata.reserve(desc.bindingCount);
+  bool hasVariableCountBinding = false;
+  u32 variableCountBinding = 0;
+  u32 variableCountMaximum = 0;
+  u32 highestBinding = 0;
+
+  for (u32 i = 0; i < desc.bindingCount; ++i) {
+    highestBinding = std::max(highestBinding, desc.bindings[i].binding);
+  }
 
   for (u32 i = 0; i < desc.bindingCount; ++i) {
     const BindingDesc &binding = desc.bindings[i];
+
+    if (binding.count == 0) {
+      throw std::runtime_error(
+          "CreateBindingLayout: descriptor count must be greater than zero");
+    }
+
+    if (bindingMetadata.contains(binding.binding)) {
+      throw std::runtime_error(
+          "CreateBindingLayout: descriptor binding numbers must be unique");
+    }
+
+    const bool variableCount =
+        HasFlag(binding.flags, BindingFlags::VariableCount);
+    if (variableCount) {
+      if (hasVariableCountBinding) {
+        throw std::runtime_error(
+            "CreateBindingLayout: only one binding may use VariableCount");
+      }
+      if (binding.binding != highestBinding) {
+        throw std::runtime_error(
+            "CreateBindingLayout: VariableCount must be used by the numerically highest binding");
+      }
+      hasVariableCountBinding = true;
+      variableCountBinding = binding.binding;
+      variableCountMaximum = binding.count;
+    }
+
+    if (HasFlag(binding.flags, BindingFlags::UpdateAfterBind)) {
+      switch (binding.type) {
+      case BindingType::CombinedImageSampler:
+      case BindingType::StorageImage:
+        break;
+      default:
+        throw std::runtime_error(
+            "CreateBindingLayout: UpdateAfterBind is not enabled for this binding type");
+      }
+    }
+
     VkDescriptorSetLayoutBinding vkBinding{};
     vkBinding.binding = binding.binding;
     vkBinding.descriptorType = ToVkDescriptorType(binding.type);
@@ -1902,6 +1958,11 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
 
     usesBindingFlags |= flags != 0;
     vkBindingFlags.push_back(flags);
+    bindingMetadata.emplace(
+        binding.binding,
+        BindingLayout::BindingMetadata{.type = binding.type,
+                                       .maximumCount = binding.count,
+                                       .flags = binding.flags});
   }
 
   VkDescriptorSetLayoutBindingFlagsCreateInfo fci{};
@@ -1929,8 +1990,13 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
 
   const u32 handleId = nextBindingLayoutHandle_++;
 
-  descriptorSetLayouts_.emplace(handleId,
-                                BindingLayout{.layout = layout, .usesUpdateAfterBind = usesUpdateAfterBind});
+  descriptorSetLayouts_.emplace(
+      handleId, BindingLayout{.layout = layout,
+                              .usesUpdateAfterBind = usesUpdateAfterBind,
+                              .bindings = std::move(bindingMetadata),
+                              .hasVariableCountBinding = hasVariableCountBinding,
+                              .variableCountBinding = variableCountBinding,
+                              .variableCountMaximum = variableCountMaximum});
 
   return BindingLayoutHandle{handleId};
 }
@@ -2043,6 +2109,17 @@ Device::AllocateBindingSet(const BindingSetAllocationDesc& desc) {
       throw std::runtime_error("Update-after-bind layout requires compatible binding pool");
   }
 
+  if (!vkLayout.hasVariableCountBinding && desc.variableBindingCount > 0) {
+    throw std::runtime_error(
+        "AllocateBindingSet: variableBindingCount requires a VariableCount binding");
+  }
+
+  if (vkLayout.hasVariableCountBinding &&
+      desc.variableBindingCount > vkLayout.variableCountMaximum) {
+    throw std::runtime_error(
+        "AllocateBindingSet: variableBindingCount exceeds the layout maximum");
+  }
+
   VkDescriptorSetAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   allocInfo.descriptorPool = vkPool.pool;
@@ -2065,10 +2142,12 @@ Device::AllocateBindingSet(const BindingSetAllocationDesc& desc) {
 
   u32 handleId = nextBindingSetHandle_++;
   descriptorSets_.emplace(handleId, BindingSet{
-                                        .set = set,
-                                        .layout = desc.layout,
-                                        .pool = desc.pool,
-                                    });
+                                         .set = set,
+                                         .layout = desc.layout,
+                                         .pool = desc.pool,
+                                         .variableBindingCount =
+                                             desc.variableBindingCount,
+                                     });
 
   return BindingSetHandle{handleId};
 }
@@ -2085,6 +2164,29 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
   }
 
   const BindingSet& vkSet = GetBindingSet(desc.dstSet);
+  const BindingLayout& vkLayout = GetBindingLayout(vkSet.layout);
+  const auto bindingIt = vkLayout.bindings.find(desc.binding);
+  if (bindingIt == vkLayout.bindings.end()) {
+    throw std::runtime_error(
+        "UpdateBindingSet: destination binding is not present in the layout");
+  }
+
+  const BindingLayout::BindingMetadata& binding = bindingIt->second;
+  if (binding.type != desc.type) {
+    throw std::runtime_error(
+        "UpdateBindingSet: descriptor type does not match the layout binding");
+  }
+
+  const u32 bindingCount =
+      vkLayout.hasVariableCountBinding &&
+              desc.binding == vkLayout.variableCountBinding
+          ? vkSet.variableBindingCount
+          : binding.maximumCount;
+  if (desc.arrayElement > bindingCount ||
+      desc.descriptorCount > bindingCount - desc.arrayElement) {
+    throw std::runtime_error(
+        "UpdateBindingSet: descriptor write exceeds the allocated binding count");
+  }
 
   VkWriteDescriptorSet write{};
   write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

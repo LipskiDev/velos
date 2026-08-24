@@ -76,6 +76,12 @@ static std::string DescribeTest(const std::string &name) {
     return "Kills the right half of a fullscreen primitive in the fragment shader and verifies that cleared pixels remain untouched.";
   if (name == "Sample2DNearestPixelOutput")
     return "Samples an uploaded RGBA8 texture through a combined image sampler into a storage image and checks every texel.";
+  if (name == "BindlessTextureUpdateAfterBindPixelOutput")
+    return "Binds a sparse partially-bound texture array, selects two texture indices non-uniformly in one dispatch, updates one slot after binding, and verifies both sampled regions pixel-by-pixel.";
+  if (name == "BindlessVariableDescriptorCountPixelOutput")
+    return "Allocates a runtime texture array below its layout maximum, indexes two descriptors non-uniformly, and verifies both sampled regions pixel-by-pixel.";
+  if (name == "StorageImageUpdateAfterBindPixelOutput")
+    return "Retargets a bound storage-image descriptor after command recording and verifies that only the replacement image receives the compute output.";
   if (name == "ScissorPixelOutput")
     return "Draws a fullscreen primitive through a smaller scissor rectangle and verifies that only pixels inside the rectangle are modified.";
   if (name == "BlendAddPixelOutput")
@@ -316,6 +322,21 @@ int main(int argc, char **argv) {
     if (!device) throw std::runtime_error("CreateDevice returned null");
   });
   if (device) {
+    auto expectRejected = [](const std::function<void()> &operation,
+                             const std::string &expectedMessage) {
+      try {
+        operation();
+      } catch (const std::exception &error) {
+        if (std::string(error.what()).find(expectedMessage) ==
+            std::string::npos) {
+          throw std::runtime_error("unexpected validation error: " +
+                                   std::string(error.what()));
+        }
+        return;
+      }
+      throw std::runtime_error("invalid descriptor request was accepted");
+    };
+
     auto renderFullscreen = [&](uint32_t width, uint32_t height,
                                 const ClearColor &clearColor,
                                 const float shaderColor[4],
@@ -494,6 +515,98 @@ int main(int argc, char **argv) {
       device->UpdateBindingSet({.dstSet = set, .binding = 0,
           .type = BindingType::UniformBuffer, .bufferInfo = &info});
       device->DestroyBuffer(buffer);
+      device->DestroyBindingPool(pool);
+      device->DestroyBindingLayout(layout);
+    });
+    run("BindingLayoutVariableCountValidation", "validation", [&] {
+      const BindingDesc nonHighest[] = {
+          {.binding = 0, .type = BindingType::CombinedImageSampler, .count = 8,
+           .visibility = ShaderStage::Fragment,
+           .flags = BindingFlags::VariableCount},
+          {.binding = 1, .type = BindingType::CombinedImageSampler, .count = 1,
+           .visibility = ShaderStage::Fragment}};
+      expectRejected(
+          [&] { device->CreateBindingLayout(
+                    {.bindings = nonHighest, .bindingCount = 2}); },
+          "numerically highest binding");
+
+      const BindingDesc multiple[] = {
+          {.binding = 5, .type = BindingType::CombinedImageSampler, .count = 8,
+           .visibility = ShaderStage::Fragment,
+           .flags = BindingFlags::VariableCount},
+          {.binding = 4, .type = BindingType::CombinedImageSampler, .count = 8,
+           .visibility = ShaderStage::Fragment,
+           .flags = BindingFlags::VariableCount}};
+      expectRejected(
+          [&] { device->CreateBindingLayout(
+                    {.bindings = multiple, .bindingCount = 2}); },
+          "only one binding");
+
+      const BindingDesc zeroMaximum{
+          .binding = 0, .type = BindingType::CombinedImageSampler, .count = 0,
+          .visibility = ShaderStage::Fragment,
+          .flags = BindingFlags::VariableCount};
+      expectRejected(
+          [&] { device->CreateBindingLayout(
+                    {.bindings = &zeroMaximum, .bindingCount = 1}); },
+          "count must be greater than zero");
+    });
+    run("BindingLayoutUpdateAfterBindTypeValidation", "validation", [&] {
+      const BindingDesc unsupported{
+          .binding = 0, .type = BindingType::UniformBuffer, .count = 1,
+          .visibility = ShaderStage::Fragment,
+          .flags = BindingFlags::UpdateAfterBind};
+      expectRejected(
+          [&] { device->CreateBindingLayout(
+                    {.bindings = &unsupported, .bindingCount = 1}); },
+          "not enabled for this binding type");
+    });
+    run("BindingSetVariableCountValidation", "validation", [&] {
+      const BindingDesc binding{
+          .binding = 3, .type = BindingType::CombinedImageSampler, .count = 4,
+          .visibility = ShaderStage::Fragment,
+          .flags = BindingFlags::VariableCount};
+      auto layout = device->CreateBindingLayout(
+          {.bindings = &binding, .bindingCount = 1});
+      const BindingPoolSize poolSize{
+          .type = BindingType::CombinedImageSampler, .count = 4};
+      auto pool = device->CreateBindingPool(
+          {.poolSizes = &poolSize, .poolSizeCount = 1, .maxSets = 1});
+
+      expectRejected(
+          [&] { device->AllocateBindingSet(
+                    {.pool = pool, .layout = layout,
+                     .variableBindingCount = 5}); },
+          "exceeds the layout maximum");
+
+      auto set = device->AllocateBindingSet(
+          {.pool = pool, .layout = layout, .variableBindingCount = 2});
+      expectRejected(
+          [&] { device->UpdateBindingSet(
+                    {.dstSet = set, .binding = 3, .arrayElement = 2,
+                     .type = BindingType::CombinedImageSampler}); },
+          "exceeds the allocated binding count");
+
+      device->DestroyBindingPool(pool);
+      device->DestroyBindingLayout(layout);
+    });
+    run("BindingSetRejectsUnexpectedVariableCount", "validation", [&] {
+      const BindingDesc binding{
+          .binding = 0, .type = BindingType::UniformBuffer, .count = 1,
+          .visibility = ShaderStage::Vertex};
+      auto layout = device->CreateBindingLayout(
+          {.bindings = &binding, .bindingCount = 1});
+      const BindingPoolSize poolSize{
+          .type = BindingType::UniformBuffer, .count = 1};
+      auto pool = device->CreateBindingPool(
+          {.poolSizes = &poolSize, .poolSizeCount = 1, .maxSets = 1});
+
+      expectRejected(
+          [&] { device->AllocateBindingSet(
+                    {.pool = pool, .layout = layout,
+                     .variableBindingCount = 1}); },
+          "requires a VariableCount binding");
+
       device->DestroyBindingPool(pool);
       device->DestroyBindingLayout(layout);
     });
@@ -2101,6 +2214,426 @@ int main(int argc, char **argv) {
       device->DestroyBindingPool(pool); device->DestroyBindingLayout(layout);
       device->DestroyShader(shader);
       if (actual != expected) throw std::runtime_error("nearest sampled texture differs from uploaded source");
+    });
+    run("BindlessVariableDescriptorCountPixelOutput", "shader", [&] {
+      constexpr uint32_t width = 8, height = 8;
+      constexpr uint32_t layoutMaximum = 8, allocatedCount = 3;
+      constexpr uint32_t leftSlot = 0, rightSlot = 2;
+      constexpr uint64_t byteCount = width * height * 4;
+      std::vector<uint8_t> leftPixels(byteCount), rightPixels(byteCount),
+          expected(byteCount);
+      for (uint32_t y = 0; y < height; ++y) {
+        for (uint32_t x = 0; x < width; ++x) {
+          const size_t offset = (y * width + x) * 4;
+          const uint8_t left[] = {static_cast<uint8_t>(x * 11 + 3),
+                                  static_cast<uint8_t>(y * 7 + 5), 37, 255};
+          const uint8_t right[] = {static_cast<uint8_t>(x * 17 + 9),
+                                   static_cast<uint8_t>(y * 19 + 1), 211, 255};
+          std::copy_n(left, 4, leftPixels.data() + offset);
+          std::copy_n(right, 4, rightPixels.data() + offset);
+          std::copy_n(x < width / 2 ? left : right, 4,
+                      expected.data() + offset);
+        }
+      }
+
+      const fs::path shaderRoot = fs::path(__FILE__).parent_path() / "shaders";
+      auto shader = CompileShader(*device,
+          shaderRoot / "bindless_variable_count.comp", ShaderStage::Compute,
+          "test.bindless.variable_count.cs");
+      const BindingDesc bindings[] = {
+          {.binding = 0, .type = BindingType::StorageImage, .count = 1,
+           .visibility = ShaderStage::Compute},
+          {.binding = 1, .type = BindingType::CombinedImageSampler,
+           .count = layoutMaximum, .visibility = ShaderStage::Compute,
+           .flags = BindingFlags::PartiallyBound | BindingFlags::VariableCount}};
+      auto layout = device->CreateBindingLayout(
+          {.bindings = bindings, .bindingCount = 2});
+      const BindingPoolSize poolSizes[] = {
+          {.type = BindingType::StorageImage, .count = 1},
+          {.type = BindingType::CombinedImageSampler, .count = allocatedCount}};
+      auto pool = device->CreateBindingPool(
+          {.poolSizes = poolSizes, .poolSizeCount = 2, .maxSets = 1});
+      auto set = device->AllocateBindingSet(
+          {.pool = pool, .layout = layout,
+           .variableBindingCount = allocatedCount});
+      auto pipeline = device->CreateComputePipeline({
+          .computeShader = shader,
+          .layout = {.descriptorSetLayouts = &layout,
+                     .descriptorSetLayoutCount = 1}});
+
+      auto leftImage = device->CreateImage({.width = width, .height = height,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::TransferDst | ImageUsage::Sampled});
+      auto rightImage = device->CreateImage({.width = width, .height = height,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::TransferDst | ImageUsage::Sampled});
+      auto outputImage = device->CreateImage({.width = width, .height = height,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::Storage | ImageUsage::TransferSrc});
+      auto leftView = device->CreateImageView(
+          {.image = leftImage, .format = Format::RGBA8_UNORM});
+      auto rightView = device->CreateImageView(
+          {.image = rightImage, .format = Format::RGBA8_UNORM});
+      auto outputView = device->CreateImageView(
+          {.image = outputImage, .format = Format::RGBA8_UNORM});
+      auto sampler = device->CreateSampler(
+          {.minFilter = Filter::Nearest, .magFilter = Filter::Nearest,
+           .addressU = SamplerAddressMode::ClampToEdge,
+           .addressV = SamplerAddressMode::ClampToEdge});
+      const BindingImageInfo leftInfo{.sampler = sampler, .imageView = leftView,
+                                      .imageLayout = ImageLayout::ShaderReadOnly};
+      const BindingImageInfo rightInfo{.sampler = sampler, .imageView = rightView,
+                                       .imageLayout = ImageLayout::ShaderReadOnly};
+      const BindingImageInfo outputInfo{.imageView = outputView,
+                                        .imageLayout = ImageLayout::General};
+      device->UpdateBindingSet({.dstSet = set, .binding = 0,
+          .type = BindingType::StorageImage, .imageInfo = &outputInfo});
+      device->UpdateBindingSet({.dstSet = set, .binding = 1,
+          .arrayElement = leftSlot, .type = BindingType::CombinedImageSampler,
+          .imageInfo = &leftInfo});
+      device->UpdateBindingSet({.dstSet = set, .binding = 1,
+          .arrayElement = rightSlot, .type = BindingType::CombinedImageSampler,
+          .imageInfo = &rightInfo});
+      auto leftUpload = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferSrc, .memoryUsage = MemoryUsage::CPUToGPU,
+          .initialData = leftPixels.data()});
+      auto rightUpload = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferSrc, .memoryUsage = MemoryUsage::CPUToGPU,
+          .initialData = rightPixels.data()});
+      auto readback = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferDst, .memoryUsage = MemoryUsage::GPUToCPU});
+
+      auto &commands = device->GetCommandList(); commands.Begin();
+      commands.Barrier(ImageBarrier{.image = leftImage,
+          .newLayout = ImageLayout::TransferDst});
+      commands.CopyBufferToImage(leftUpload, leftImage,
+          {.imageExtent = {width, height, 1}});
+      commands.Barrier(ImageBarrier{.image = leftImage,
+          .oldLayout = ImageLayout::TransferDst,
+          .newLayout = ImageLayout::ShaderReadOnly});
+      commands.Barrier(ImageBarrier{.image = rightImage,
+          .newLayout = ImageLayout::TransferDst});
+      commands.CopyBufferToImage(rightUpload, rightImage,
+          {.imageExtent = {width, height, 1}});
+      commands.Barrier(ImageBarrier{.image = rightImage,
+          .oldLayout = ImageLayout::TransferDst,
+          .newLayout = ImageLayout::ShaderReadOnly});
+      commands.Barrier(ImageBarrier{.image = outputImage,
+          .newLayout = ImageLayout::General});
+      commands.BindComputePipeline(pipeline);
+      commands.SetComputeBindings(pipeline, 0, set);
+      const uint32_t indices[] = {leftSlot, rightSlot};
+      commands.PushConstants(ShaderStage::Compute, 0, sizeof(indices), indices);
+      commands.Dispatch(width / 4, height / 4, 1);
+      commands.Barrier(ImageBarrier{.image = outputImage,
+          .oldLayout = ImageLayout::General,
+          .newLayout = ImageLayout::TransferSrc});
+      commands.CopyImageToBuffer(outputImage, readback,
+          {.imageExtent = {width, height, 1}});
+      commands.End(); device->Submit(); device->WaitIdle();
+      const auto *mapped = static_cast<const uint8_t *>(device->MapBuffer(readback));
+      std::vector<uint8_t> actual(mapped, mapped + byteCount);
+      publishPixelComparison(width, height, expected, actual);
+      device->UnmapBuffer(readback);
+      device->DestroyBuffer(readback); device->DestroyBuffer(rightUpload);
+      device->DestroyBuffer(leftUpload); device->DestroySampler(sampler);
+      device->DestroyImageView(outputView); device->DestroyImageView(rightView);
+      device->DestroyImageView(leftView); device->DestroyImage(outputImage);
+      device->DestroyImage(rightImage); device->DestroyImage(leftImage);
+      device->DestroyPipeline(pipeline); device->DestroyBindingPool(pool);
+      device->DestroyBindingLayout(layout); device->DestroyShader(shader);
+      if (actual != expected)
+        throw std::runtime_error("variable descriptor-count texture selection differs");
+    });
+    run("StorageImageUpdateAfterBindPixelOutput", "shader", [&] {
+      constexpr uint32_t width = 8, height = 8;
+      constexpr uint64_t byteCount = width * height * 4;
+      std::vector<uint8_t> zeroPixels(byteCount, 0), expected(byteCount);
+      for (uint32_t y = 0; y < height; ++y) for (uint32_t x = 0; x < width; ++x) {
+        const size_t offset = (y * width + x) * 4;
+        expected[offset] = static_cast<uint8_t>(x * 23 + 11);
+        expected[offset + 1] = static_cast<uint8_t>(y * 17 + 19);
+        expected[offset + 2] = static_cast<uint8_t>((x + y) * 13 + 7);
+        expected[offset + 3] = 255;
+      }
+      const fs::path shaderRoot = fs::path(__FILE__).parent_path() / "shaders";
+      auto shader = CompileShader(*device,
+          shaderRoot / "storage_image_update_after_bind.comp",
+          ShaderStage::Compute, "test.storage_image.update_after_bind.cs");
+      const BindingDesc binding{.binding = 0, .type = BindingType::StorageImage,
+          .count = 1, .visibility = ShaderStage::Compute,
+          .flags = BindingFlags::UpdateAfterBind};
+      auto layout = device->CreateBindingLayout(
+          {.bindings = &binding, .bindingCount = 1});
+      const BindingPoolSize poolSize{.type = BindingType::StorageImage, .count = 1};
+      auto pool = device->CreateBindingPool({.poolSizes = &poolSize,
+          .poolSizeCount = 1, .maxSets = 1,
+          .flags = BindingPoolFlags::UpdateAfterBind});
+      auto set = device->AllocateBindingSet({.pool = pool, .layout = layout});
+      auto pipeline = device->CreateComputePipeline({.computeShader = shader,
+          .layout = {.descriptorSetLayouts = &layout,
+                     .descriptorSetLayoutCount = 1}});
+      auto oldImage = device->CreateImage({.width = width, .height = height,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::TransferDst | ImageUsage::Storage | ImageUsage::TransferSrc});
+      auto newImage = device->CreateImage({.width = width, .height = height,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::TransferDst | ImageUsage::Storage | ImageUsage::TransferSrc});
+      auto oldView = device->CreateImageView(
+          {.image = oldImage, .format = Format::RGBA8_UNORM});
+      auto newView = device->CreateImageView(
+          {.image = newImage, .format = Format::RGBA8_UNORM});
+      const BindingImageInfo oldInfo{.imageView = oldView,
+                                     .imageLayout = ImageLayout::General};
+      const BindingImageInfo newInfo{.imageView = newView,
+                                     .imageLayout = ImageLayout::General};
+      device->UpdateBindingSet({.dstSet = set, .binding = 0,
+          .type = BindingType::StorageImage, .imageInfo = &oldInfo});
+      auto zeroUpload = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferSrc, .memoryUsage = MemoryUsage::CPUToGPU,
+          .initialData = zeroPixels.data()});
+      auto oldReadback = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferDst, .memoryUsage = MemoryUsage::GPUToCPU});
+      auto newReadback = device->CreateBuffer({.size = byteCount,
+          .usage = BufferUsage::TransferDst, .memoryUsage = MemoryUsage::GPUToCPU});
+      auto &commands = device->GetCommandList(); commands.Begin();
+      for (auto image : {oldImage, newImage}) {
+        commands.Barrier(ImageBarrier{.image = image,
+            .newLayout = ImageLayout::TransferDst});
+        commands.CopyBufferToImage(zeroUpload, image,
+            {.imageExtent = {width, height, 1}});
+        commands.Barrier(ImageBarrier{.image = image,
+            .oldLayout = ImageLayout::TransferDst,
+            .newLayout = ImageLayout::General});
+      }
+      commands.BindComputePipeline(pipeline);
+      commands.SetComputeBindings(pipeline, 0, set);
+      commands.Dispatch(width / 4, height / 4, 1);
+      for (const auto &[image, readback] :
+           {std::pair{oldImage, oldReadback}, std::pair{newImage, newReadback}}) {
+        commands.Barrier(ImageBarrier{.image = image,
+            .oldLayout = ImageLayout::General,
+            .newLayout = ImageLayout::TransferSrc});
+        commands.CopyImageToBuffer(image, readback,
+            {.imageExtent = {width, height, 1}});
+      }
+      commands.End();
+      device->UpdateBindingSet({.dstSet = set, .binding = 0,
+          .type = BindingType::StorageImage, .imageInfo = &newInfo});
+      device->Submit(); device->WaitIdle();
+      const auto *oldMapped = static_cast<const uint8_t *>(device->MapBuffer(oldReadback));
+      std::vector<uint8_t> oldActual(oldMapped, oldMapped + byteCount);
+      device->UnmapBuffer(oldReadback);
+      const auto *newMapped = static_cast<const uint8_t *>(device->MapBuffer(newReadback));
+      std::vector<uint8_t> newActual(newMapped, newMapped + byteCount);
+      publishPixelComparison(width, height, expected, newActual);
+      device->UnmapBuffer(newReadback);
+      device->DestroyBuffer(newReadback); device->DestroyBuffer(oldReadback);
+      device->DestroyBuffer(zeroUpload); device->DestroyImageView(newView);
+      device->DestroyImageView(oldView); device->DestroyImage(newImage);
+      device->DestroyImage(oldImage); device->DestroyPipeline(pipeline);
+      device->DestroyBindingPool(pool); device->DestroyBindingLayout(layout);
+      device->DestroyShader(shader);
+      if (oldActual != zeroPixels)
+        throw std::runtime_error("old storage image was modified after descriptor retarget");
+      if (newActual != expected)
+        throw std::runtime_error("updated storage image did not receive compute output");
+    });
+    run("BindlessTextureUpdateAfterBindPixelOutput", "shader", [&] {
+      constexpr uint32_t width = 8, height = 8;
+      constexpr uint32_t textureCount = 8;
+      constexpr uint32_t initialSlot = 2;
+      constexpr uint32_t updatedSlot = 5;
+      constexpr uint64_t byteCount = width * height * 4;
+
+      std::vector<uint8_t> initialPixels(byteCount);
+      std::vector<uint8_t> updatedPixels(byteCount);
+      std::vector<uint8_t> expected(byteCount);
+      for (uint32_t y = 0; y < height; ++y) {
+        for (uint32_t x = 0; x < width; ++x) {
+          const size_t offset = (y * width + x) * 4;
+          initialPixels[offset] = static_cast<uint8_t>(x * 13 + 17);
+          initialPixels[offset + 1] = static_cast<uint8_t>(y * 9 + 23);
+          initialPixels[offset + 2] = 41;
+          initialPixels[offset + 3] = 255;
+
+          updatedPixels[offset] = static_cast<uint8_t>(x * 19 + 5);
+          updatedPixels[offset + 1] = static_cast<uint8_t>(y * 21 + 7);
+          updatedPixels[offset + 2] = ((x + y) & 1) ? 231 : 29;
+          updatedPixels[offset + 3] = 255;
+
+          const auto &selectedPixels =
+              x < width / 2 ? initialPixels : updatedPixels;
+          std::copy_n(selectedPixels.data() + offset, 4,
+                      expected.data() + offset);
+        }
+      }
+
+      const fs::path shaderRoot = fs::path(__FILE__).parent_path() / "shaders";
+      auto shader = CompileShader(*device, shaderRoot / "bindless_texture.comp",
+                                  ShaderStage::Compute, "test.bindless.cs");
+      const BindingDesc bindings[] = {
+          {.binding = 0,
+           .type = BindingType::CombinedImageSampler,
+           .count = textureCount,
+           .visibility = ShaderStage::Compute,
+           .flags = BindingFlags::PartiallyBound |
+                    BindingFlags::UpdateAfterBind},
+          {.binding = 1,
+           .type = BindingType::StorageImage,
+           .count = 1,
+           .visibility = ShaderStage::Compute}};
+      auto layout = device->CreateBindingLayout(
+          {.bindings = bindings, .bindingCount = 2});
+      const BindingPoolSize poolSizes[] = {
+          {.type = BindingType::CombinedImageSampler, .count = textureCount},
+          {.type = BindingType::StorageImage, .count = 1}};
+      auto pool = device->CreateBindingPool(
+          {.poolSizes = poolSizes,
+           .poolSizeCount = 2,
+           .maxSets = 1,
+           .flags = BindingPoolFlags::UpdateAfterBind});
+      auto set = device->AllocateBindingSet({.pool = pool, .layout = layout});
+      auto pipeline = device->CreateComputePipeline({
+          .computeShader = shader,
+          .layout = {.descriptorSetLayouts = &layout,
+                     .descriptorSetLayoutCount = 1}});
+
+      auto initialImage = device->CreateImage(
+          {.width = width,
+           .height = height,
+           .format = Format::RGBA8_UNORM,
+           .usage = ImageUsage::TransferDst | ImageUsage::Sampled});
+      auto updatedImage = device->CreateImage(
+          {.width = width,
+           .height = height,
+           .format = Format::RGBA8_UNORM,
+           .usage = ImageUsage::TransferDst | ImageUsage::Sampled});
+      auto outputImage = device->CreateImage(
+          {.width = width,
+           .height = height,
+           .format = Format::RGBA8_UNORM,
+           .usage = ImageUsage::Storage | ImageUsage::TransferSrc});
+      auto initialView = device->CreateImageView(
+          {.image = initialImage, .format = Format::RGBA8_UNORM});
+      auto updatedView = device->CreateImageView(
+          {.image = updatedImage, .format = Format::RGBA8_UNORM});
+      auto outputView = device->CreateImageView(
+          {.image = outputImage, .format = Format::RGBA8_UNORM});
+      auto sampler = device->CreateSampler(
+          {.minFilter = Filter::Nearest,
+           .magFilter = Filter::Nearest,
+           .addressU = SamplerAddressMode::ClampToEdge,
+           .addressV = SamplerAddressMode::ClampToEdge});
+
+      const BindingImageInfo initialInfo{
+          .sampler = sampler,
+          .imageView = initialView,
+          .imageLayout = ImageLayout::ShaderReadOnly};
+      const BindingImageInfo updatedInfo{
+          .sampler = sampler,
+          .imageView = updatedView,
+          .imageLayout = ImageLayout::ShaderReadOnly};
+      const BindingImageInfo outputInfo{
+          .imageView = outputView, .imageLayout = ImageLayout::General};
+      device->UpdateBindingSet(
+          {.dstSet = set,
+           .binding = 0,
+           .arrayElement = initialSlot,
+           .type = BindingType::CombinedImageSampler,
+           .imageInfo = &initialInfo});
+      device->UpdateBindingSet(
+          {.dstSet = set,
+           .binding = 1,
+           .type = BindingType::StorageImage,
+           .imageInfo = &outputInfo});
+
+      auto initialUpload = device->CreateBuffer(
+          {.size = byteCount,
+           .usage = BufferUsage::TransferSrc,
+           .memoryUsage = MemoryUsage::CPUToGPU,
+           .initialData = initialPixels.data()});
+      auto updatedUpload = device->CreateBuffer(
+          {.size = byteCount,
+           .usage = BufferUsage::TransferSrc,
+           .memoryUsage = MemoryUsage::CPUToGPU,
+           .initialData = updatedPixels.data()});
+      auto readback = device->CreateBuffer(
+          {.size = byteCount,
+           .usage = BufferUsage::TransferDst,
+           .memoryUsage = MemoryUsage::GPUToCPU});
+
+      auto &commands = device->GetCommandList();
+      commands.Begin();
+      commands.Barrier(ImageBarrier{
+          .image = initialImage, .newLayout = ImageLayout::TransferDst});
+      commands.CopyBufferToImage(
+          initialUpload, initialImage, {.imageExtent = {width, height, 1}});
+      commands.Barrier(ImageBarrier{
+          .image = initialImage,
+          .oldLayout = ImageLayout::TransferDst,
+          .newLayout = ImageLayout::ShaderReadOnly});
+      commands.Barrier(ImageBarrier{
+          .image = updatedImage, .newLayout = ImageLayout::TransferDst});
+      commands.CopyBufferToImage(
+          updatedUpload, updatedImage, {.imageExtent = {width, height, 1}});
+      commands.Barrier(ImageBarrier{
+          .image = updatedImage,
+          .oldLayout = ImageLayout::TransferDst,
+          .newLayout = ImageLayout::ShaderReadOnly});
+      commands.Barrier(ImageBarrier{
+          .image = outputImage, .newLayout = ImageLayout::General});
+      commands.BindComputePipeline(pipeline);
+      commands.SetComputeBindings(pipeline, 0, set);
+      const uint32_t textureIndices[] = {initialSlot, updatedSlot};
+      commands.PushConstants(ShaderStage::Compute, 0, sizeof(textureIndices),
+                             textureIndices);
+      commands.Dispatch(width / 4, height / 4, 1);
+      commands.Barrier(ImageBarrier{
+          .image = outputImage,
+          .oldLayout = ImageLayout::General,
+          .newLayout = ImageLayout::TransferSrc});
+      commands.CopyImageToBuffer(
+          outputImage, readback, {.imageExtent = {width, height, 1}});
+      commands.End();
+
+      // The command buffer already contains the descriptor-set bind. Updating
+      // sparse slot 5 here specifically exercises update-after-bind, while the
+      // dispatch selects both slots 2 and 5 across different invocations.
+      device->UpdateBindingSet(
+          {.dstSet = set,
+           .binding = 0,
+           .arrayElement = updatedSlot,
+           .type = BindingType::CombinedImageSampler,
+           .imageInfo = &updatedInfo});
+
+      device->Submit();
+      device->WaitIdle();
+      const auto *mapped =
+          static_cast<const uint8_t *>(device->MapBuffer(readback));
+      std::vector<uint8_t> actual(mapped, mapped + byteCount);
+      publishPixelComparison(width, height, expected, actual);
+      device->UnmapBuffer(readback);
+
+      device->DestroyBuffer(readback);
+      device->DestroyBuffer(updatedUpload);
+      device->DestroyBuffer(initialUpload);
+      device->DestroySampler(sampler);
+      device->DestroyImageView(outputView);
+      device->DestroyImageView(updatedView);
+      device->DestroyImageView(initialView);
+      device->DestroyImage(outputImage);
+      device->DestroyImage(updatedImage);
+      device->DestroyImage(initialImage);
+      device->DestroyPipeline(pipeline);
+      device->DestroyBindingPool(pool);
+      device->DestroyBindingLayout(layout);
+      device->DestroyShader(shader);
+
+      if (actual != expected) {
+        throw std::runtime_error(
+            "bindless update-after-bind sampled the wrong sparse texture slot");
+      }
     });
     run("ScissorPixelOutput", "shader", [&] {
       constexpr uint32_t width = 8, height = 8;

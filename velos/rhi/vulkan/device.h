@@ -81,6 +81,15 @@ struct Sampler {
 struct BindingLayout {
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   bool usesUpdateAfterBind = false;
+  struct BindingMetadata {
+    BindingType type = BindingType::UniformBuffer;
+    u32 maximumCount = 0;
+    BindingFlags flags = BindingFlags::None;
+  };
+  std::unordered_map<u32, BindingMetadata> bindings;
+  bool hasVariableCountBinding = false;
+  u32 variableCountBinding = 0;
+  u32 variableCountMaximum = 0;
 };
 
 struct BindingPool {
@@ -92,6 +101,7 @@ struct BindingSet {
   VkDescriptorSet set = VK_NULL_HANDLE;
   BindingLayoutHandle layout;
   BindingPoolHandle pool;
+  u32 variableBindingCount = 0;
 };
 
 struct QueryPool {
