@@ -173,4 +173,10 @@ struct BindingWriteDesc {
   const BindingImageInfo *imageInfo = nullptr;
   u32 descriptorCount = 1;
 };
+
+struct GeneratedPipelineLayout {
+	std::vector<RHI::BindingLayoutHandle> setLayouts;
+	std::vector<RHI::BindingLayoutHandle> ownedSetLayouts;
+};
+
 }; // namespace Velos::RHI

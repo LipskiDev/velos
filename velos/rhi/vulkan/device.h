@@ -84,6 +84,7 @@ struct BindingLayout {
   struct BindingMetadata {
     BindingType type = BindingType::UniformBuffer;
     u32 maximumCount = 0;
+    ShaderStage visibility = ShaderStage::None;
     BindingFlags flags = BindingFlags::None;
   };
   std::unordered_map<u32, BindingMetadata> bindings;
@@ -197,6 +198,11 @@ public:
   CreateUploadContext(u64 stagingBufferSize = 1024 * 16 * 1024) override;
 
   void DumpLiveResources() const;
+
+  GeneratedPipelineLayout BuildPipelineLayout(
+      const PipelineReflectionData& reflection,
+      const PipelineLayoutOverrides& overrides = {}
+  ) override;
 
 private:
   u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) const;

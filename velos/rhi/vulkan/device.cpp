@@ -75,6 +75,119 @@ void Device::DumpLiveResources() const {
   std::cout << "=====================================\n";
 }
 
+GeneratedPipelineLayout
+Device::BuildPipelineLayout(const PipelineReflectionData &reflection,
+                            const PipelineLayoutOverrides &overrides) {
+  GeneratedPipelineLayout result{};
+
+  if (reflection.resources.empty() && overrides.existingSetLayouts.empty()) {
+    return result;
+  }
+
+  u32 highestSet = 0;
+  for (const auto &resource : reflection.resources) {
+    highestSet = std::max(highestSet, resource.set);
+  }
+  for (const auto &[set, layout] : overrides.existingSetLayouts) {
+    if (!layout.IsValid()) {
+      throw std::runtime_error(
+          "BuildPipelineLayout: override contains an invalid binding layout");
+    }
+    highestSet = std::max(highestSet, set);
+  }
+
+  result.setLayouts.resize(highestSet + 1);
+
+  try {
+    for (u32 set = 0; set <= highestSet; ++set) {
+      std::vector<RHI::BindingDesc> bindings;
+
+      for (const auto &resource : reflection.resources) {
+        if (resource.set != set) {
+          continue;
+        }
+
+        if (resource.arraySize == 0 && !resource.runtimeArray) {
+          throw std::runtime_error("BuildPipelineLayout: reflected descriptor "
+                                   "count must be greater than zero");
+        }
+
+        bindings.push_back({
+            .binding = resource.binding,
+            .type = ToBindingType(resource.type),
+            .count = resource.arraySize,
+            .visibility = resource.stage,
+            .flags = RHI::BindingFlags::None,
+        });
+      }
+
+      std::sort(bindings.begin(), bindings.end(),
+                [](const RHI::BindingDesc &lhs, const RHI::BindingDesc &rhs) {
+                  return lhs.binding < rhs.binding;
+                });
+
+      const auto overrideIt = overrides.existingSetLayouts.find(set);
+      if (overrideIt != overrides.existingSetLayouts.end()) {
+        const BindingLayout &existing = GetBindingLayout(overrideIt->second);
+        if (existing.bindings.size() != bindings.size()) {
+          throw std::runtime_error("BuildPipelineLayout: override binding "
+                                   "count does not match reflection for set " +
+                                   std::to_string(set));
+        }
+
+        for (const auto &resource : reflection.resources) {
+          if (resource.set != set) {
+            continue;
+          }
+
+          const auto bindingIt = existing.bindings.find(resource.binding);
+          if (bindingIt == existing.bindings.end() ||
+              bindingIt->second.type != ToBindingType(resource.type) ||
+              (bindingIt->second.visibility & resource.stage) !=
+                  resource.stage ||
+              (resource.runtimeArray && bindingIt->second.maximumCount == 0) ||
+              (!resource.runtimeArray &&
+               bindingIt->second.maximumCount != resource.arraySize)) {
+            throw std::runtime_error("BuildPipelineLayout: override is "
+                                     "incompatible with reflected set " +
+                                     std::to_string(set) + ", binding " +
+                                     std::to_string(resource.binding));
+          }
+        }
+
+        result.setLayouts[set] = overrideIt->second;
+        continue;
+      }
+
+      const auto runtimeIt =
+          std::find_if(reflection.resources.begin(), reflection.resources.end(),
+                       [set](const ShaderResourceBinding &resource) {
+                         return resource.set == set && resource.runtimeArray;
+                       });
+      if (runtimeIt != reflection.resources.end()) {
+        throw std::runtime_error(
+            "BuildPipelineLayout: runtime descriptor array at set " +
+            std::to_string(set) + " requires an existing layout override");
+      }
+
+      const BindingLayoutHandle layout = CreateBindingLayout({
+          .bindings = bindings.empty() ? nullptr : bindings.data(),
+          .bindingCount = static_cast<u32>(bindings.size()),
+          .debugName = "Reflected pipeline binding layout",
+      });
+      result.setLayouts[set] = layout;
+      result.ownedSetLayouts.push_back(layout);
+    }
+  } catch (...) {
+    for (BindingLayoutHandle layout : result.ownedSetLayouts) {
+      DestroyBindingLayout(layout);
+    }
+    throw;
+  }
+
+  return result;
+}
+
 Device::Device(const DeviceDesc &desc) {
   VL_PROFILE_ZONE_N("Device::Device");
 
@@ -182,8 +295,7 @@ Device::~Device() {
   }
 }
 
-QueryPoolHandle
-Device::CreateTimestampQueryPool(const QueryPoolDesc &desc) {
+QueryPoolHandle Device::CreateTimestampQueryPool(const QueryPoolDesc &desc) {
   if (desc.queryCount == 0) {
     throw std::runtime_error(
         "CreateTimestampQueryPool: queryCount must be greater than zero");
@@ -230,10 +342,10 @@ bool Device::GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
     throw std::runtime_error("GetTimestampQueryResults: invalid range");
   }
 
-  const VkResult result = vkGetQueryPoolResults(
-      device_, queryPool.pool, firstQuery, queryCount,
-      static_cast<size_t>(queryCount) * sizeof(u64), results, sizeof(u64),
-      VK_QUERY_RESULT_64_BIT);
+  const VkResult result =
+      vkGetQueryPoolResults(device_, queryPool.pool, firstQuery, queryCount,
+                            static_cast<size_t>(queryCount) * sizeof(u64),
+                            results, sizeof(u64), VK_QUERY_RESULT_64_BIT);
   if (result == VK_NOT_READY) {
     return false;
   }
@@ -409,18 +521,21 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
   vkGetPhysicalDeviceFeatures2(device, &features2);
 
   return vulkan13Features.dynamicRendering == VK_TRUE &&
-      vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
-      vulkan12Features.drawIndirectCount == VK_TRUE &&
-      vulkan11Features.shaderDrawParameters == VK_TRUE &&
-      features2.features.multiDrawIndirect == VK_TRUE &&
-      vulkan12Features.bufferDeviceAddress == VK_TRUE &&
-      vulkan12Features.descriptorBindingPartiallyBound == VK_TRUE &&
-      vulkan12Features.runtimeDescriptorArray == VK_TRUE &&
-      vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE &&
-      vulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE &&
-      vulkan12Features.descriptorBindingStorageImageUpdateAfterBind == VK_TRUE &&
-      vulkan12Features.descriptorBindingVariableDescriptorCount == VK_TRUE &&
-      vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
+         vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
+         vulkan12Features.drawIndirectCount == VK_TRUE &&
+         vulkan11Features.shaderDrawParameters == VK_TRUE &&
+         features2.features.multiDrawIndirect == VK_TRUE &&
+         vulkan12Features.bufferDeviceAddress == VK_TRUE &&
+         vulkan12Features.descriptorBindingPartiallyBound == VK_TRUE &&
+         vulkan12Features.runtimeDescriptorArray == VK_TRUE &&
+         vulkan12Features.shaderSampledImageArrayNonUniformIndexing ==
+             VK_TRUE &&
+         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind ==
+             VK_TRUE &&
+         vulkan12Features.descriptorBindingStorageImageUpdateAfterBind ==
+             VK_TRUE &&
+         vulkan12Features.descriptorBindingVariableDescriptorCount == VK_TRUE &&
+         vulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
 }
 
 u32 ScoreGPU(VkPhysicalDevice device) {
@@ -488,8 +603,8 @@ void Device::PickPhysicalDevice() {
 
   vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties_);
 
-  std::cout << "[Device] Selected GPU: "
-            << physicalDeviceProperties_.deviceName << "\n";
+  std::cout << "[Device] Selected GPU: " << physicalDeviceProperties_.deviceName
+            << "\n";
 
   std::cout << "[Device] API version: "
             << VK_VERSION_MAJOR(physicalDeviceProperties_.apiVersion) << "."
@@ -531,7 +646,6 @@ void Device::CreateLogicalDevice() {
   queueCreateInfo.queueFamilyIndex = graphicsQueueFamily_;
   queueCreateInfo.queueCount = 1;
   queueCreateInfo.pQueuePriorities = &queuePriority;
-
 
   VkPhysicalDeviceFeatures deviceFeatures{};
   deviceFeatures.multiDrawIndirect = VK_TRUE;
@@ -618,8 +732,7 @@ void Device::CreateCommandObjects() {
 #endif
 
   for (u32 i = 0; i < k_MaxFramesInFlight; i++) {
-    commandLists_[i] =
-        std::make_unique<CommandList>(*this, commandBuffers_[i]);
+    commandLists_[i] = std::make_unique<CommandList>(*this, commandBuffers_[i]);
   }
 }
 
@@ -688,7 +801,7 @@ Device::CreateUploadContext(u64 stagingBufferSize) {
 }
 
 u32 Device::FindMemoryType(u32 typeFilter,
-                                 VkMemoryPropertyFlags properties) const {
+                           VkMemoryPropertyFlags properties) const {
   VkPhysicalDeviceMemoryProperties memProperties{};
   vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
 
@@ -709,8 +822,8 @@ SwapchainHandle Device::CreateSwapchain(const SwapchainDesc &desc) {
     throw std::runtime_error("Only one swapchain is supported for now");
   }
 
-  swapchain_ = std::make_unique<Swapchain>(
-      instance_, physicalDevice_, device_, presentQueueFamily_, desc);
+  swapchain_ = std::make_unique<Swapchain>(instance_, physicalDevice_, device_,
+                                           presentQueueFamily_, desc);
 
   swapchainImageHandles_.clear();
   swapchainImageViewHandles_.clear();
@@ -756,8 +869,7 @@ SwapchainHandle Device::CreateSwapchain(const SwapchainDesc &desc) {
   return SwapchainHandle{1};
 }
 
-void Device::ClearCurrentSwapchainImage(float r, float g, float b,
-                                              float a) {
+void Device::ClearCurrentSwapchainImage(float r, float g, float b, float a) {
   VL_PROFILE_ZONE_N("Device::ClearCurrentSwapchainImage");
   if (!swapchain_) {
     throw std::runtime_error("No swapchain available to clear");
@@ -765,8 +877,7 @@ void Device::ClearCurrentSwapchainImage(float r, float g, float b,
 
   VkCommandBuffer cmd = commandBuffers_[currentFrame_];
 
-  const SwapchainImage &image =
-      swapchain_->GetImage(currentBackbufferIndex_);
+  const SwapchainImage &image = swapchain_->GetImage(currentBackbufferIndex_);
 
   VkImageMemoryBarrier toTransfer{};
   toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -849,8 +960,7 @@ void Device::DestroySwapchain(SwapchainHandle handle) {
   swapchain_.reset();
 }
 
-void Device::ResizeSwapchain(SwapchainHandle handle, u32 width,
-                                   u32 height) {
+void Device::ResizeSwapchain(SwapchainHandle handle, u32 width, u32 height) {
   VL_PROFILE_ZONE_N("Device::ResizeSwapchain");
 
   if (!handle.IsValid()) {
@@ -886,8 +996,8 @@ void Device::ResizeSwapchain(SwapchainHandle handle, u32 width,
 
   swapchain_.reset();
 
-  swapchain_ = std::make_unique<Swapchain>(
-      instance_, physicalDevice_, device_, presentQueueFamily_, desc);
+  swapchain_ = std::make_unique<Swapchain>(instance_, physicalDevice_, device_,
+                                           presentQueueFamily_, desc);
 
   for (u32 i = 0; i < swapchain_->GetImageCount(); ++i) {
     const SwapchainImage &swapImage = swapchain_->GetImage(i);
@@ -1061,7 +1171,8 @@ void *Device::MapBuffer(BufferHandle handle) {
 void Device::UnmapBuffer(BufferHandle handle) {
   const Buffer &buffer = GetBuffer(handle);
   if (buffer.memoryUsage == MemoryUsage::GPUOnly) {
-    throw std::runtime_error("UnmapBuffer: GPUOnly buffers are not host visible");
+    throw std::runtime_error(
+        "UnmapBuffer: GPUOnly buffers are not host visible");
   }
   if (buffer.memoryUsage == MemoryUsage::CPUToGPU) {
     vmaFlushAllocation(allocator_, buffer.allocation, 0, buffer.size);
@@ -1212,7 +1323,7 @@ const Image &Device::GetImage(ImageHandle handle) const {
 }
 
 void Device::SetImageLayout(ImageHandle handle, u32 baseMipLevel,
-                                  u32 mipLevelCount, ImageLayout layout) {
+                            u32 mipLevelCount, ImageLayout layout) {
   auto it = images_.find(handle.id);
   if (it == images_.end()) {
     throw std::runtime_error("Invalid image handle");
@@ -1338,8 +1449,7 @@ void Device::DestroyImageView(ImageViewHandle handle) {
   imageViews_.erase(it);
 }
 
-const ImageView &
-Device::GetImageView(ImageViewHandle handle) const {
+const ImageView &Device::GetImageView(ImageViewHandle handle) const {
   auto it = imageViews_.find(handle.id);
   if (it == imageViews_.end()) {
     throw std::runtime_error("Invalid image view handle");
@@ -1429,9 +1539,9 @@ ShaderHandle Device::CreateShader(const ShaderDesc &desc) {
 
   const u32 handleId = nextShaderHandle_++;
   shaders_.emplace(handleId, Shader{.module = shaderModule,
-                                          .stage = desc.stage,
-                                          .reflection = desc.reflection,
-                                          .entryPoint = desc.entryPoint});
+                                    .stage = desc.stage,
+                                    .reflection = desc.reflection,
+                                    .entryPoint = desc.entryPoint});
 
   return ShaderHandle{handleId};
 }
@@ -1671,8 +1781,7 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
     BindingLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
-    const BindingLayout &vkLayout =
-        descriptorSetLayouts_[handle.id];
+    const BindingLayout &vkLayout = descriptorSetLayouts_[handle.id];
     vkSetLayouts.push_back(vkLayout.layout);
   }
 
@@ -1752,8 +1861,8 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   }
 
   const u32 handleId = nextPipelineHandle_++;
-  pipelines_.emplace(
-      handleId, Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
+  pipelines_.emplace(handleId,
+                     Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
 
   return PipelineHandle{handleId};
 }
@@ -1781,8 +1890,7 @@ void Device::DestroyPipeline(PipelineHandle handle) {
   pipelines_.erase(it);
 }
 
-PipelineHandle
-Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
+PipelineHandle Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
   VL_PROFILE_ZONE_N("Device::CreateComputePipeline");
 
   if (!desc.computeShader.IsValid()) {
@@ -1815,8 +1923,7 @@ Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
   for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
     BindingLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
 
-    const BindingLayout &vkLayout =
-        descriptorSetLayouts_.at(handle.id);
+    const BindingLayout &vkLayout = descriptorSetLayouts_.at(handle.id);
 
     vkSetLayouts.push_back(vkLayout.layout);
   }
@@ -1852,8 +1959,8 @@ Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
   }
 
   const u32 handleId = nextPipelineHandle_++;
-  pipelines_.emplace(
-      handleId, Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
+  pipelines_.emplace(handleId,
+                     Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
 
   return PipelineHandle{handleId};
 }
@@ -1867,8 +1974,7 @@ const Pipeline &Device::GetPipeline(PipelineHandle handle) const {
   return it->second;
 }
 
-BindingLayoutHandle
-Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
+BindingLayoutHandle Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   if (desc.bindingCount > 0 && desc.bindings == nullptr) {
     throw std::runtime_error(
         "CreateBindingLayout: bindings is null when bindingCount is non-zero");
@@ -1913,8 +2019,8 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
             "CreateBindingLayout: only one binding may use VariableCount");
       }
       if (binding.binding != highestBinding) {
-        throw std::runtime_error(
-            "CreateBindingLayout: VariableCount must be used by the numerically highest binding");
+        throw std::runtime_error("CreateBindingLayout: VariableCount must be "
+                                 "used by the numerically highest binding");
       }
       hasVariableCountBinding = true;
       variableCountBinding = binding.binding;
@@ -1927,8 +2033,8 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
       case BindingType::StorageImage:
         break;
       default:
-        throw std::runtime_error(
-            "CreateBindingLayout: UpdateAfterBind is not enabled for this binding type");
+        throw std::runtime_error("CreateBindingLayout: UpdateAfterBind is not "
+                                 "enabled for this binding type");
       }
     }
 
@@ -1944,16 +2050,16 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
     VkDescriptorBindingFlags flags = 0;
 
     if (HasFlag(binding.flags, BindingFlags::PartiallyBound)) {
-        flags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+      flags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     }
 
     if (HasFlag(binding.flags, BindingFlags::VariableCount)) {
-        flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+      flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
     }
 
     if (HasFlag(binding.flags, BindingFlags::UpdateAfterBind)) {
-        flags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
-        usesUpdateAfterBind = true;
+      flags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+      usesUpdateAfterBind = true;
     }
 
     usesBindingFlags |= flags != 0;
@@ -1962,6 +2068,7 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
         binding.binding,
         BindingLayout::BindingMetadata{.type = binding.type,
                                        .maximumCount = binding.count,
+                                       .visibility = binding.visibility,
                                        .flags = binding.flags});
   }
 
@@ -1976,11 +2083,12 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   createInfo.pBindings = vkBindings.data();
 
   if (usesBindingFlags) {
-      createInfo.pNext = &fci;
+    createInfo.pNext = &fci;
   }
 
   if (usesUpdateAfterBind) {
-      createInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    createInfo.flags =
+        VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
   }
 
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
@@ -1991,18 +2099,18 @@ Device::CreateBindingLayout(const BindingLayoutDesc &desc) {
   const u32 handleId = nextBindingLayoutHandle_++;
 
   descriptorSetLayouts_.emplace(
-      handleId, BindingLayout{.layout = layout,
-                              .usesUpdateAfterBind = usesUpdateAfterBind,
-                              .bindings = std::move(bindingMetadata),
-                              .hasVariableCountBinding = hasVariableCountBinding,
-                              .variableCountBinding = variableCountBinding,
-                              .variableCountMaximum = variableCountMaximum});
+      handleId,
+      BindingLayout{.layout = layout,
+                    .usesUpdateAfterBind = usesUpdateAfterBind,
+                    .bindings = std::move(bindingMetadata),
+                    .hasVariableCountBinding = hasVariableCountBinding,
+                    .variableCountBinding = variableCountBinding,
+                    .variableCountMaximum = variableCountMaximum});
 
   return BindingLayoutHandle{handleId};
 }
 
-void Device::DestroyBindingLayout(
-    BindingLayoutHandle handle) {
+void Device::DestroyBindingLayout(BindingLayoutHandle handle) {
   if (!handle.IsValid()) {
     return;
   }
@@ -2030,8 +2138,7 @@ Device::GetBindingLayout(BindingLayoutHandle handle) const {
   return it->second;
 }
 
-BindingPoolHandle
-Device::CreateBindingPool(const BindingPoolDesc &desc) {
+BindingPoolHandle Device::CreateBindingPool(const BindingPoolDesc &desc) {
   std::vector<VkDescriptorPoolSize> vkPoolSizes;
   vkPoolSizes.reserve(desc.poolSizeCount);
 
@@ -2050,8 +2157,7 @@ Device::CreateBindingPool(const BindingPoolDesc &desc) {
   createInfo.pPoolSizes = vkPoolSizes.data();
   createInfo.maxSets = desc.maxSets;
   if (HasFlag(desc.flags, BindingPoolFlags::UpdateAfterBind)) {
-      createInfo.flags |=
-          VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    createInfo.flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
   }
 
   VkDescriptorPool pool = VK_NULL_HANDLE;
@@ -2059,7 +2165,11 @@ Device::CreateBindingPool(const BindingPoolDesc &desc) {
            "vkCreateDescriptorPool: failed to create Descriptor Pool");
   const u32 handleId = nextBindingPoolHandle_++;
 
-  descriptorPools_.emplace(handleId, BindingPool{.pool = pool, .supportsUpdateAfterBind = HasFlag(desc.flags, BindingPoolFlags::UpdateAfterBind)});
+  descriptorPools_.emplace(
+      handleId,
+      BindingPool{.pool = pool,
+                  .supportsUpdateAfterBind =
+                      HasFlag(desc.flags, BindingPoolFlags::UpdateAfterBind)});
 
   return BindingPoolHandle{handleId};
 }
@@ -2090,8 +2200,7 @@ void Device::DestroyBindingPool(BindingPoolHandle handle) {
   descriptorPools_.erase(it);
 }
 
-const BindingPool &
-Device::GetBindingPool(BindingPoolHandle handle) const {
+const BindingPool &Device::GetBindingPool(BindingPoolHandle handle) const {
   auto it = descriptorPools_.find(handle.id);
   if (it == descriptorPools_.end()) {
     throw std::runtime_error("Invalid binding pool handle");
@@ -2101,17 +2210,18 @@ Device::GetBindingPool(BindingPoolHandle handle) const {
 }
 
 BindingSetHandle
-Device::AllocateBindingSet(const BindingSetAllocationDesc& desc) {
+Device::AllocateBindingSet(const BindingSetAllocationDesc &desc) {
   const BindingPool &vkPool = GetBindingPool(desc.pool);
   const BindingLayout &vkLayout = GetBindingLayout(desc.layout);
 
   if (vkLayout.usesUpdateAfterBind && !vkPool.supportsUpdateAfterBind) {
-      throw std::runtime_error("Update-after-bind layout requires compatible binding pool");
+    throw std::runtime_error(
+        "Update-after-bind layout requires compatible binding pool");
   }
 
   if (!vkLayout.hasVariableCountBinding && desc.variableBindingCount > 0) {
-    throw std::runtime_error(
-        "AllocateBindingSet: variableBindingCount requires a VariableCount binding");
+    throw std::runtime_error("AllocateBindingSet: variableBindingCount "
+                             "requires a VariableCount binding");
   }
 
   if (vkLayout.hasVariableCountBinding &&
@@ -2128,26 +2238,26 @@ Device::AllocateBindingSet(const BindingSetAllocationDesc& desc) {
 
   VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
   if (desc.variableBindingCount > 0) {
-      countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
-      countInfo.descriptorSetCount = 1;
-      countInfo.pDescriptorCounts = &desc.variableBindingCount;
+    countInfo.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+    countInfo.descriptorSetCount = 1;
+    countInfo.pDescriptorCounts = &desc.variableBindingCount;
 
-      allocInfo.pNext = &countInfo;
+    allocInfo.pNext = &countInfo;
   }
-
 
   VkDescriptorSet set = VK_NULL_HANDLE;
   VK_CHECK(vkAllocateDescriptorSets(device_, &allocInfo, &set),
            "vkAllocateDescriptorSets: failed to allocate Descriptor Sets");
 
   u32 handleId = nextBindingSetHandle_++;
-  descriptorSets_.emplace(handleId, BindingSet{
-                                         .set = set,
-                                         .layout = desc.layout,
-                                         .pool = desc.pool,
-                                         .variableBindingCount =
-                                             desc.variableBindingCount,
-                                     });
+  descriptorSets_.emplace(handleId,
+                          BindingSet{
+                              .set = set,
+                              .layout = desc.layout,
+                              .pool = desc.pool,
+                              .variableBindingCount = desc.variableBindingCount,
+                          });
 
   return BindingSetHandle{handleId};
 }
@@ -2163,29 +2273,28 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
         "UpdateBindingSet: descriptorCount must be greater than zero");
   }
 
-  const BindingSet& vkSet = GetBindingSet(desc.dstSet);
-  const BindingLayout& vkLayout = GetBindingLayout(vkSet.layout);
+  const BindingSet &vkSet = GetBindingSet(desc.dstSet);
+  const BindingLayout &vkLayout = GetBindingLayout(vkSet.layout);
   const auto bindingIt = vkLayout.bindings.find(desc.binding);
   if (bindingIt == vkLayout.bindings.end()) {
     throw std::runtime_error(
         "UpdateBindingSet: destination binding is not present in the layout");
   }
 
-  const BindingLayout::BindingMetadata& binding = bindingIt->second;
+  const BindingLayout::BindingMetadata &binding = bindingIt->second;
   if (binding.type != desc.type) {
     throw std::runtime_error(
         "UpdateBindingSet: descriptor type does not match the layout binding");
   }
 
-  const u32 bindingCount =
-      vkLayout.hasVariableCountBinding &&
-              desc.binding == vkLayout.variableCountBinding
-          ? vkSet.variableBindingCount
-          : binding.maximumCount;
+  const u32 bindingCount = vkLayout.hasVariableCountBinding &&
+                                   desc.binding == vkLayout.variableCountBinding
+                               ? vkSet.variableBindingCount
+                               : binding.maximumCount;
   if (desc.arrayElement > bindingCount ||
       desc.descriptorCount > bindingCount - desc.arrayElement) {
-    throw std::runtime_error(
-        "UpdateBindingSet: descriptor write exceeds the allocated binding count");
+    throw std::runtime_error("UpdateBindingSet: descriptor write exceeds the "
+                             "allocated binding count");
   }
 
   VkWriteDescriptorSet write{};
@@ -2209,12 +2318,12 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
     }
 
     for (u32 i = 0; i < desc.descriptorCount; i++) {
-        const BindingBufferInfo& bufferInfo = desc.bufferInfo[i];
-        vkBufferInfos[i] = {
-            .buffer = GetBuffer(bufferInfo.buffer).buffer,
-            .offset = bufferInfo.offset,
-            .range = bufferInfo.range,
-        };
+      const BindingBufferInfo &bufferInfo = desc.bufferInfo[i];
+      vkBufferInfos[i] = {
+          .buffer = GetBuffer(bufferInfo.buffer).buffer,
+          .offset = bufferInfo.offset,
+          .range = bufferInfo.range,
+      };
     }
 
     write.pBufferInfo = vkBufferInfos.data();
@@ -2228,12 +2337,12 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
     }
 
     for (u32 i = 0; i < desc.descriptorCount; i++) {
-        const BindingImageInfo& imageInfo = desc.imageInfo[i];
-        vkImageInfos[i] = {
-            .sampler = GetSampler(imageInfo.sampler).sampler,
-            .imageView = GetImageView(imageInfo.imageView).view,
-            .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
-        };
+      const BindingImageInfo &imageInfo = desc.imageInfo[i];
+      vkImageInfos[i] = {
+          .sampler = GetSampler(imageInfo.sampler).sampler,
+          .imageView = GetImageView(imageInfo.imageView).view,
+          .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
+      };
     }
 
     write.pImageInfo = vkImageInfos.data();
@@ -2246,15 +2355,14 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: imageInfo is null for StorageImage");
     }
 
-
     for (u32 i = 0; i < desc.descriptorCount; i++) {
-        const BindingImageInfo& imageInfo = desc.imageInfo[i];
-        const ImageView& vkImageView = GetImageView(imageInfo.imageView);
-        vkImageInfos[i] = {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = vkImageView.view,
-            .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
-        };
+      const BindingImageInfo &imageInfo = desc.imageInfo[i];
+      const ImageView &vkImageView = GetImageView(imageInfo.imageView);
+      vkImageInfos[i] = {
+          .sampler = VK_NULL_HANDLE,
+          .imageView = vkImageView.view,
+          .imageLayout = ToVkImageLayout(imageInfo.imageLayout),
+      };
     }
 
     write.pImageInfo = vkImageInfos.data();
@@ -2267,14 +2375,13 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
           "UpdateBindingSet: bufferInfo is null for StorageBuffer");
     }
 
-
     for (u32 i = 0; i < desc.descriptorCount; i++) {
-        const BindingBufferInfo& bufferInfo = desc.bufferInfo[i];
-        vkBufferInfos[i] = {
-            .buffer = GetBuffer(bufferInfo.buffer).buffer,
-            .offset = bufferInfo.offset,
-            .range = bufferInfo.range,
-        };
+      const BindingBufferInfo &bufferInfo = desc.bufferInfo[i];
+      vkBufferInfos[i] = {
+          .buffer = GetBuffer(bufferInfo.buffer).buffer,
+          .offset = bufferInfo.offset,
+          .range = bufferInfo.range,
+      };
     }
 
     write.pBufferInfo = vkBufferInfos.data();
@@ -2283,15 +2390,13 @@ void Device::UpdateBindingSet(const BindingWriteDesc &desc) {
   }
 
   default:
-    throw std::runtime_error(
-        "UpdateBindingSet: unsupported descriptor type");
+    throw std::runtime_error("UpdateBindingSet: unsupported descriptor type");
   }
 
   vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
 }
 
-const BindingSet &
-Device::GetBindingSet(BindingSetHandle handle) const {
+const BindingSet &Device::GetBindingSet(BindingSetHandle handle) const {
   auto it = descriptorSets_.find(handle.id);
   if (it == descriptorSets_.end()) {
     throw std::runtime_error("Invalid binding set handle");
@@ -2301,7 +2406,7 @@ Device::GetBindingSet(BindingSetHandle handle) const {
 }
 
 ImageLayout Device::GetImageLayout(ImageHandle imageHandle,
-                                         u32 mipLevel) const {
+                                   u32 mipLevel) const {
   if (!imageHandle.IsValid()) {
     throw std::runtime_error("GetImageLayout: invalid image handle");
   }

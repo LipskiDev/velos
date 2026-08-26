@@ -24,6 +24,25 @@ shaderc_shader_kind ToShadercKind(Velos::RHI::ShaderStage stage) {
 }
 } // namespace
 
+RHI::BindingType ToBindingType(ShaderResourceType type) {
+  switch (type) {
+  case ShaderResourceType::UniformBuffer:
+    return RHI::BindingType::UniformBuffer;
+  case ShaderResourceType::StorageBuffer:
+    return RHI::BindingType::StorageBuffer;
+  case ShaderResourceType::SampledImage:
+    return RHI::BindingType::SampledTexture;
+  case ShaderResourceType::StorageImage:
+    return RHI::BindingType::StorageImage;
+  case ShaderResourceType::Sampler:
+    return RHI::BindingType::Sampler;
+  case ShaderResourceType::CombinedImageSampler:
+    return RHI::BindingType::CombinedImageSampler;
+  default:
+    throw std::runtime_error("Unsupported reflected resource type");
+  }
+}
+
 std::string ShaderCompiler::ReadTextFile(const std::string &path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
   if (!file) {
@@ -82,11 +101,62 @@ ShaderCompiler::ReflectSpirv(const std::vector<uint32_t> &spirv,
 
   out.entryPoint = module.entry_point_name ? module.entry_point_name : "main";
 
-  // ReflectDescriptorBindings(module, stage, out);
+  ReflectDescriptorBindings(module, stage, out);
   ReflectPushConstants(module, stage, out);
 
   spvReflectDestroyShaderModule(&module);
   return out;
+}
+
+void ShaderCompiler::ReflectDescriptorBindings(const SpvReflectShaderModule& module, RHI::ShaderStage stage, ShaderReflectionData& out)
+{
+	uint32_t bindingCount = 0;
+	SpvReflectResult result =
+		spvReflectEnumerateDescriptorBindings(&module, &bindingCount, nullptr);
+	if (result != SPV_REFLECT_RESULT_SUCCESS) {
+		throw std::runtime_error("Failed to enumerate descriptor bindings");
+	}
+	std::vector<SpvReflectDescriptorBinding*> bindings(bindingCount);
+	result = spvReflectEnumerateDescriptorBindings(&module, &bindingCount,
+		bindings.data());
+	if (result != SPV_REFLECT_RESULT_SUCCESS) {
+		throw std::runtime_error("Failed to fetch descriptor bindings");
+	}
+	for (SpvReflectDescriptorBinding* binding : bindings) {
+		ShaderResourceBinding resource{};
+		resource.name = binding->name ? binding->name : "";
+		resource.set = binding->set;
+		resource.binding = binding->binding;
+		resource.arraySize = binding->array.dims_count > 0 ? binding->array.dims[0] : 1;
+		resource.runtimeArray = binding->array.dims_count > 0 && binding->array.dims[0] == 0;
+		resource.stage = stage;
+		switch (binding->descriptor_type) {
+		case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+			resource.type = ShaderResourceType::UniformBuffer;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+			resource.type = ShaderResourceType::StorageBuffer;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+			resource.type = ShaderResourceType::SampledImage;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+			resource.type = ShaderResourceType::StorageImage;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER:
+			resource.type = ShaderResourceType::Sampler;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+			resource.type = ShaderResourceType::CombinedImageSampler;
+			break;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+			resource.type = ShaderResourceType::InputAttachment;
+			break;
+		default:
+			throw std::runtime_error("Unsupported descriptor type in reflection");
+		}
+		out.resources.push_back(resource);
+	}
 }
 
 void ShaderCompiler::ReflectPushConstants(const SpvReflectShaderModule &module,
@@ -115,6 +185,44 @@ void ShaderCompiler::ReflectPushConstants(const SpvReflectShaderModule &module,
     range.stage = stage;
     out.pushConstants.push_back(range);
   }
+}
+
+PipelineReflectionData ShaderCompiler::MergeShaderReflection(std::span<const ShaderReflectionData> shaders)
+{
+	PipelineReflectionData pipelineReflection;
+	for (const auto& shader : shaders) {
+		// Merge resources
+		for (const auto& resource : shader.resources) {
+			auto it = std::find_if(pipelineReflection.resources.begin(), pipelineReflection.resources.end(),
+				[&resource](const ShaderResourceBinding& existingResource) {
+					return existingResource.set == resource.set && existingResource.binding == resource.binding;
+				});
+			if (it != pipelineReflection.resources.end()) {
+				// Update stage flags if the resource already exists
+				it->stage = static_cast<RHI::ShaderStage>(static_cast<int>(it->stage) | static_cast<int>(resource.stage));
+			}
+			else {
+				// Add new resource
+				pipelineReflection.resources.push_back(resource);
+			}
+		}
+		// Merge push constants
+		for (const auto& pushConstant : shader.pushConstants) {
+			auto it = std::find_if(pipelineReflection.pushConstants.begin(), pipelineReflection.pushConstants.end(),
+				[&pushConstant](const PushConstantRangeInfo& existingRange) {
+					return existingRange.offset == pushConstant.offset && existingRange.size == pushConstant.size;
+				});
+			if (it != pipelineReflection.pushConstants.end()) {
+				// Update stage flags if the push constant range already exists
+				it->stage = static_cast<RHI::ShaderStage>(static_cast<int>(it->stage) | static_cast<int>(pushConstant.stage));
+			}
+			else {
+				// Add new push constant range
+				pipelineReflection.pushConstants.push_back(pushConstant);
+			}
+		}
+	}
+	return pipelineReflection;
 }
 
 ShaderCompileOutput

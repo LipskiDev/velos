@@ -103,6 +103,11 @@ public:
   virtual std::unique_ptr<IUploadContext>
   CreateUploadContext(u64 stagingBufferSize = 16 * 1024 * 1024) = 0;
 
+  virtual GeneratedPipelineLayout BuildPipelineLayout(
+      const PipelineReflectionData& reflection,
+      const PipelineLayoutOverrides& overrides = {}
+  ) = 0;
+
 public:
   virtual Extent2D GetSwapchainDimensions() const = 0;
 };

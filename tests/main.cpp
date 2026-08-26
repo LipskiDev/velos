@@ -518,6 +518,87 @@ int main(int argc, char **argv) {
       device->DestroyBindingPool(pool);
       device->DestroyBindingLayout(layout);
     });
+    run("ReflectedPipelineLayoutGeneration", "validation", [&] {
+      Velos::PipelineReflectionData reflection{
+          .resources = {
+              {.name = "frame", .type = Velos::ShaderResourceType::UniformBuffer,
+               .set = 0, .binding = 1, .arraySize = 1,
+               .stage = ShaderStage::Vertex | ShaderStage::Fragment},
+              {.name = "materials", .type = Velos::ShaderResourceType::StorageBuffer,
+               .set = 1, .binding = 0, .arraySize = 1,
+               .stage = ShaderStage::Fragment},
+          }};
+
+      auto generated = device->BuildPipelineLayout(reflection);
+      if (generated.setLayouts.size() != 2 ||
+          generated.ownedSetLayouts.size() != 2 ||
+          !generated.setLayouts[0] || !generated.setLayouts[1]) {
+        throw std::runtime_error("reflected layouts were not generated");
+      }
+
+      for (auto layout : generated.ownedSetLayouts)
+        device->DestroyBindingLayout(layout);
+    });
+    run("ReflectedPipelineLayoutOverride", "validation", [&] {
+      const BindingDesc bindlessBinding{
+          .binding = 0, .type = BindingType::CombinedImageSampler, .count = 32,
+          .visibility = ShaderStage::Fragment,
+          .flags = BindingFlags::PartiallyBound |
+                   BindingFlags::UpdateAfterBind |
+                   BindingFlags::VariableCount};
+      const auto bindlessLayout = device->CreateBindingLayout(
+          {.bindings = &bindlessBinding, .bindingCount = 1});
+
+      Velos::PipelineReflectionData reflection{
+          .resources = {{.name = "textures",
+                         .type = Velos::ShaderResourceType::CombinedImageSampler,
+                         .set = 0, .binding = 0, .arraySize = 0,
+                         .runtimeArray = true,
+                         .stage = ShaderStage::Fragment}}};
+      Velos::PipelineLayoutOverrides overrides{
+          .existingSetLayouts = {{0, bindlessLayout}}};
+
+      auto generated = device->BuildPipelineLayout(reflection, overrides);
+      if (generated.setLayouts.size() != 1 ||
+          generated.setLayouts[0].id != bindlessLayout.id ||
+          !generated.ownedSetLayouts.empty()) {
+        device->DestroyBindingLayout(bindlessLayout);
+        throw std::runtime_error("existing reflected layout was not reused");
+      }
+
+      device->DestroyBindingLayout(bindlessLayout);
+    });
+    run("ReflectedRuntimeArrayRequiresOverride", "validation", [&] {
+      Velos::PipelineReflectionData reflection{
+          .resources = {{.name = "textures",
+                         .type = Velos::ShaderResourceType::CombinedImageSampler,
+                         .set = 0, .binding = 0, .arraySize = 0,
+                         .runtimeArray = true,
+                         .stage = ShaderStage::Fragment}}};
+      expectRejected(
+          [&] { device->BuildPipelineLayout(reflection); },
+          "requires an existing layout override");
+    });
+    run("ReflectedPipelineLayoutRejectsIncompatibleOverride", "validation", [&] {
+      const BindingDesc binding{
+          .binding = 0, .type = BindingType::UniformBuffer, .count = 1,
+          .visibility = ShaderStage::Fragment};
+      const auto layout = device->CreateBindingLayout(
+          {.bindings = &binding, .bindingCount = 1});
+
+      Velos::PipelineReflectionData reflection{
+          .resources = {{.name = "texture",
+                         .type = Velos::ShaderResourceType::CombinedImageSampler,
+                         .set = 0, .binding = 0, .arraySize = 1,
+                         .stage = ShaderStage::Fragment}}};
+      Velos::PipelineLayoutOverrides overrides{
+          .existingSetLayouts = {{0, layout}}};
+      expectRejected(
+          [&] { device->BuildPipelineLayout(reflection, overrides); },
+          "override is incompatible");
+
+      device->DestroyBindingLayout(layout);
+    });
     run("BindingLayoutVariableCountValidation", "validation", [&] {
       const BindingDesc nonHighest[] = {
           {.binding = 0, .type = BindingType::CombinedImageSampler, .count = 8,

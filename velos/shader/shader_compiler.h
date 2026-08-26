@@ -1,9 +1,13 @@
 #pragma once
 
 #include "rhi/types.h"
+#include "rhi/handles.h"
 #include <spirv_reflect.h>
 #include <string>
+#include <span>
+#include <unordered_map>
 #include <vector>
+
 namespace Velos {
 enum class ShaderSourceLanguage {
   GLSL,
@@ -42,6 +46,7 @@ struct ShaderResourceBinding {
   u32 set = 0;
   u32 binding = 0;
   u32 arraySize = 1;
+  bool runtimeArray = false;
   RHI::ShaderStage stage;
 };
 
@@ -64,9 +69,21 @@ struct ShaderCompileOutput {
   ShaderReflectionData reflection;
 };
 
+struct PipelineReflectionData {
+	std::vector<ShaderResourceBinding> resources;
+	std::vector<PushConstantRangeInfo> pushConstants;
+};
+
+struct PipelineLayoutOverrides {
+	std::unordered_map<u32, RHI::BindingLayoutHandle> existingSetLayouts;
+};
+
+RHI::BindingType ToBindingType(ShaderResourceType type);
+
 class ShaderCompiler {
 public:
   static ShaderCompileOutput CompileFile(const ShaderCompileInput &input);
+  static PipelineReflectionData MergeShaderReflection(std::span<const ShaderReflectionData> shaders);
 
 private:
   static ShaderCompileOutput
@@ -79,9 +96,14 @@ private:
 
   static ShaderReflectionData ReflectSpirv(const std::vector<uint32_t> &spirv,
                                            RHI::ShaderStage stage);
+  static void ReflectDescriptorBindings(const SpvReflectShaderModule &module,
+                                        RHI::ShaderStage stage,
+                                        ShaderReflectionData &out);
   static void ReflectPushConstants(const SpvReflectShaderModule &module,
                                    RHI::ShaderStage stage,
                                    ShaderReflectionData &out);
+
+
 
 private:
   static std::string ReadTextFile(const std::string &path);

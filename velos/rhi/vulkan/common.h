@@ -376,6 +376,12 @@ inline VkDescriptorType ToVkDescriptorType(BindingType type) {
     return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
   case BindingType::StorageBuffer:
     return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  case BindingType::SampledTexture:
+    return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  case BindingType::Sampler:
+    return VK_DESCRIPTOR_TYPE_SAMPLER;
+  case BindingType::StorageTexture:
+    return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
   default:
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
   }

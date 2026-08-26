@@ -191,6 +191,9 @@ enum class BindingType {
   CombinedImageSampler,
   StorageBuffer,
   StorageImage,
+  SampledTexture,
+  Sampler,
+  StorageTexture
 };
 
 enum class BlendFactor {
