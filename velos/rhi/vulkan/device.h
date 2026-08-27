@@ -3,6 +3,7 @@
 #include <rhi/vulkan/profiler.h>
 
 #include <array>
+#include <filesystem>
 #include <unordered_map>
 #include <vk_mem_alloc.h>
 
@@ -254,6 +255,9 @@ private:
 
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   u32 presentQueueFamily_ = 0;
+
+  VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
+  std::filesystem::path pipelineCachePath_;
 
   static constexpr u32 k_MaxFramesInFlight = 2;
 

@@ -20,6 +20,7 @@ struct DeviceDesc {
   GraphicsAPI graphicsAPI = GraphicsAPI::Vulkan;
   bool enableValidation = true;
   const char *applicationName = "Velos";
+  const char *pipelineCachePath = "cache/pipelines";
 };
 
 struct FrameBeginResult {

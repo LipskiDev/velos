@@ -10,10 +10,13 @@
 #include "vlpch.h"
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include <filesystem>
+#include <fstream>
 
 #include <vk_mem_alloc.h>
 
@@ -73,6 +76,73 @@ void Device::DumpLiveResources() const {
   std::cout << "DescriptorSets: " << descriptorSets_.size() << "\n";
 
   std::cout << "=====================================\n";
+}
+
+std::vector<char> ReadBinaryFile(const std::filesystem::path &path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return {};
+  }
+
+  const std::streampos end = file.tellg();
+  if (end <= 0) {
+    return {};
+  }
+
+  std::vector<char> data(static_cast<std::size_t>(end));
+  file.seekg(0, std::ios::beg);
+  if (!file.read(data.data(), static_cast<std::streamsize>(data.size()))) {
+    return {};
+  }
+
+  return data;
+}
+
+bool WriteBinaryFile(const std::filesystem::path &path,
+                     const std::vector<char> &data) noexcept {
+  if (path.empty()) {
+    return false;
+  }
+
+  const std::filesystem::path parentPath = path.parent_path();
+  if (!parentPath.empty()) {
+    std::error_code error;
+    std::filesystem::create_directories(parentPath, error);
+    if (error) {
+      return false;
+    }
+  }
+
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  if (!file) {
+    return false;
+  }
+
+  if (!data.empty()) {
+    file.write(data.data(), static_cast<std::streamsize>(data.size()));
+  }
+
+  return file.good();
+}
+
+bool IsPipelineCacheCompatible(
+    const std::vector<char> &data,
+    const VkPhysicalDeviceProperties &deviceProperties) {
+  if (data.size() < sizeof(VkPipelineCacheHeaderVersionOne)) {
+    return false;
+  }
+
+  VkPipelineCacheHeaderVersionOne header{};
+  std::memcpy(&header, data.data(), sizeof(header));
+
+  return header.headerSize >= sizeof(header) &&
+         header.headerSize <= data.size() &&
+         header.headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+         header.vendorID == deviceProperties.vendorID &&
+         header.deviceID == deviceProperties.deviceID &&
+         std::memcmp(header.pipelineCacheUUID,
+                     deviceProperties.pipelineCacheUUID,
+                     VK_UUID_SIZE) == 0;
 }
 
 GeneratedPipelineLayout
@@ -200,6 +270,34 @@ Device::Device(const DeviceDesc &desc) {
   CreateLogicalDevice();
   volkLoadDevice(device_);
 
+  if (desc.pipelineCachePath != nullptr) {
+    pipelineCachePath_ = desc.pipelineCachePath;
+  }
+
+  std::vector<char> initialCacheData = ReadBinaryFile(pipelineCachePath_);
+  if (!initialCacheData.empty() &&
+      !IsPipelineCacheCompatible(initialCacheData,
+                                 physicalDeviceProperties_)) {
+    initialCacheData.clear();
+  }
+  VkPipelineCacheCreateInfo pipelineCacheInfo{};
+  pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  pipelineCacheInfo.initialDataSize = initialCacheData.size();
+  pipelineCacheInfo.pInitialData =
+      initialCacheData.empty() ? nullptr : initialCacheData.data();
+
+  VkResult cacheResult = vkCreatePipelineCache(
+      device_, &pipelineCacheInfo, nullptr, &pipelineCache_);
+  if (cacheResult != VK_SUCCESS && !initialCacheData.empty()) {
+    pipelineCacheInfo.initialDataSize = 0;
+    pipelineCacheInfo.pInitialData = nullptr;
+    cacheResult = vkCreatePipelineCache(
+        device_, &pipelineCacheInfo, nullptr, &pipelineCache_);
+  }
+  if (cacheResult != VK_SUCCESS) {
+    throw std::runtime_error("Failed to create Vulkan pipeline cache");
+  }
+
   CreateAllocator();
 
   CreateCommandObjects();
@@ -222,6 +320,26 @@ Device::~Device() {
 
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
+
+    if (pipelineCache_ != VK_NULL_HANDLE) {
+      if (!pipelineCachePath_.empty()) {
+        std::size_t size = 0;
+        VkResult cacheResult =
+            vkGetPipelineCacheData(device_, pipelineCache_, &size, nullptr);
+        if (cacheResult == VK_SUCCESS && size > 0) {
+          std::vector<char> data(size);
+          cacheResult = vkGetPipelineCacheData(
+              device_, pipelineCache_, &size, data.data());
+          if (cacheResult == VK_SUCCESS) {
+            data.resize(size);
+            WriteBinaryFile(pipelineCachePath_, data);
+          }
+        }
+      }
+
+      vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+      pipelineCache_ = VK_NULL_HANDLE;
+    }
 
     for (auto &[id, queryPool] : queryPools_) {
       if (queryPool.pool != VK_NULL_HANDLE) {
@@ -1853,7 +1971,7 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkResult result = vkCreateGraphicsPipelines(
-      device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+      device_, pipelineCache_, 1, &pipelineInfo, nullptr, &pipeline);
 
   if (result != VK_SUCCESS) {
     vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
@@ -1950,7 +2068,7 @@ PipelineHandle Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
   pipelineInfo.basePipelineIndex = -1;
 
   VkPipeline pipeline = VK_NULL_HANDLE;
-  VkResult result = vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1,
+  VkResult result = vkCreateComputePipelines(device_, pipelineCache_, 1,
                                              &pipelineInfo, nullptr, &pipeline);
 
   if (result != VK_SUCCESS) {
