@@ -31,13 +31,13 @@ UploadContext::UploadContext(Device &device, u64 size)
 
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = device_.GetUploadCommandPool();
+  allocInfo.commandPool = device_.GetTransferCommandPool();
   allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   allocInfo.commandBufferCount = 1;
 
   VK_CHECK(vkAllocateCommandBuffers(device_.GetVkDevice(), &allocInfo,
                                     &commandBuffer_),
-           "Failed to allocate upload command buffer");
+           "Failed to allocate transfer command buffer");
 
   cmd_ = std::make_unique<CommandList>(device_, commandBuffer_);
 
@@ -45,7 +45,7 @@ UploadContext::UploadContext(Device &device, u64 size)
   fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
   VK_CHECK(vkCreateFence(device_.GetVkDevice(), &fenceInfo, nullptr, &fence_),
-           "Failed to create upload fence");
+           "Failed to create transfer fence");
 }
 
 UploadContext::~UploadContext() {
@@ -54,7 +54,7 @@ UploadContext::~UploadContext() {
   }
 
   if (commandBuffer_ != VK_NULL_HANDLE) {
-    vkFreeCommandBuffers(device_.GetVkDevice(), device_.GetUploadCommandPool(),
+    vkFreeCommandBuffers(device_.GetVkDevice(), device_.GetTransferCommandPool(),
                          1, &commandBuffer_);
   }
 
@@ -132,35 +132,61 @@ void UploadContext::UploadImage(const ImageUploadDesc &desc,
 
   cmd_->CopyBufferToImage(stagingBuffer_, desc.dstImage, region);
 
+  const u32 transferFamily = device_.GetTransferQueueFamily();
+  const u32 graphicsFamily = device_.GetGraphicsQueueFamily();
+  const bool requiresOwnershipTransfer = transferFamily != graphicsFamily;
+
   cmd_->Barrier(ImageBarrier{
       .image = desc.dstImage,
       .oldLayout = ImageLayout::TransferDst,
       .newLayout = desc.finalLayout,
+      .oldState = ResourceState::TransferDst,
+      .newState = ResourceState::TransferDst,
+      .useExplicitStates = requiresOwnershipTransfer,
       .aspect = desc.aspect,
+      .srcQueueFamilyIndex = requiresOwnershipTransfer ? transferFamily : INT_MAX,
+      .dstQueueFamilyIndex = requiresOwnershipTransfer ? graphicsFamily : INT_MAX,
       .baseMipLevel = desc.mipLevel,
       .mipLevelCount = 1,
       .baseArrayLayer = desc.baseArrayLayer,
       .layerCount = desc.layerCount,
   });
+
+  if (requiresOwnershipTransfer) {
+    pendingImageAcquires_.push_back(PendingImageAcquire{
+        .image = desc.dstImage,
+        .finalLayout = desc.finalLayout,
+        .aspect = desc.aspect,
+        .mipLevel = desc.mipLevel,
+        .baseArrayLayer = desc.baseArrayLayer,
+        .layerCount = desc.layerCount,
+    });
+  }
 }
 
 void UploadContext::Flush() {
   cmd_->End();
 
   VK_CHECK(vkResetFences(device_.GetVkDevice(), 1, &fence_),
-           "Failed to reset upload fence");
+           "Failed to reset transfer fence");
 
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &commandBuffer_;
 
-  VK_CHECK(vkQueueSubmit(device_.GetGraphicsQueue(), 1, &submitInfo, fence_),
-           "Failed to submit upload command buffer");
+  VK_CHECK(vkQueueSubmit(device_.GetTransferQueue(), 1, &submitInfo, fence_),
+           "Failed to submit transfer command buffer");
 
   VK_CHECK(
       vkWaitForFences(device_.GetVkDevice(), 1, &fence_, VK_TRUE, UINT64_MAX),
-      "Failed to wait for upload fence");
+      "Failed to wait for transfer fence");
+}
+
+std::vector<PendingImageAcquire> UploadContext::TakePendingImageAcquires() {
+  std::vector<PendingImageAcquire> pending;
+  pending.swap(pendingImageAcquires_);
+  return pending;
 }
 
 } // namespace Velos::Vulkan

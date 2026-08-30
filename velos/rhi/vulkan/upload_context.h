@@ -15,6 +15,7 @@ public:
   void UploadImage(const ImageUploadDesc &desc, const void *data,
                    u64 dataSize) override;
   void Flush() override;
+  std::vector<PendingImageAcquire> TakePendingImageAcquires() override;
 
 private:
   u64 Allocate(u64 size, u64 alignment);
@@ -31,6 +32,7 @@ private:
   std::unique_ptr<CommandList> cmd_;
 
   VkFence fence_ = VK_NULL_HANDLE;
+  std::vector<PendingImageAcquire> pendingImageAcquires_;
 };
 
 } // namespace Velos::Vulkan

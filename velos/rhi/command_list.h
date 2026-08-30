@@ -45,6 +45,8 @@ struct ImageBarrier {
   ResourceState newState = ResourceState::Undefined;
   bool useExplicitStates = false;
   ImageAspect aspect = ImageAspect::Color;
+  u32 srcQueueFamilyIndex = INT_MAX;
+  u32 dstQueueFamilyIndex = INT_MAX;
 
   u32 baseMipLevel = 0;
   u32 mipLevelCount = 1;

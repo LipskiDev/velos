@@ -198,6 +198,8 @@ public:
   std::unique_ptr<IUploadContext>
   CreateUploadContext(u64 stagingBufferSize = 1024 * 16 * 1024) override;
 
+  void AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires) override;
+
   void DumpLiveResources() const;
 
   GeneratedPipelineLayout BuildPipelineLayout(
@@ -223,7 +225,9 @@ public:
   VkPhysicalDevice GetVkPhysicalDevice() const { return physicalDevice_; }
   VkDevice GetVkDevice() const { return device_; }
   VkQueue GetGraphicsQueue() const { return graphicsQueue_; }
-  u32 GetGraphicsQueueFamily() const { return graphicsQueueFamily_; }
+  u32 GetGraphicsQueueFamily() const { return mainQueueFamily; }
+  VkQueue GetTransferQueue() const { return transferQueue_; }
+  u32 GetTransferQueueFamily() const { return transferQueueFamily_; }
   const VkPhysicalDeviceProperties &GetPhysicalDeviceProperties() const {
     return physicalDeviceProperties_;
   }
@@ -231,7 +235,7 @@ public:
     return commandBuffers_[currentFrame_];
   }
 
-  VkCommandPool GetUploadCommandPool() const { return uploadCommandPool_; }
+  VkCommandPool GetTransferCommandPool() const { return transferCommandPool_; }
 
   Extent2D GetSwapchainDimensions() const override;
 
@@ -251,10 +255,13 @@ private:
   VkPhysicalDeviceProperties physicalDeviceProperties_{};
 
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
-  u32 graphicsQueueFamily_ = 0;
+  u32 mainQueueFamily = 0;
 
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   u32 presentQueueFamily_ = 0;
+
+  VkQueue transferQueue_ = VK_NULL_HANDLE;
+  u32 transferQueueFamily_ = 0;
 
   VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
   std::filesystem::path pipelineCachePath_;
@@ -262,7 +269,7 @@ private:
   static constexpr u32 k_MaxFramesInFlight = 2;
 
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
-  VkCommandPool uploadCommandPool_ = VK_NULL_HANDLE;
+  VkCommandPool transferCommandPool_ = VK_NULL_HANDLE;
 
   std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
   std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>

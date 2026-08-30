@@ -3,7 +3,18 @@
 #include "rhi/handles.h"
 #include "types.h"
 
+#include <vector>
+
 namespace Velos::RHI {
+
+struct PendingImageAcquire {
+    ImageHandle image;
+    ImageLayout finalLayout;
+    ImageAspect aspect;
+    u32 mipLevel;
+    u32 baseArrayLayer;
+    u32 layerCount;
+};
 
 struct BufferUploadDesc {
   BufferHandle dstBuffer;
@@ -39,6 +50,7 @@ public:
   virtual void UploadImage(const ImageUploadDesc &desc, const void *data,
                            u64 dataSize) = 0;
   virtual void Flush() = 0;
+  virtual std::vector<PendingImageAcquire> TakePendingImageAcquires() = 0;
 };
 
 } // namespace Velos::RHI

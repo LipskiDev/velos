@@ -391,9 +391,9 @@ Device::~Device() {
       commandPool_ = VK_NULL_HANDLE;
     }
 
-    if (uploadCommandPool_ != VK_NULL_HANDLE) {
-      vkDestroyCommandPool(device_, uploadCommandPool_, nullptr);
-      uploadCommandPool_ = VK_NULL_HANDLE;
+    if (transferCommandPool_ != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(device_, transferCommandPool_, nullptr);
+      transferCommandPool_ = VK_NULL_HANDLE;
     }
 
     DumpLiveResources();
@@ -575,8 +575,10 @@ bool HasRequiredQueues(VkPhysicalDevice device) {
         (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
     const bool hasCompute =
         (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+	const bool hasTransfer =
+        (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
 
-    if (queueFamily.queueCount > 0 && hasGraphics && hasCompute) {
+    if (queueFamily.queueCount > 0 && hasGraphics && hasCompute && hasTransfer) {
       return true;
     }
   }
@@ -744,26 +746,45 @@ void Device::CreateLogicalDevice() {
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount,
                                            queueFamilies.data());
 
-  bool foundGraphicsQueue = false;
+  bool foundMainQueue = false;
+  bool foundDedicatedTransferQueue = false;
   for (u32 i = 0; i < queueFamilyCount; ++i) {
-    if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
-      graphicsQueueFamily_ = i;
-      foundGraphicsQueue = true;
-      break;
+    const VkQueueFlags flags = queueFamilies[i].queueFlags;
+    const VkQueueFlags mainQueueFlags =
+        VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+    if (!foundMainQueue && (flags & mainQueueFlags) == mainQueueFlags) {
+      mainQueueFamily = i;
+      foundMainQueue = true;
+    }
+    if (!foundDedicatedTransferQueue &&
+        (flags & VK_QUEUE_TRANSFER_BIT) != 0 &&
+        (flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0) {
+      transferQueueFamily_ = i;
+      foundDedicatedTransferQueue = true;
     }
   }
 
-  if (!foundGraphicsQueue) {
+  if (!foundMainQueue) {
     throw std::runtime_error("Failed to find graphics queue family");
+  }
+
+  if (!foundDedicatedTransferQueue) {
+    transferQueueFamily_ = mainQueueFamily;
   }
 
   const float queuePriority = 1.0f;
 
-  VkDeviceQueueCreateInfo queueCreateInfo{};
-  queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  queueCreateInfo.queueFamilyIndex = graphicsQueueFamily_;
-  queueCreateInfo.queueCount = 1;
-  queueCreateInfo.pQueuePriorities = &queuePriority;
+  VkDeviceQueueCreateInfo graphicsQueueCreateInfo{};
+  graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  graphicsQueueCreateInfo.queueFamilyIndex = mainQueueFamily;
+  graphicsQueueCreateInfo.queueCount = 1;
+  graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
+
+  VkDeviceQueueCreateInfo transferQueueCreateInfo{};
+  transferQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  transferQueueCreateInfo.queueFamilyIndex = transferQueueFamily_;
+  transferQueueCreateInfo.queueCount = 1;
+  transferQueueCreateInfo.pQueuePriorities = &queuePriority;
 
   VkPhysicalDeviceFeatures deviceFeatures{};
   deviceFeatures.multiDrawIndirect = VK_TRUE;
@@ -798,8 +819,11 @@ void Device::CreateLogicalDevice() {
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   createInfo.pNext = &vulkan13Features;
-  createInfo.queueCreateInfoCount = 1;
-  createInfo.pQueueCreateInfos = &queueCreateInfo;
+  const VkDeviceQueueCreateInfo queueCreateInfos[] = {
+      graphicsQueueCreateInfo, transferQueueCreateInfo};
+  createInfo.queueCreateInfoCount =
+      transferQueueFamily_ == mainQueueFamily ? 1u : 2u;
+  createInfo.pQueueCreateInfos = queueCreateInfos;
   createInfo.pEnabledFeatures = &deviceFeatures;
   createInfo.enabledExtensionCount = 1;
   createInfo.ppEnabledExtensionNames = deviceExtensions;
@@ -807,9 +831,10 @@ void Device::CreateLogicalDevice() {
   VK_CHECK(vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_),
            "Failed to create Vulkan logical device");
 
-  vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+  vkGetDeviceQueue(device_, mainQueueFamily, 0, &graphicsQueue_);
+  vkGetDeviceQueue(device_, transferQueueFamily_, 0, &transferQueue_);
 
-  presentQueueFamily_ = graphicsQueueFamily_;
+  presentQueueFamily_ = mainQueueFamily;
   presentQueue_ = graphicsQueue_;
 }
 
@@ -819,20 +844,20 @@ void Device::CreateCommandObjects() {
   VkCommandPoolCreateInfo framePoolInfo{};
   framePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   framePoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  framePoolInfo.queueFamilyIndex = graphicsQueueFamily_;
+  framePoolInfo.queueFamilyIndex = mainQueueFamily;
 
   VK_CHECK(vkCreateCommandPool(device_, &framePoolInfo, nullptr, &commandPool_),
            "Failed to create Vulkan command pool");
 
-  VkCommandPoolCreateInfo uploadPoolInfo{};
-  uploadPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  uploadPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT |
-                         VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-  uploadPoolInfo.queueFamilyIndex = graphicsQueueFamily_;
+  VkCommandPoolCreateInfo transferPoolInfo{};
+  transferPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  transferPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT |
+	  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+  transferPoolInfo.queueFamilyIndex = transferQueueFamily_;
 
-  VK_CHECK(vkCreateCommandPool(device_, &uploadPoolInfo, nullptr,
-                               &uploadCommandPool_),
-           "Failed to create upload command pool");
+  VK_CHECK(vkCreateCommandPool(device_, &transferPoolInfo, nullptr,
+	  &transferCommandPool_),
+	  "Failed to create transfer command pool");
 
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -916,6 +941,60 @@ void Device::CollectGarbage() {
 std::unique_ptr<IUploadContext>
 Device::CreateUploadContext(u64 stagingBufferSize) {
   return std::make_unique<UploadContext>(*this, stagingBufferSize);
+}
+
+void Device::AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires)
+{
+	if (pendingAcquires.empty())
+	{
+		return;
+	}
+
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool_;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+	VK_CHECK(vkAllocateCommandBuffers(device_, &allocInfo, &cmd),
+		"Failed to allocate command buffer for image acquire");
+
+	CommandList cmdList(*this, cmd);
+	cmdList.Begin();
+	for (const auto& a : pendingAcquires)
+	{
+        cmdList.Barrier(ImageBarrier{
+            .image = a.image,
+            .oldLayout = ImageLayout::TransferDst,
+            .newLayout = a.finalLayout,
+            .aspect = a.aspect,
+            .srcQueueFamilyIndex = transferQueueFamily_,
+            .dstQueueFamilyIndex = mainQueueFamily,
+            .baseMipLevel = a.mipLevel,
+            .mipLevelCount = 1,
+            .baseArrayLayer = a.baseArrayLayer,
+            .layerCount = a.layerCount,
+            });
+	}
+	cmdList.End();
+
+    VkFenceCreateInfo fenceInfo{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    VkFence fence;
+    VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr, &fence), "Failed to create acquire fence");
+
+    VkSubmitInfo submitInfo{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmd;
+
+    VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, fence),
+        "Failed to submit acquire command buffer");
+    VK_CHECK(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX),
+        "Failed to wait for acquire fence");
+
+    vkDestroyFence(device_, fence, nullptr);
+	vkFreeCommandBuffers(device_, commandPool_, 1, &cmd);
+
 }
 
 u32 Device::FindMemoryType(u32 typeFilter,

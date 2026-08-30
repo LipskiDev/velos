@@ -103,6 +103,7 @@ public:
 
   virtual std::unique_ptr<IUploadContext>
   CreateUploadContext(u64 stagingBufferSize = 16 * 1024 * 1024) = 0;
+  virtual void AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires) = 0;
 
   virtual GeneratedPipelineLayout BuildPipelineLayout(
       const PipelineReflectionData& reflection,

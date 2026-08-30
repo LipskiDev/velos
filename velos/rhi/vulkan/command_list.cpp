@@ -103,8 +103,8 @@ void CommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.srcAccessMask = srcInfo.access;
   vkBarrier.dstAccessMask = dstInfo.access;
 
-  vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  vkBarrier.srcQueueFamilyIndex = barrier.srcQueueFamilyIndex == INT_MAX ? VK_QUEUE_FAMILY_IGNORED : barrier.srcQueueFamilyIndex;
+  vkBarrier.dstQueueFamilyIndex = barrier.dstQueueFamilyIndex == INT_MAX ? VK_QUEUE_FAMILY_IGNORED : barrier.dstQueueFamilyIndex;
   vkBarrier.image = image.image;
 
   vkBarrier.subresourceRange.aspectMask = ToVkImageAspect(barrier.aspect);
@@ -611,6 +611,11 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
     vkBarrier.subresourceRange.levelCount = i.mipLevelCount;
     vkBarrier.subresourceRange.baseArrayLayer = i.baseArrayLayer;
     vkBarrier.subresourceRange.layerCount = i.layerCount;
+    vkBarrier.srcQueueFamilyIndex = i.srcQueueFamilyIndex == INT_MAX
+        ? VK_QUEUE_FAMILY_IGNORED : i.srcQueueFamilyIndex;
+    vkBarrier.dstQueueFamilyIndex = i.dstQueueFamilyIndex == INT_MAX
+        ? VK_QUEUE_FAMILY_IGNORED : i.dstQueueFamilyIndex;
+
 
     vkImageBarriers.push_back(vkBarrier);
 
