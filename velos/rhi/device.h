@@ -91,6 +91,18 @@ public:
   virtual double GetTimestampPeriodNanoseconds() const = 0;
   virtual u32 GetCurrentFrameIndex() const = 0;
 
+  virtual FenceHandle CreateFence(bool signaled = false) = 0;
+  virtual void DestroyFence(FenceHandle handle) = 0;
+  virtual bool IsFenceSignaled(FenceHandle handle) const = 0;
+  virtual void WaitFence(FenceHandle handle, u64 timeoutNanoseconds = UINT64_MAX) = 0;
+  virtual void ResetFence(FenceHandle handle) = 0;
+  virtual SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
+                                          u64 initialValue = 0) = 0;
+  virtual void DestroySemaphore(SemaphoreHandle handle) = 0;
+  virtual u64 GetSemaphoreValue(SemaphoreHandle handle) const = 0;
+  virtual void WaitSemaphore(SemaphoreHandle handle, u64 value,
+                             u64 timeoutNanoseconds = UINT64_MAX) = 0;
+
   virtual ImageLayout GetImageLayout(ImageHandle image, u32 mipLevel) const = 0;
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;

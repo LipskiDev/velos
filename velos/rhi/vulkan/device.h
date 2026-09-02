@@ -180,6 +180,17 @@ public:
                                 u32 queryCount, u64 *results) override;
   double GetTimestampPeriodNanoseconds() const override;
   u32 GetCurrentFrameIndex() const override { return currentFrame_; }
+  FenceHandle CreateFence(bool signaled = false) override;
+  void DestroyFence(FenceHandle handle) override;
+  bool IsFenceSignaled(FenceHandle handle) const override;
+  void WaitFence(FenceHandle handle, u64 timeoutNanoseconds = UINT64_MAX) override;
+  void ResetFence(FenceHandle handle) override;
+  SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
+                                  u64 initialValue = 0) override;
+  void DestroySemaphore(SemaphoreHandle handle) override;
+  u64 GetSemaphoreValue(SemaphoreHandle handle) const override;
+  void WaitSemaphore(SemaphoreHandle handle, u64 value,
+                     u64 timeoutNanoseconds = UINT64_MAX) override;
   const QueryPool &GetQueryPool(QueryPoolHandle handle) const;
 
   ImageLayout GetImageLayout(ImageHandle imageHandle, u32 mipLevel) const;
@@ -320,5 +331,13 @@ private:
 
   u32 nextQueryPoolHandle_ = 1;
   std::unordered_map<u32, QueryPool> queryPools_;
+  u32 nextFenceHandle_ = 1;
+  std::unordered_map<u32, VkFence> fences_;
+  u32 nextSemaphoreHandle_ = 1;
+  struct SemaphoreResource {
+    VkSemaphore semaphore = VK_NULL_HANDLE;
+    SemaphoreType type = SemaphoreType::Binary;
+  };
+  std::unordered_map<u32, SemaphoreResource> semaphores_;
 };
 } // namespace Velos::Vulkan

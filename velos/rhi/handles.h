@@ -26,6 +26,8 @@ struct BindingLayoutTag {};
 struct BindingPoolTag {};
 struct BindingSetTag {};
 struct QueryPoolTag {};
+struct FenceTag {};
+struct SemaphoreTag {};
 
 using BufferHandle = Handle<BufferTag>;
 using SamplerHandle = Handle<SamplerTag>;
@@ -39,5 +41,7 @@ using BindingLayoutHandle = Handle<BindingLayoutTag>;
 using BindingPoolHandle = Handle<BindingPoolTag>;
 using BindingSetHandle = Handle<BindingSetTag>;
 using QueryPoolHandle = Handle<QueryPoolTag>;
+using FenceHandle = Handle<FenceTag>;
+using SemaphoreHandle = Handle<SemaphoreTag>;
 
 } // namespace Velos::RHI

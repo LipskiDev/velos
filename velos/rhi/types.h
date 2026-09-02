@@ -135,6 +135,8 @@ enum class MemoryUsage {
   GPUToCPU,
 };
 
+enum class SemaphoreType { Binary, Timeline };
+
 enum class LoadOp {
   Load,
   Clear,

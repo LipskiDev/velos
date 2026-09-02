@@ -348,6 +348,17 @@ Device::~Device() {
     }
     queryPools_.clear();
 
+    for (auto &[id, fence] : fences_) {
+      if (fence != VK_NULL_HANDLE) vkDestroyFence(device_, fence, nullptr);
+    }
+    fences_.clear();
+    for (auto &[id, semaphore] : semaphores_) {
+      if (semaphore.semaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(device_, semaphore.semaphore, nullptr);
+      }
+    }
+    semaphores_.clear();
+
     for (auto &[id, pipeline] : pipelines_) {
       if (pipeline.pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device_, pipeline.pipeline, nullptr);
@@ -443,6 +454,97 @@ void Device::DestroyQueryPool(QueryPoolHandle handle) {
     vkDestroyQueryPool(device_, it->second.pool, nullptr);
   }
   queryPools_.erase(it);
+}
+
+FenceHandle Device::CreateFence(bool signaled) {
+  VkFenceCreateInfo info{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+  if (signaled) info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+  VkFence fence = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateFence(device_, &info, nullptr, &fence), "Failed to create fence");
+  const FenceHandle handle{nextFenceHandle_++};
+  fences_.emplace(handle.id, fence);
+  return handle;
+}
+
+void Device::DestroyFence(FenceHandle handle) {
+  const auto it = fences_.find(handle.id);
+  if (it == fences_.end()) return;
+  vkDestroyFence(device_, it->second, nullptr);
+  fences_.erase(it);
+}
+
+bool Device::IsFenceSignaled(FenceHandle handle) const {
+  const auto it = fences_.find(handle.id);
+  if (it == fences_.end()) throw std::runtime_error("Invalid fence handle");
+  const VkResult result = vkGetFenceStatus(device_, it->second);
+  if (result == VK_SUCCESS) return true;
+  if (result == VK_NOT_READY) return false;
+  VK_CHECK(result, "Failed to query fence status");
+  return false;
+}
+
+void Device::WaitFence(FenceHandle handle, u64 timeoutNanoseconds) {
+  const auto it = fences_.find(handle.id);
+  if (it == fences_.end()) throw std::runtime_error("Invalid fence handle");
+  VK_CHECK(vkWaitForFences(device_, 1, &it->second, VK_TRUE, timeoutNanoseconds),
+           "Failed to wait for fence");
+}
+
+void Device::ResetFence(FenceHandle handle) {
+  const auto it = fences_.find(handle.id);
+  if (it == fences_.end()) throw std::runtime_error("Invalid fence handle");
+  VK_CHECK(vkResetFences(device_, 1, &it->second), "Failed to reset fence");
+}
+
+SemaphoreHandle Device::CreateSemaphore(SemaphoreType type, u64 initialValue) {
+  VkSemaphoreTypeCreateInfo typeInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+      .semaphoreType = type == SemaphoreType::Timeline ? VK_SEMAPHORE_TYPE_TIMELINE
+                                                        : VK_SEMAPHORE_TYPE_BINARY,
+      .initialValue = initialValue};
+  VkSemaphoreCreateInfo info{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+  if (type == SemaphoreType::Timeline) info.pNext = &typeInfo;
+  VkSemaphore semaphore = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateSemaphore(device_, &info, nullptr, &semaphore),
+           "Failed to create semaphore");
+  const SemaphoreHandle handle{nextSemaphoreHandle_++};
+  semaphores_.emplace(handle.id, SemaphoreResource{semaphore, type});
+  return handle;
+}
+
+void Device::DestroySemaphore(SemaphoreHandle handle) {
+  const auto it = semaphores_.find(handle.id);
+  if (it == semaphores_.end()) return;
+  vkDestroySemaphore(device_, it->second.semaphore, nullptr);
+  semaphores_.erase(it);
+}
+
+u64 Device::GetSemaphoreValue(SemaphoreHandle handle) const {
+  const auto it = semaphores_.find(handle.id);
+  if (it == semaphores_.end()) throw std::runtime_error("Invalid semaphore handle");
+  if (it->second.type != SemaphoreType::Timeline) {
+    throw std::invalid_argument("Semaphore value is only available for timeline semaphores");
+  }
+  u64 value = 0;
+  VK_CHECK(vkGetSemaphoreCounterValue(device_, it->second.semaphore, &value),
+           "Failed to query semaphore value");
+  return value;
+}
+
+void Device::WaitSemaphore(SemaphoreHandle handle, u64 value,
+                           u64 timeoutNanoseconds) {
+  const auto it = semaphores_.find(handle.id);
+  if (it == semaphores_.end()) throw std::runtime_error("Invalid semaphore handle");
+  if (it->second.type != SemaphoreType::Timeline) {
+    throw std::invalid_argument("Semaphore waits require a timeline semaphore");
+  }
+  VkSemaphoreWaitInfo info{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+      .semaphoreCount = 1,
+      .pSemaphores = &it->second.semaphore,
+      .pValues = &value};
+  VK_CHECK(vkWaitSemaphores(device_, &info, timeoutNanoseconds),
+           "Failed to wait for semaphore");
 }
 
 const QueryPool &Device::GetQueryPool(QueryPoolHandle handle) const {
