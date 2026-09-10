@@ -135,14 +135,7 @@ project "Velos"
 	{
 		"velos/**.h",
 		"velos/**.hpp",
-<<<<<<< HEAD
 		"velos/**.cpp"
-=======
-		"velos/**.cpp",
-		"velos/**.c",
-		"external/SPIRV-Reflect/spirv_reflect.h",
-		"external/SPIRV-Reflect/spirv_reflect.c"
->>>>>>> f721c4bac4daf678e0b801ca9e0b7e32ae46835a
 	}
 
 	includedirs
@@ -228,7 +221,6 @@ project "Velos"
 			"shaderc"
 		}
 
-<<<<<<< HEAD
 	filter { "system:linux", "configurations:Debug" }
 		defines
 		{
@@ -269,37 +261,6 @@ project "Velos"
 		}
 		runtime "Release"
 		optimize "Speed"
-=======
-  filter "configurations:Debug"
-    files
-    {
-      "external/tracy/public/TracyClient.cpp"
-    }
-    defines
-    {
-      "VL_DEBUG",
-      "TRACY_ENABLE"
-    }
-    runtime "Debug"
-    symbols "On"
-
-  filter "configurations:Release"
-    defines
-    {
-      "VL_RELEASE"
-    }
-    runtime "Release"
-    optimize "Speed"
-
-  filter "configurations:Profile"
-    defines
-    {
-      "VL_RELEASE"
-    }
-    runtime "Release"
-    optimize "Speed"
-    symbols "On"
->>>>>>> f721c4bac4daf678e0b801ca9e0b7e32ae46835a
 
 	filter {}
 
@@ -435,14 +396,4 @@ project "VelosImGui"
 		runtime "Release"
 		optimize "Speed"
 
-<<<<<<< HEAD
 	filter {}
-=======
-  filter "configurations:Profile"
-    defines { "VL_RELEASE" }
-    runtime "Release"
-    optimize "Speed"
-    symbols "On"
-
-	filter {}
->>>>>>> f721c4bac4daf678e0b801ca9e0b7e32ae46835a
