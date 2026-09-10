@@ -29,15 +29,7 @@ UploadContext::UploadContext(Device &device, u64 size)
 
   mappedPtr_ = static_cast<u8 *>(buffer.allocationInfo.pMappedData);
 
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = device_.GetTransferCommandPool();
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
-
-  VK_CHECK(vkAllocateCommandBuffers(device_.GetVkDevice(), &allocInfo,
-                                    &commandBuffer_),
-           "Failed to allocate transfer command buffer");
+  commandBuffer_ = device_.AllocateTransferCommandBuffer();
 
   cmd_ = std::make_unique<CommandList>(device_, commandBuffer_);
 
@@ -54,8 +46,7 @@ UploadContext::~UploadContext() {
   }
 
   if (commandBuffer_ != VK_NULL_HANDLE) {
-    vkFreeCommandBuffers(device_.GetVkDevice(), device_.GetTransferCommandPool(),
-                         1, &commandBuffer_);
+    device_.FreeTransferCommandBuffer(commandBuffer_);
   }
 
   if (stagingBuffer_.IsValid()) {

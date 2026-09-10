@@ -28,6 +28,12 @@
 namespace Velos::Vulkan {
 using namespace Velos::RHI;
 
+struct Device::CommandPools {
+  VkCommandPool graphics = VK_NULL_HANDLE;
+  VkCommandPool compute = VK_NULL_HANDLE;
+  VkCommandPool transfer = VK_NULL_HANDLE;
+};
+
 static const char *BoolStr(bool v) { return v ? "true" : "false"; }
 
 void Device::DumpLiveResources() const {
@@ -310,6 +316,12 @@ Device::~Device() {
   for (auto &commandList : commandLists_) {
     commandList.reset();
   }
+  for (auto &commandList : computeCommandLists_) {
+    commandList.reset();
+  }
+  for (auto &commandList : transferCommandLists_) {
+    commandList.reset();
+  }
 
 #if VL_PROFILING
   if (tracyContext_) {
@@ -320,6 +332,15 @@ Device::~Device() {
 
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
+
+    for (PooledCommandList &slot : pooledCommandLists_) {
+      slot.commandList.reset();
+      if (slot.fence != VK_NULL_HANDLE) {
+        vkDestroyFence(device_, slot.fence, nullptr);
+        slot.fence = VK_NULL_HANDLE;
+      }
+    }
+    pooledCommandLists_.clear();
 
     if (pipelineCache_ != VK_NULL_HANDLE) {
       if (!pipelineCachePath_.empty()) {
@@ -395,16 +416,28 @@ Device::~Device() {
                            nullptr);
         frames_[i].imageAvailableSemaphore = VK_NULL_HANDLE;
       }
+
+      if (computeInFlightFences_[i] != VK_NULL_HANDLE) {
+        vkDestroyFence(device_, computeInFlightFences_[i], nullptr);
+        computeInFlightFences_[i] = VK_NULL_HANDLE;
+      }
+      if (transferInFlightFences_[i] != VK_NULL_HANDLE) {
+        vkDestroyFence(device_, transferInFlightFences_[i], nullptr);
+        transferInFlightFences_[i] = VK_NULL_HANDLE;
+      }
     }
 
-    if (commandPool_ != VK_NULL_HANDLE) {
-      vkDestroyCommandPool(device_, commandPool_, nullptr);
-      commandPool_ = VK_NULL_HANDLE;
-    }
-
-    if (transferCommandPool_ != VK_NULL_HANDLE) {
-      vkDestroyCommandPool(device_, transferCommandPool_, nullptr);
-      transferCommandPool_ = VK_NULL_HANDLE;
+    if (commandPools_ != nullptr) {
+      if (commandPools_->graphics != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(device_, commandPools_->graphics, nullptr);
+      }
+      if (commandPools_->compute != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(device_, commandPools_->compute, nullptr);
+      }
+      if (commandPools_->transfer != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(device_, commandPools_->transfer, nullptr);
+      }
+      commandPools_.reset();
     }
 
     DumpLiveResources();
@@ -519,6 +552,16 @@ void Device::DestroySemaphore(SemaphoreHandle handle) {
   semaphores_.erase(it);
 }
 
+void Device::SignalSemaphore(SemaphoreHandle handle, u64 value) {
+  if (value <= GetSemaphoreValue(handle))
+    throw std::invalid_argument("Timeline signal value must increase");
+  VkSemaphoreSignalInfo info{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+      .semaphore = semaphores_.at(handle.id).semaphore,
+      .value = value};
+  VK_CHECK(vkSignalSemaphore(device_, &info), "Failed to signal semaphore");
+}
+
 u64 Device::GetSemaphoreValue(SemaphoreHandle handle) const {
   const auto it = semaphores_.find(handle.id);
   if (it == semaphores_.end()) throw std::runtime_error("Invalid semaphore handle");
@@ -575,6 +618,77 @@ bool Device::GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
 
 double Device::GetTimestampPeriodNanoseconds() const {
   return static_cast<double>(physicalDeviceProperties_.limits.timestampPeriod);
+}
+
+QueueInfo Device::GetQueueInfo(QueueType type) const {
+  switch (type) {
+  case QueueType::Graphics:
+    return {.type = type, .dedicated = false, .aliasesGraphics = true};
+  case QueueType::Compute:
+    return {.type = type,
+            .dedicated = computeQueueFamily_ != mainQueueFamily,
+            .aliasesGraphics = computeQueue_ == graphicsQueue_};
+  case QueueType::Transfer:
+    return {.type = type,
+            .dedicated = transferQueueFamily_ != mainQueueFamily,
+            .aliasesGraphics = transferQueue_ == graphicsQueue_};
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+VkQueue Device::GetVkQueue(QueueType type) const {
+  switch (type) {
+  case QueueType::Graphics: return graphicsQueue_;
+  case QueueType::Compute: return computeQueue_;
+  case QueueType::Transfer: return transferQueue_;
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+VkFence Device::GetFrameFence(QueueType type, u32 frameIndex) const {
+  switch (type) {
+  case QueueType::Graphics: return frames_.at(frameIndex).inFlightFence;
+  case QueueType::Compute: return computeInFlightFences_.at(frameIndex);
+  case QueueType::Transfer: return transferInFlightFences_.at(frameIndex);
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+VkCommandBuffer Device::GetFrameCommandBuffer(QueueType type,
+                                               u32 frameIndex) const {
+  switch (type) {
+  case QueueType::Graphics: return commandBuffers_.at(frameIndex);
+  case QueueType::Compute: return computeCommandBuffers_.at(frameIndex);
+  case QueueType::Transfer: return transferCommandBuffers_.at(frameIndex);
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+std::unique_ptr<CommandList>& Device::GetFrameCommandList(QueueType type,
+                                                          u32 frameIndex) {
+  switch (type) {
+  case QueueType::Graphics: return commandLists_.at(frameIndex);
+  case QueueType::Compute: return computeCommandLists_.at(frameIndex);
+  case QueueType::Transfer: return transferCommandLists_.at(frameIndex);
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+bool& Device::GetCommandPrepared(QueueType type, u32 frameIndex) {
+  switch (type) {
+  case QueueType::Graphics: return graphicsCommandPrepared_.at(frameIndex);
+  case QueueType::Compute: return computeCommandPrepared_.at(frameIndex);
+  case QueueType::Transfer: return transferCommandPrepared_.at(frameIndex);
+  }
+  throw std::invalid_argument("Unsupported queue type");
+}
+
+std::vector<u32> Device::GetResourceQueueFamilies() const {
+  std::vector<u32> families{
+      mainQueueFamily, computeQueueFamily_, transferQueueFamily_};
+  std::sort(families.begin(), families.end());
+  families.erase(std::unique(families.begin(), families.end()), families.end());
+  return families;
 }
 
 void Device::CreateAllocator() {
@@ -744,6 +858,7 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
 
   return vulkan13Features.dynamicRendering == VK_TRUE &&
          vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
+         vulkan12Features.timelineSemaphore == VK_TRUE &&
          vulkan12Features.drawIndirectCount == VK_TRUE &&
          vulkan11Features.shaderDrawParameters == VK_TRUE &&
          features2.features.multiDrawIndirect == VK_TRUE &&
@@ -849,6 +964,7 @@ void Device::CreateLogicalDevice() {
                                            queueFamilies.data());
 
   bool foundMainQueue = false;
+  bool foundDedicatedComputeQueue = false;
   bool foundDedicatedTransferQueue = false;
   for (u32 i = 0; i < queueFamilyCount; ++i) {
     const VkQueueFlags flags = queueFamilies[i].queueFlags;
@@ -857,6 +973,13 @@ void Device::CreateLogicalDevice() {
     if (!foundMainQueue && (flags & mainQueueFlags) == mainQueueFlags) {
       mainQueueFamily = i;
       foundMainQueue = true;
+    }
+    if (!foundDedicatedComputeQueue &&
+        (flags & VK_QUEUE_COMPUTE_BIT) != 0 &&
+        (flags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+      computeQueueFamily_ = i;
+      computeQueueIndex_ = 0;
+      foundDedicatedComputeQueue = true;
     }
     if (!foundDedicatedTransferQueue &&
         (flags & VK_QUEUE_TRANSFER_BIT) != 0 &&
@@ -870,23 +993,52 @@ void Device::CreateLogicalDevice() {
     throw std::runtime_error("Failed to find graphics queue family");
   }
 
+  if (!foundDedicatedComputeQueue) {
+    computeQueueFamily_ = mainQueueFamily;
+    computeQueueIndex_ = queueFamilies[mainQueueFamily].queueCount > 1 ? 1u : 0u;
+  }
+
   if (!foundDedicatedTransferQueue) {
     transferQueueFamily_ = mainQueueFamily;
   }
 
-  const float queuePriority = 1.0f;
+  struct QueueRequest {
+    u32 family = 0;
+    u32 count = 0;
+  };
+  std::vector<QueueRequest> queueRequests;
+  const auto requireQueue = [&queueRequests](u32 family, u32 index) {
+    const auto request = std::find_if(
+        queueRequests.begin(), queueRequests.end(),
+        [family](const QueueRequest &candidate) {
+          return candidate.family == family;
+        });
+    if (request == queueRequests.end()) {
+      queueRequests.push_back({family, index + 1});
+    } else {
+      request->count = std::max(request->count, index + 1);
+    }
+  };
+  requireQueue(mainQueueFamily, 0);
+  requireQueue(computeQueueFamily_, computeQueueIndex_);
+  requireQueue(transferQueueFamily_, 0);
 
-  VkDeviceQueueCreateInfo graphicsQueueCreateInfo{};
-  graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  graphicsQueueCreateInfo.queueFamilyIndex = mainQueueFamily;
-  graphicsQueueCreateInfo.queueCount = 1;
-  graphicsQueueCreateInfo.pQueuePriorities = &queuePriority;
+  std::vector<std::vector<float>> queuePriorities;
+  queuePriorities.reserve(queueRequests.size());
+  for (const QueueRequest &request : queueRequests) {
+    queuePriorities.emplace_back(request.count, 1.0f);
+  }
 
-  VkDeviceQueueCreateInfo transferQueueCreateInfo{};
-  transferQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  transferQueueCreateInfo.queueFamilyIndex = transferQueueFamily_;
-  transferQueueCreateInfo.queueCount = 1;
-  transferQueueCreateInfo.pQueuePriorities = &queuePriority;
+  std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+  queueCreateInfos.reserve(queueRequests.size());
+  for (std::size_t i = 0; i < queueRequests.size(); ++i) {
+    queueCreateInfos.push_back(VkDeviceQueueCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = queueRequests[i].family,
+        .queueCount = queueRequests[i].count,
+        .pQueuePriorities = queuePriorities[i].data(),
+    });
+  }
 
   VkPhysicalDeviceFeatures deviceFeatures{};
   deviceFeatures.multiDrawIndirect = VK_TRUE;
@@ -900,6 +1052,7 @@ void Device::CreateLogicalDevice() {
   vulkan12Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
   vulkan12Features.drawIndirectCount = VK_TRUE;
+  vulkan12Features.timelineSemaphore = VK_TRUE;
   vulkan12Features.bufferDeviceAddress = VK_TRUE;
   vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
   vulkan12Features.runtimeDescriptorArray = VK_TRUE;
@@ -921,11 +1074,8 @@ void Device::CreateLogicalDevice() {
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   createInfo.pNext = &vulkan13Features;
-  const VkDeviceQueueCreateInfo queueCreateInfos[] = {
-      graphicsQueueCreateInfo, transferQueueCreateInfo};
-  createInfo.queueCreateInfoCount =
-      transferQueueFamily_ == mainQueueFamily ? 1u : 2u;
-  createInfo.pQueueCreateInfos = queueCreateInfos;
+  createInfo.queueCreateInfoCount = static_cast<u32>(queueCreateInfos.size());
+  createInfo.pQueueCreateInfos = queueCreateInfos.data();
   createInfo.pEnabledFeatures = &deviceFeatures;
   createInfo.enabledExtensionCount = 1;
   createInfo.ppEnabledExtensionNames = deviceExtensions;
@@ -934,6 +1084,8 @@ void Device::CreateLogicalDevice() {
            "Failed to create Vulkan logical device");
 
   vkGetDeviceQueue(device_, mainQueueFamily, 0, &graphicsQueue_);
+  vkGetDeviceQueue(device_, computeQueueFamily_, computeQueueIndex_,
+                   &computeQueue_);
   vkGetDeviceQueue(device_, transferQueueFamily_, 0, &transferQueue_);
 
   presentQueueFamily_ = mainQueueFamily;
@@ -942,14 +1094,25 @@ void Device::CreateLogicalDevice() {
 
 void Device::CreateCommandObjects() {
   VL_PROFILE_ZONE_N("Device::CreateCommandObjects");
+  commandPools_ = std::make_unique<CommandPools>();
 
   VkCommandPoolCreateInfo framePoolInfo{};
   framePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   framePoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   framePoolInfo.queueFamilyIndex = mainQueueFamily;
 
-  VK_CHECK(vkCreateCommandPool(device_, &framePoolInfo, nullptr, &commandPool_),
-           "Failed to create Vulkan command pool");
+  VK_CHECK(vkCreateCommandPool(device_, &framePoolInfo, nullptr,
+                               &commandPools_->graphics),
+            "Failed to create Vulkan command pool");
+
+  VkCommandPoolCreateInfo computePoolInfo{};
+  computePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  computePoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  computePoolInfo.queueFamilyIndex = computeQueueFamily_;
+
+  VK_CHECK(vkCreateCommandPool(device_, &computePoolInfo, nullptr,
+                               &commandPools_->compute),
+           "Failed to create compute command pool");
 
   VkCommandPoolCreateInfo transferPoolInfo{};
   transferPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -958,18 +1121,28 @@ void Device::CreateCommandObjects() {
   transferPoolInfo.queueFamilyIndex = transferQueueFamily_;
 
   VK_CHECK(vkCreateCommandPool(device_, &transferPoolInfo, nullptr,
-	  &transferCommandPool_),
+	  &commandPools_->transfer),
 	  "Failed to create transfer command pool");
 
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = commandPool_;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = k_MaxFramesInFlight;
+  const auto allocateCommandBuffers = [this](
+      VkCommandPool pool,
+      std::array<VkCommandBuffer, k_MaxFramesInFlight> &buffers,
+      const char *failureMessage) {
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = pool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = k_MaxFramesInFlight;
+    VK_CHECK(vkAllocateCommandBuffers(device_, &allocInfo, buffers.data()),
+             failureMessage);
+  };
 
-  VK_CHECK(
-      vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()),
-      "Failed to allocate Vulkan command buffer");
+  allocateCommandBuffers(commandPools_->graphics, commandBuffers_,
+                         "Failed to allocate graphics command buffers");
+  allocateCommandBuffers(commandPools_->compute, computeCommandBuffers_,
+                         "Failed to allocate compute command buffers");
+  allocateCommandBuffers(commandPools_->transfer, transferCommandBuffers_,
+                         "Failed to allocate transfer command buffers");
 
 #if VL_PROFILING
   tracyContext_ = VL_PROFILE_GPU_CONTEXT(physicalDevice_, device_,
@@ -978,6 +1151,29 @@ void Device::CreateCommandObjects() {
 
   for (u32 i = 0; i < k_MaxFramesInFlight; i++) {
     commandLists_[i] = std::make_unique<CommandList>(*this, commandBuffers_[i]);
+    computeCommandLists_[i] =
+        std::make_unique<CommandList>(*this, computeCommandBuffers_[i]);
+    transferCommandLists_[i] =
+        std::make_unique<CommandList>(*this, transferCommandBuffers_[i]);
+  }
+}
+
+VkCommandBuffer Device::AllocateTransferCommandBuffer() {
+  VkCommandBufferAllocateInfo allocateInfo{};
+  allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocateInfo.commandPool = commandPools_->transfer;
+  allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocateInfo.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+  VK_CHECK(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
+           "Failed to allocate transfer command buffer");
+  return commandBuffer;
+}
+
+void Device::FreeTransferCommandBuffer(VkCommandBuffer commandBuffer) {
+  if (commandBuffer != VK_NULL_HANDLE) {
+    vkFreeCommandBuffers(device_, commandPools_->transfer, 1, &commandBuffer);
   }
 }
 
@@ -999,6 +1195,13 @@ void Device::CreateSyncObjects() {
     VK_CHECK(
         vkCreateFence(device_, &fenceInfo, nullptr, &frames_[i].inFlightFence),
         "Failed to create in-flight fence");
+
+    VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr,
+                           &computeInFlightFences_[i]),
+             "Failed to create compute in-flight fence");
+    VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr,
+                           &transferInFlightFences_[i]),
+             "Failed to create transfer in-flight fence");
   }
 }
 
@@ -1054,7 +1257,7 @@ void Device::AcquireUploadedImages(std::span<const PendingImageAcquire> pendingA
 
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = commandPool_;
+    allocInfo.commandPool = commandPools_->graphics;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 1;
 
@@ -1095,7 +1298,7 @@ void Device::AcquireUploadedImages(std::span<const PendingImageAcquire> pendingA
         "Failed to wait for acquire fence");
 
     vkDestroyFence(device_, fence, nullptr);
-	vkFreeCommandBuffers(device_, commandPool_, 1, &cmd);
+	vkFreeCommandBuffers(device_, commandPools_->graphics, 1, &cmd);
 
 }
 
@@ -1355,6 +1558,13 @@ BufferHandle Device::CreateBuffer(const BufferDesc &desc) {
   bufferInfo.size = desc.size;
   bufferInfo.usage = ToVkBufferUsageFlags(desc.usage);
   bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  const std::vector<u32> queueFamilies =
+      desc.concurrentQueues ? GetResourceQueueFamilies() : std::vector<u32>{};
+  if (queueFamilies.size() > 1) {
+    bufferInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+    bufferInfo.queueFamilyIndexCount = static_cast<u32>(queueFamilies.size());
+    bufferInfo.pQueueFamilyIndices = queueFamilies.data();
+  }
 
   Buffer buffer{};
   buffer.size = desc.size;
@@ -1532,6 +1742,13 @@ ImageHandle Device::CreateImage(const ImageDesc &desc) {
   createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
   createInfo.usage = ToVkImageUsage(desc.usage);
   createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  const std::vector<u32> queueFamilies =
+      desc.concurrentQueues ? GetResourceQueueFamilies() : std::vector<u32>{};
+  if (queueFamilies.size() > 1) {
+    createInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+    createInfo.queueFamilyIndexCount = static_cast<u32>(queueFamilies.size());
+    createInfo.pQueueFamilyIndices = queueFamilies.data();
+  }
   createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
   if (desc.type == ImageType::Cube) {
@@ -2737,6 +2954,10 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
 
   const u32 frameIndex = currentFrame_;
   FrameSyncData &frame = frames_[frameIndex];
+  if (graphicsCommandPrepared_[frameIndex]) {
+    throw std::logic_error(
+        "BeginFrame called with an unsubmitted graphics command list");
+  }
   float frameFenceWaitMs = 0.0f;
   float acquireImageMs = 0.0f;
   float imageFenceWaitMs = 0.0f;
@@ -2781,6 +3002,15 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
 
   VK_CHECK(vkResetFences(device_, 1, &frame.inFlightFence),
            "Failed to reset frame fence");
+  graphicsCommandPrepared_[frameIndex] = true;
+  imageAvailablePending_ = true;
+  ++commandListEpoch_;
+  if (commandListEpoch_ == 0) {
+    commandListEpoch_ = 1;
+    for (PooledCommandList &slot : pooledCommandLists_) {
+      slot.lastAcquireEpoch = 0;
+    }
+  }
 
   currentBackbufferIndex_ = imageIndex;
 
@@ -2801,37 +3031,190 @@ FrameBeginResult Device::BeginFrame(SwapchainHandle swapchain) {
   };
 }
 
-ICommandList &Device::GetCommandList() {
+ICommandList &Device::AcquireCommandList(QueueType type) {
+  const auto reusable = std::find_if(
+      pooledCommandLists_.begin(), pooledCommandLists_.end(),
+      [this, type](const PooledCommandList &slot) {
+        return slot.queue == type && slot.frameIndex == currentFrame_ &&
+               !slot.acquired && slot.lastAcquireEpoch != commandListEpoch_;
+      });
 
-  if (!commandLists_[currentFrame_]) {
+  PooledCommandList *slot = nullptr;
+  if (reusable != pooledCommandLists_.end()) {
+    slot = &*reusable;
+    if (slot->inFlight) {
+      VK_CHECK(vkWaitForFences(device_, 1, &slot->fence, VK_TRUE, UINT64_MAX),
+               "Failed to wait for pooled command-list fence");
+      slot->inFlight = false;
+    }
+  } else {
+    VkCommandPool commandPool = VK_NULL_HANDLE;
+    switch (type) {
+    case QueueType::Graphics: commandPool = commandPools_->graphics; break;
+    case QueueType::Compute: commandPool = commandPools_->compute; break;
+    case QueueType::Transfer: commandPool = commandPools_->transfer; break;
+    }
+    VkCommandBufferAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.commandPool = commandPool;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VK_CHECK(vkAllocateCommandBuffers(device_, &allocateInfo, &commandBuffer),
+             "Failed to allocate pooled command buffer");
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkFence fence = VK_NULL_HANDLE;
+    const VkResult fenceResult =
+        vkCreateFence(device_, &fenceInfo, nullptr, &fence);
+    if (fenceResult != VK_SUCCESS) {
+      vkFreeCommandBuffers(device_, allocateInfo.commandPool, 1,
+                           &commandBuffer);
+      VK_CHECK(fenceResult, "Failed to create pooled command-list fence");
+    }
+
+    pooledCommandLists_.push_back({
+        .queue = type,
+        .frameIndex = currentFrame_,
+        .commandBuffer = commandBuffer,
+        .commandList = std::make_unique<CommandList>(*this, commandBuffer),
+        .fence = fence,
+    });
+    slot = &pooledCommandLists_.back();
+  }
+
+  slot->lastAcquireEpoch = commandListEpoch_;
+  slot->acquired = true;
+  return *slot->commandList;
+}
+
+void Device::Submit(QueueType type, ICommandList &commandList,
+                    const SubmitDesc &desc) {
+  VL_PROFILE_ZONE_N("Device::SubmitPooled");
+  const auto found = std::find_if(
+      pooledCommandLists_.begin(), pooledCommandLists_.end(),
+      [&commandList](const PooledCommandList &slot) {
+        return slot.commandList.get() == &commandList;
+      });
+  if (found == pooledCommandLists_.end()) {
+    throw std::invalid_argument(
+        "Submit received a command list that was not acquired from the pool");
+  }
+
+  PooledCommandList &slot = *found;
+  if (slot.queue != type) {
+    throw std::invalid_argument(
+        "Submit queue does not match the acquired command list");
+  }
+  if (!slot.acquired || slot.frameIndex != currentFrame_) {
+    throw std::logic_error("Acquired command list is not ready for submission");
+  }
+
+  VK_CHECK(vkResetFences(device_, 1, &slot.fence),
+           "Failed to reset pooled command-list fence");
+  const VkSemaphore binaryWait =
+      type == QueueType::Graphics && imageAvailablePending_
+          ? frames_[currentFrame_].imageAvailableSemaphore
+          : VK_NULL_HANDLE;
+  SubmitWithTimeline(GetVkQueue(type), slot.commandBuffer, slot.fence, desc,
+                     binaryWait);
+  if (binaryWait != VK_NULL_HANDLE) imageAvailablePending_ = false;
+  slot.acquired = false;
+  slot.inFlight = true;
+}
+
+ICommandList &Device::GetCommandList(QueueType type) {
+  std::unique_ptr<CommandList> &commandList =
+      GetFrameCommandList(type, currentFrame_);
+  if (!commandList) {
     throw std::runtime_error("Command list has not been created");
   }
 
-  return *commandLists_[currentFrame_];
+  bool &prepared = GetCommandPrepared(type, currentFrame_);
+  if (!prepared) {
+    const VkFence fence = GetFrameFence(type, currentFrame_);
+    VK_CHECK(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX),
+             "Failed to wait for queue command-list fence");
+    VK_CHECK(vkResetFences(device_, 1, &fence),
+             "Failed to reset queue command-list fence");
+    prepared = true;
+  }
+
+  return *commandList;
 }
 
-void Device::Submit() {
+void Device::SubmitWithTimeline(VkQueue queue, VkCommandBuffer cmd,
+                                VkFence fence, const SubmitDesc &desc,
+                                VkSemaphore binaryWait, VkSemaphore binarySignal) {
+  std::vector<VkSemaphore> waits, signals;
+  std::vector<u64> waitValues, signalValues;
+  auto append = [&](std::span<const TimelineSemaphorePoint> points,
+                    std::vector<VkSemaphore> &handles, std::vector<u64> &values) {
+    for (const auto &point : points) {
+      const auto it = semaphores_.find(point.semaphore.id);
+      if (it == semaphores_.end())
+        throw std::invalid_argument("Invalid timeline semaphore handle");
+      if (it->second.type != SemaphoreType::Timeline)
+        throw std::invalid_argument("Submission points require timeline semaphores");
+      if (std::find(handles.begin(), handles.end(), it->second.semaphore) != handles.end())
+        throw std::invalid_argument("Duplicate timeline semaphore in submission");
+      handles.push_back(it->second.semaphore);
+      values.push_back(point.value);
+    }
+  };
+  append(desc.waits, waits, waitValues);
+  append(desc.signals, signals, signalValues);
+  for (size_t i = 0; i < signals.size(); ++i) {
+    if (signalValues[i] <= GetSemaphoreValue(desc.signals[i].semaphore))
+      throw std::invalid_argument("Timeline signal value must increase");
+    for (size_t j = 0; j < waits.size(); ++j)
+      if (signals[i] == waits[j] && signalValues[i] <= waitValues[j])
+        throw std::invalid_argument("Timeline signal must exceed its submission wait");
+  }
+  if (binaryWait) { waits.push_back(binaryWait); waitValues.push_back(0); }
+  if (binarySignal) { signals.push_back(binarySignal); signalValues.push_back(0); }
+  std::vector<VkPipelineStageFlags> stages(waits.size(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+  VkTimelineSemaphoreSubmitInfo timeline{
+      .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+      .waitSemaphoreValueCount = static_cast<u32>(waitValues.size()),
+      .pWaitSemaphoreValues = waitValues.data(),
+      .signalSemaphoreValueCount = static_cast<u32>(signalValues.size()),
+      .pSignalSemaphoreValues = signalValues.data()};
+  VkSubmitInfo submit{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .pNext = &timeline,
+      .waitSemaphoreCount = static_cast<u32>(waits.size()),
+      .pWaitSemaphores = waits.data(),
+      .pWaitDstStageMask = stages.data(),
+      .commandBufferCount = 1,
+      .pCommandBuffers = &cmd,
+      .signalSemaphoreCount = static_cast<u32>(signals.size()),
+      .pSignalSemaphores = signals.data()};
+  VK_CHECK(vkQueueSubmit(queue, 1, &submit, fence),
+            "Failed to submit Vulkan command buffer");
+}
+
+void Device::Submit(QueueType type, const SubmitDesc &desc) {
   VL_PROFILE_ZONE_N("Device::Submit");
-
-  FrameSyncData &frame = frames_[currentFrame_];
-  VkCommandBuffer cmd = commandBuffers_[currentFrame_];
-
-  VK_CHECK(
-      vkWaitForFences(device_, 1, &frame.inFlightFence, VK_TRUE, UINT64_MAX),
-      "Failed to wait for frame fence");
-  VK_CHECK(vkResetFences(device_, 1, &frame.inFlightFence),
-           "Failed to reset frame fence");
-
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &cmd;
-
-  VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, frame.inFlightFence),
-           "Failed to submit Vulkan command buffer");
+  bool &prepared = GetCommandPrepared(type, currentFrame_);
+  if (!prepared) {
+    throw std::logic_error("Submit called before acquiring a command list");
+  }
+  const VkSemaphore binaryWait =
+      type == QueueType::Graphics && imageAvailablePending_
+          ? frames_[currentFrame_].imageAvailableSemaphore
+          : VK_NULL_HANDLE;
+  SubmitWithTimeline(GetVkQueue(type),
+                     GetFrameCommandBuffer(type, currentFrame_),
+                     GetFrameFence(type, currentFrame_), desc, binaryWait);
+  if (binaryWait != VK_NULL_HANDLE) imageAvailablePending_ = false;
+  prepared = false;
 }
 
-void Device::SubmitAndPresent(SwapchainHandle swapchain) {
+void Device::SubmitAndPresent(SwapchainHandle swapchain, const SubmitDesc &desc) {
   VL_PROFILE_ZONE_N("Device::SubmitAndPresent");
 
   if (!swapchain.IsValid()) {
@@ -2850,20 +3233,16 @@ void Device::SubmitAndPresent(SwapchainHandle swapchain) {
   VkSemaphore renderFinishedSemaphore =
       swapchainRenderFinishedSemaphores_[currentBackbufferIndex_];
 
-  VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
-
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.waitSemaphoreCount = 1;
-  submitInfo.pWaitSemaphores = &frame.imageAvailableSemaphore;
-  submitInfo.pWaitDstStageMask = waitStages;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &cmd;
-  submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
-
-  VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, frame.inFlightFence),
-           "Failed to submit Vulkan command buffer");
+  if (!graphicsCommandPrepared_[currentFrame_]) {
+    throw std::logic_error(
+        "SubmitAndPresent called before acquiring a graphics command list");
+  }
+  const VkSemaphore imageAvailable = imageAvailablePending_
+      ? frame.imageAvailableSemaphore : VK_NULL_HANDLE;
+  SubmitWithTimeline(graphicsQueue_, cmd, frame.inFlightFence, desc,
+                     imageAvailable, renderFinishedSemaphore);
+  imageAvailablePending_ = false;
+  graphicsCommandPrepared_[currentFrame_] = false;
 
   VkSwapchainKHR swapchains[] = {swapchain_->GetVkSwapchain()};
 
@@ -2888,19 +3267,6 @@ void Device::SubmitAndPresent(SwapchainHandle swapchain) {
   VK_CHECK(result, "Failed to present Vulkan swapchain image");
 
   currentFrame_ = (currentFrame_ + 1) % k_MaxFramesInFlight;
-}
-
-void Device::Submit(CommandListHandle handle, VkFence fence) {
-
-  VkCommandBuffer cmd = GetCommandBuffer();
-
-  VkSubmitInfo submit{};
-  submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit.commandBufferCount = 1;
-  submit.pCommandBuffers = &cmd;
-
-  VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submit, fence),
-           "Failed to submit command buffer");
 }
 
 Extent2D Device::GetSwapchainDimensions() const {

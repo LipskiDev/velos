@@ -5,6 +5,7 @@
 #include <array>
 #include <filesystem>
 #include <unordered_map>
+#include <vector>
 #include <vk_mem_alloc.h>
 
 #include "rhi/device.h"
@@ -16,6 +17,7 @@
 namespace Velos::Vulkan {
 using namespace Velos::RHI;
 class CommandList;
+class UploadContext;
 
 struct Shader {
   VkShaderModule module = VK_NULL_HANDLE;
@@ -180,6 +182,7 @@ public:
                                 u32 queryCount, u64 *results) override;
   double GetTimestampPeriodNanoseconds() const override;
   u32 GetCurrentFrameIndex() const override { return currentFrame_; }
+  QueueInfo GetQueueInfo(QueueType type) const override;
   FenceHandle CreateFence(bool signaled = false) override;
   void DestroyFence(FenceHandle handle) override;
   bool IsFenceSignaled(FenceHandle handle) const override;
@@ -188,6 +191,7 @@ public:
   SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
                                   u64 initialValue = 0) override;
   void DestroySemaphore(SemaphoreHandle handle) override;
+  void SignalSemaphore(SemaphoreHandle handle, u64 value) override;
   u64 GetSemaphoreValue(SemaphoreHandle handle) const override;
   void WaitSemaphore(SemaphoreHandle handle, u64 value,
                      u64 timeoutNanoseconds = UINT64_MAX) override;
@@ -196,10 +200,14 @@ public:
   ImageLayout GetImageLayout(ImageHandle imageHandle, u32 mipLevel) const;
 
   FrameBeginResult BeginFrame(SwapchainHandle handle) override;
-  ICommandList &GetCommandList() override;
-  void Submit() override;
-  void SubmitAndPresent(SwapchainHandle swapchain) override;
-  void Submit(CommandListHandle handle, VkFence fence);
+  ICommandList &AcquireCommandList(QueueType type) override;
+  void Submit(QueueType type, ICommandList &commandList,
+              const SubmitDesc &desc = {}) override;
+  ICommandList &GetCommandList(
+      QueueType type = QueueType::Graphics) override;
+  using IDevice::Submit;
+  void Submit(QueueType type, const SubmitDesc &desc = {}) override;
+  void SubmitAndPresent(SwapchainHandle swapchain, const SubmitDesc &desc = {}) override;
 
   void ClearCurrentSwapchainImage(float r, float g, float b, float a);
 
@@ -220,6 +228,21 @@ public:
 
 private:
   u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) const;
+  void SubmitWithTimeline(VkQueue queue, VkCommandBuffer cmd, VkFence fence,
+                          const SubmitDesc &desc,
+                          VkSemaphore binaryWait = VK_NULL_HANDLE,
+                          VkSemaphore binarySignal = VK_NULL_HANDLE);
+  VkQueue GetVkQueue(QueueType type) const;
+  VkFence GetFrameFence(QueueType type, u32 frameIndex) const;
+  VkCommandBuffer GetFrameCommandBuffer(QueueType type, u32 frameIndex) const;
+  std::unique_ptr<CommandList>& GetFrameCommandList(QueueType type,
+                                                    u32 frameIndex);
+  bool& GetCommandPrepared(QueueType type, u32 frameIndex);
+  VkCommandBuffer AllocateTransferCommandBuffer();
+  void FreeTransferCommandBuffer(VkCommandBuffer commandBuffer);
+  std::vector<u32> GetResourceQueueFamilies() const;
+
+  friend class UploadContext;
 
 private:
   void CreateInstance(const DeviceDesc &desc);
@@ -246,8 +269,6 @@ public:
     return commandBuffers_[currentFrame_];
   }
 
-  VkCommandPool GetTransferCommandPool() const { return transferCommandPool_; }
-
   Extent2D GetSwapchainDimensions() const override;
 
   VmaAllocator GetAllocator() { return allocator_; }
@@ -268,6 +289,10 @@ private:
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   u32 mainQueueFamily = 0;
 
+  VkQueue computeQueue_ = VK_NULL_HANDLE;
+  u32 computeQueueFamily_ = 0;
+  u32 computeQueueIndex_ = 0;
+
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   u32 presentQueueFamily_ = 0;
 
@@ -279,12 +304,37 @@ private:
 
   static constexpr u32 k_MaxFramesInFlight = 2;
 
-  VkCommandPool commandPool_ = VK_NULL_HANDLE;
-  VkCommandPool transferCommandPool_ = VK_NULL_HANDLE;
+  struct CommandPools;
+  std::unique_ptr<CommandPools> commandPools_;
 
   std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
   std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
       commandLists_;
+  std::array<VkCommandBuffer, k_MaxFramesInFlight> computeCommandBuffers_{};
+  std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
+      computeCommandLists_;
+  std::array<VkCommandBuffer, k_MaxFramesInFlight> transferCommandBuffers_{};
+  std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
+      transferCommandLists_;
+  std::array<VkFence, k_MaxFramesInFlight> computeInFlightFences_{};
+  std::array<VkFence, k_MaxFramesInFlight> transferInFlightFences_{};
+  std::array<bool, k_MaxFramesInFlight> graphicsCommandPrepared_{};
+  std::array<bool, k_MaxFramesInFlight> computeCommandPrepared_{};
+  std::array<bool, k_MaxFramesInFlight> transferCommandPrepared_{};
+
+  struct PooledCommandList {
+    QueueType queue = QueueType::Graphics;
+    u32 frameIndex = 0;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    std::unique_ptr<CommandList> commandList;
+    VkFence fence = VK_NULL_HANDLE;
+    u64 lastAcquireEpoch = 0;
+    bool acquired = false;
+    bool inFlight = false;
+  };
+  std::vector<PooledCommandList> pooledCommandLists_;
+  u64 commandListEpoch_ = 1;
+  bool imageAvailablePending_ = false;
 
   std::unique_ptr<Swapchain> swapchain_;
   std::vector<ImageHandle> swapchainImageHandles_;

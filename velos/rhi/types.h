@@ -4,6 +4,12 @@
 
 namespace Velos::RHI {
 
+enum class QueueType {
+  Graphics,
+  Compute,
+  Transfer,
+};
+
 template <typename T> constexpr T operator|(T a, T b) {
   return static_cast<T>(static_cast<u32>(a) | static_cast<u32>(b));
 }

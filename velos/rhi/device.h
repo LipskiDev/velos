@@ -8,6 +8,7 @@
 #include "resources.h"
 #include "types.h"
 #include <memory>
+#include <span>
 
 namespace Velos::RHI {
 enum class GraphicsAPI {
@@ -34,6 +35,24 @@ struct FrameBeginResult {
   float frameFenceWaitMs = 0.0f;
   float acquireImageMs = 0.0f;
   float imageFenceWaitMs = 0.0f;
+};
+
+// Waits cover all commands. Keep semaphores alive until work completes and
+// externally synchronize signals so their values strictly increase.
+struct TimelineSemaphorePoint {
+  SemaphoreHandle semaphore{};
+  u64 value = 0;
+};
+
+struct SubmitDesc {
+  std::span<const TimelineSemaphorePoint> waits{};
+  std::span<const TimelineSemaphorePoint> signals{};
+};
+
+struct QueueInfo {
+  QueueType type = QueueType::Graphics;
+  bool dedicated = false;
+  bool aliasesGraphics = true;
 };
 
 class IDevice {
@@ -90,6 +109,7 @@ public:
                                         u32 queryCount, u64 *results) = 0;
   virtual double GetTimestampPeriodNanoseconds() const = 0;
   virtual u32 GetCurrentFrameIndex() const = 0;
+  virtual QueueInfo GetQueueInfo(QueueType type) const = 0;
 
   virtual FenceHandle CreateFence(bool signaled = false) = 0;
   virtual void DestroyFence(FenceHandle handle) = 0;
@@ -99,6 +119,7 @@ public:
   virtual SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
                                           u64 initialValue = 0) = 0;
   virtual void DestroySemaphore(SemaphoreHandle handle) = 0;
+  virtual void SignalSemaphore(SemaphoreHandle handle, u64 value) = 0;
   virtual u64 GetSemaphoreValue(SemaphoreHandle handle) const = 0;
   virtual void WaitSemaphore(SemaphoreHandle handle, u64 value,
                              u64 timeoutNanoseconds = UINT64_MAX) = 0;
@@ -106,9 +127,16 @@ public:
   virtual ImageLayout GetImageLayout(ImageHandle image, u32 mipLevel) const = 0;
 
   virtual FrameBeginResult BeginFrame(SwapchainHandle handle) = 0;
-  virtual ICommandList &GetCommandList() = 0;
-  virtual void Submit() = 0;
-  virtual void SubmitAndPresent(SwapchainHandle swapchain) = 0;
+  virtual ICommandList &AcquireCommandList(QueueType type) = 0;
+  virtual void Submit(QueueType type, ICommandList &commandList,
+                      const SubmitDesc &desc = {}) = 0;
+  virtual ICommandList &GetCommandList(
+      QueueType type = QueueType::Graphics) = 0;
+  virtual void Submit(QueueType type, const SubmitDesc &desc = {}) = 0;
+  void Submit(const SubmitDesc &desc = {}) {
+    Submit(QueueType::Graphics, desc);
+  }
+  virtual void SubmitAndPresent(SwapchainHandle swapchain, const SubmitDesc &desc = {}) = 0;
 
   virtual void WaitIdle() = 0;
   virtual void CollectGarbage() = 0;

@@ -3,6 +3,12 @@
 The executable runs the same backend-neutral RHI checks against a selected
 backend and overwrites `last-run.html` after every run.
 
+Timeline coverage includes initial values, CPU signals/waits, a GPU wait released
+by a CPU signal, GPU signals and chained waits across compute and graphics queues,
+pooled compute-graphics-compute submissions, invalid submission rejection, and
+four presented frames mixing binary and timeline semaphores. Run just these
+checks with `VelosRhiTests.exe --filter Timeline --report timeline.html`.
+
 ```powershell
 .\tests\run-tests.ps1 -Backend vulkan -Configuration Debug
 ```
