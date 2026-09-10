@@ -84,6 +84,34 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
                    BufferCopyRegion{.srcOffset = offset,
                                     .dstOffset = desc.dstOffset,
                                     .size = desc.size});
+
+  const u32 transferFamily = device_.GetTransferQueueFamily();
+  const u32 graphicsFamily = device_.GetGraphicsQueueFamily();
+  const bool requiresOwnershipTransfer = transferFamily != graphicsFamily;
+
+  if (requiresOwnershipTransfer) {
+    cmd_->Barrier(BufferBarrier{
+        .buffer = desc.dstBuffer,
+        .oldState = ResourceState::TransferDst,
+        .newState = ResourceState::TransferDst,
+        .srcQueueFamilyIndex = transferFamily,
+        .dstQueueFamilyIndex = graphicsFamily,
+        .sourceQueue = QueueType::Transfer,
+        .destinationQueue = QueueType::Transfer,
+    });
+    pendingBufferAcquires_.push_back(PendingBufferAcquire{
+        .buffer = desc.dstBuffer,
+        .finalState = desc.finalState,
+    });
+  } else {
+    cmd_->Barrier(BufferBarrier{
+        .buffer = desc.dstBuffer,
+        .oldState = ResourceState::TransferDst,
+        .newState = desc.finalState,
+        .sourceQueue = QueueType::Transfer,
+        .destinationQueue = QueueType::Graphics,
+    });
+  }
 }
 
 void UploadContext::UploadImage(const ImageUploadDesc &desc,
@@ -177,6 +205,12 @@ void UploadContext::Flush() {
 std::vector<PendingImageAcquire> UploadContext::TakePendingImageAcquires() {
   std::vector<PendingImageAcquire> pending;
   pending.swap(pendingImageAcquires_);
+  return pending;
+}
+
+std::vector<PendingBufferAcquire> UploadContext::TakePendingBufferAcquires() {
+  std::vector<PendingBufferAcquire> pending;
+  pending.swap(pendingBufferAcquires_);
   return pending;
 }
 

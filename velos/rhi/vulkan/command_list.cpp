@@ -94,10 +94,12 @@ void CommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.newLayout = ToVkImageLayout(barrier.newLayout);
 
   const VulkanBarrierInfo srcInfo =
-      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.oldState)
+      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.oldState,
+                                                       barrier.sourceQueue)
                                 : GetImageBarrierInfo(barrier.oldLayout);
   const VulkanBarrierInfo dstInfo =
-      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.newState)
+      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.newState,
+                                                       barrier.destinationQueue)
                                 : GetImageBarrierInfo(barrier.newLayout);
 
   vkBarrier.srcAccessMask = srcInfo.access;
@@ -570,15 +572,17 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
   vkImageBarriers.reserve(images.size());
 
   for (const auto &b : buffers) {
-    const auto srcInfo = GetBufferBarrierInfo(b.oldState);
-    const auto dstInfo = GetBufferBarrierInfo(b.newState);
+    const auto srcInfo = GetBufferBarrierInfo(b.oldState, b.sourceQueue);
+    const auto dstInfo = GetBufferBarrierInfo(b.newState, b.destinationQueue);
 
     VkBufferMemoryBarrier vkBarrier{};
     vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     vkBarrier.srcAccessMask = srcInfo.access;
     vkBarrier.dstAccessMask = dstInfo.access;
-    vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBarrier.srcQueueFamilyIndex = b.srcQueueFamilyIndex == INT_MAX
+        ? VK_QUEUE_FAMILY_IGNORED : b.srcQueueFamilyIndex;
+    vkBarrier.dstQueueFamilyIndex = b.dstQueueFamilyIndex == INT_MAX
+        ? VK_QUEUE_FAMILY_IGNORED : b.dstQueueFamilyIndex;
     vkBarrier.buffer = device_.GetBuffer(b.buffer).buffer;
     vkBarrier.offset = 0;
     vkBarrier.size = VK_WHOLE_SIZE;
@@ -591,10 +595,11 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
 
   for (const auto &i : images) {
     const auto srcInfo =
-        i.useExplicitStates ? GetBufferBarrierInfo(i.oldState)
+        i.useExplicitStates ? GetBufferBarrierInfo(i.oldState, i.sourceQueue)
                             : GetImageBarrierInfo(i.oldLayout);
     const auto dstInfo =
-        i.useExplicitStates ? GetBufferBarrierInfo(i.newState)
+        i.useExplicitStates ? GetBufferBarrierInfo(i.newState,
+                                                   i.destinationQueue)
                             : GetImageBarrierInfo(i.newLayout);
 
     VkImageMemoryBarrier vkBarrier{};

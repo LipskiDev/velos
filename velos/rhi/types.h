@@ -170,6 +170,7 @@ enum class ResourceState {
   UniformBuffer,
   ShaderRead,
   ShaderWrite,
+  ShaderReadWrite,
 
   // Render targets
   ColorAttachmentRead,
@@ -177,6 +178,7 @@ enum class ResourceState {
   RenderTarget,
   DepthWrite,
   DepthRead,
+  DepthReadWrite,
 
   IndirectArgument,
 

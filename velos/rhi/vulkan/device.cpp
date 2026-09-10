@@ -1248,6 +1248,57 @@ Device::CreateUploadContext(u64 stagingBufferSize) {
   return std::make_unique<UploadContext>(*this, stagingBufferSize);
 }
 
+void Device::AcquireUploadedBuffers(std::span<const PendingBufferAcquire> pendingAcquires)
+{
+	if (pendingAcquires.empty())
+	{
+		return;
+	}
+
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPools_->graphics;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+	VK_CHECK(vkAllocateCommandBuffers(device_, &allocInfo, &cmd),
+		"Failed to allocate command buffer for buffer acquire");
+
+	CommandList cmdList(*this, cmd);
+	cmdList.Begin();
+	for (const auto& a : pendingAcquires)
+	{
+        cmdList.Barrier(BufferBarrier{
+            .buffer = a.buffer,
+            .oldState = ResourceState::TransferDst,
+            .newState = a.finalState,
+            .srcQueueFamilyIndex = transferQueueFamily_,
+            .dstQueueFamilyIndex = mainQueueFamily,
+            .sourceQueue = QueueType::Transfer,
+            .destinationQueue = QueueType::Graphics,
+        });
+	}
+	cmdList.End();
+
+    VkFenceCreateInfo fenceInfo{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    VkFence fence;
+    VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr, &fence),
+        "Failed to create buffer acquire fence");
+
+    VkSubmitInfo submitInfo{ .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmd;
+
+    VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, fence),
+        "Failed to submit buffer acquire command buffer");
+    VK_CHECK(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX),
+        "Failed to wait for buffer acquire fence");
+
+    vkDestroyFence(device_, fence, nullptr);
+	vkFreeCommandBuffers(device_, commandPools_->graphics, 1, &cmd);
+}
+
 void Device::AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires)
 {
 	if (pendingAcquires.empty())

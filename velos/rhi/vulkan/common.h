@@ -501,6 +501,9 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   case ResourceState::ShaderWrite:
     return VK_ACCESS_SHADER_WRITE_BIT;
 
+  case ResourceState::ShaderReadWrite:
+    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
   case ResourceState::ColorAttachmentRead:
     return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
@@ -517,6 +520,10 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   case ResourceState::DepthRead:
     return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 
+  case ResourceState::DepthReadWrite:
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
   case ResourceState::IndirectArgument:
     return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
   }
@@ -524,7 +531,8 @@ inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   throw std::runtime_error("Unsupported ResourceState");
 }
 
-inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state) {
+inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state,
+                                                QueueType queue) {
   switch (state) {
   case ResourceState::Undefined:
     return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -543,6 +551,13 @@ inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state) {
   case ResourceState::UniformBuffer:
   case ResourceState::ShaderRead:
   case ResourceState::ShaderWrite:
+  case ResourceState::ShaderReadWrite:
+    if (queue == QueueType::Compute) {
+      return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    }
+    if (queue == QueueType::Transfer) {
+      return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
     return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
@@ -554,6 +569,7 @@ inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state) {
 
   case ResourceState::DepthWrite:
   case ResourceState::DepthRead:
+  case ResourceState::DepthReadWrite:
     return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 
@@ -573,10 +589,12 @@ inline VkAccessFlags ToVkAccessFlags(ImageLayout layout) {
     return 0;
 
   case ImageLayout::ColorAttachment:
-    return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
   case ImageLayout::DepthAttachment:
-    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
   case ImageLayout::ShaderReadOnly:
     return VK_ACCESS_SHADER_READ_BIT;
@@ -633,8 +651,10 @@ struct VulkanBarrierInfo {
   VkPipelineStageFlags stage;
 };
 
-inline VulkanBarrierInfo GetBufferBarrierInfo(ResourceState state) {
-  return VulkanBarrierInfo{ToVkAccessFlags(state), ToVkExecutionStage(state)};
+inline VulkanBarrierInfo GetBufferBarrierInfo(
+    ResourceState state, QueueType queue = QueueType::Graphics) {
+  return VulkanBarrierInfo{ToVkAccessFlags(state),
+                           ToVkExecutionStage(state, queue)};
 }
 
 inline VulkanBarrierInfo GetImageBarrierInfo(ImageLayout layout) {

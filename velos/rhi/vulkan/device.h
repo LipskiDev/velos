@@ -217,6 +217,7 @@ public:
   std::unique_ptr<IUploadContext>
   CreateUploadContext(u64 stagingBufferSize = 1024 * 16 * 1024) override;
 
+  void AcquireUploadedBuffers(std::span<const PendingBufferAcquire> pendingAcquires) override;
   void AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires) override;
 
   void DumpLiveResources() const;
