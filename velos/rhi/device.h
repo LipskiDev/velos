@@ -55,6 +55,14 @@ struct QueueInfo {
   bool aliasesGraphics = true;
 };
 
+// Describes how two logical RHI queues map to the backend's execution queues.
+// This keeps backend queue handles and family indices out of higher layers.
+enum class QueueRelationship {
+  SameQueue,
+  SameFamily,
+  DifferentFamily,
+};
+
 class IDevice {
 public:
   virtual ~IDevice() = default;
@@ -110,6 +118,8 @@ public:
   virtual double GetTimestampPeriodNanoseconds() const = 0;
   virtual u32 GetCurrentFrameIndex() const = 0;
   virtual QueueInfo GetQueueInfo(QueueType type) const = 0;
+  virtual QueueRelationship GetQueueRelationship(QueueType first,
+                                                 QueueType second) const = 0;
 
   virtual FenceHandle CreateFence(bool signaled = false) = 0;
   virtual void DestroyFence(FenceHandle handle) = 0;

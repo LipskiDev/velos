@@ -636,6 +636,26 @@ QueueInfo Device::GetQueueInfo(QueueType type) const {
   throw std::invalid_argument("Unsupported queue type");
 }
 
+QueueRelationship Device::GetQueueRelationship(QueueType first,
+                                               QueueType second) const {
+  if (GetVkQueue(first) == GetVkQueue(second)) {
+    return QueueRelationship::SameQueue;
+  }
+
+  const auto queueFamily = [this](QueueType type) {
+    switch (type) {
+    case QueueType::Graphics: return mainQueueFamily;
+    case QueueType::Compute: return computeQueueFamily_;
+    case QueueType::Transfer: return transferQueueFamily_;
+    }
+    throw std::invalid_argument("Unsupported queue type");
+  };
+
+  return queueFamily(first) == queueFamily(second)
+             ? QueueRelationship::SameFamily
+             : QueueRelationship::DifferentFamily;
+}
+
 VkQueue Device::GetVkQueue(QueueType type) const {
   switch (type) {
   case QueueType::Graphics: return graphicsQueue_;
@@ -1621,6 +1641,7 @@ BufferHandle Device::CreateBuffer(const BufferDesc &desc) {
   buffer.size = desc.size;
   buffer.usage = desc.usage;
   buffer.memoryUsage = desc.memoryUsage;
+  buffer.concurrentQueues = queueFamilies.size() > 1;
 
   VmaAllocationCreateInfo allocInfo =
       ToVmaAllocationCreateInfo(desc.memoryUsage);

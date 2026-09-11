@@ -814,6 +814,18 @@ int main(int argc, char **argv) {
         throw std::runtime_error("Compute queue query returned the wrong type");
       if (computeInfo.dedicated && computeInfo.aliasesGraphics)
         throw std::runtime_error("Dedicated compute queue aliases graphics");
+      const QueueRelationship relationship = device->GetQueueRelationship(
+          QueueType::Graphics, QueueType::Compute);
+      if ((relationship == QueueRelationship::SameQueue) !=
+          computeInfo.aliasesGraphics)
+        throw std::runtime_error("Compute queue alias relationship is inconsistent");
+      if ((relationship == QueueRelationship::DifferentFamily) !=
+          computeInfo.dedicated)
+        throw std::runtime_error("Compute queue family relationship is inconsistent");
+      if (device->GetQueueRelationship(QueueType::Compute,
+                                       QueueType::Compute) !=
+          QueueRelationship::SameQueue)
+        throw std::runtime_error("A queue does not alias itself");
 
       auto timeline = device->CreateSemaphore(SemaphoreType::Timeline);
 

@@ -87,7 +87,9 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
 
   const u32 transferFamily = device_.GetTransferQueueFamily();
   const u32 graphicsFamily = device_.GetGraphicsQueueFamily();
-  const bool requiresOwnershipTransfer = transferFamily != graphicsFamily;
+  const bool requiresOwnershipTransfer =
+      transferFamily != graphicsFamily &&
+      !device_.GetBuffer(desc.dstBuffer).concurrentQueues;
 
   if (requiresOwnershipTransfer) {
     cmd_->Barrier(BufferBarrier{
@@ -103,7 +105,7 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
         .buffer = desc.dstBuffer,
         .finalState = desc.finalState,
     });
-  } else {
+  } else if (!device_.GetBuffer(desc.dstBuffer).concurrentQueues) {
     cmd_->Barrier(BufferBarrier{
         .buffer = desc.dstBuffer,
         .oldState = ResourceState::TransferDst,

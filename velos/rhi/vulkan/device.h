@@ -75,6 +75,7 @@ struct Buffer {
 
   BufferUsage usage = BufferUsage::None;
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
+  bool concurrentQueues = false;
 };
 
 struct Sampler {
@@ -183,6 +184,8 @@ public:
   double GetTimestampPeriodNanoseconds() const override;
   u32 GetCurrentFrameIndex() const override { return currentFrame_; }
   QueueInfo GetQueueInfo(QueueType type) const override;
+  QueueRelationship GetQueueRelationship(QueueType first,
+                                         QueueType second) const override;
   FenceHandle CreateFence(bool signaled = false) override;
   void DestroyFence(FenceHandle handle) override;
   bool IsFenceSignaled(FenceHandle handle) const override;
