@@ -268,3 +268,42 @@ device->DestroyShader(fragShader);
 device->DestroySwapchain(swapchain);
 Velos::RHI::DestroyDevice(device);
 ```
+
+### Timeline semaphores
+
+Vulkan device selection requires timeline semaphore support and enables it.
+Create a timeline, then pass optional waits/signals to a queue submission:
+
+~~~cpp
+using namespace Velos::RHI;
+auto timeline = device->CreateSemaphore(SemaphoreType::Timeline, 0);
+device->SignalSemaphore(timeline, 1); // CPU signal
+const TimelineSemaphorePoint waits[] = {{timeline, 1}};
+const TimelineSemaphorePoint signals[] = {{timeline, 2}};
+auto &compute = device->AcquireCommandList(QueueType::Compute);
+compute.Begin();
+// Record compute work.
+compute.End();
+device->Submit(QueueType::Compute, compute,
+               {.waits = waits, .signals = signals});
+device->WaitSemaphore(timeline, 2); // CPU wait for GPU completion
+auto completed = device->GetSemaphoreValue(timeline);
+device->WaitIdle();
+device->DestroySemaphore(timeline);
+~~~
+
+The caller chooses a logical `QueueType`; Velos selects the best available physical
+queue and falls back to an alias of the graphics queue when necessary.
+`GetQueueInfo` reports whether the selected queue is dedicated or aliases graphics.
+`AcquireCommandList` may be called repeatedly for the same logical queue in one
+frame. Each acquired list must be submitted explicitly, which permits sequences such
+as compute, graphics, then compute again. The pool waits and recycles those command
+lists when their frame-in-flight slot is reused.
+`SubmitAndPresent(swapchain, desc)` remains graphics-only, accepts the same
+descriptor, and retains the swapchain's binary acquire/present semaphores. Existing
+graphics calls without an explicit queue type remain valid.
+
+Signal values must strictly increase, including relative to pending signals.
+The caller must synchronize CPU/GPU signals and keep semaphores alive until all
+uses complete. Descriptor spans need remain valid only during the submission
+call. CPU waits retain the existing exception behavior on timeout.

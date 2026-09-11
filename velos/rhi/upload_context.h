@@ -7,6 +7,11 @@
 
 namespace Velos::RHI {
 
+struct PendingBufferAcquire {
+  BufferHandle buffer;
+  ResourceState finalState = ResourceState::Common;
+};
+
 struct PendingImageAcquire {
     ImageHandle image;
     ImageLayout finalLayout;
@@ -21,6 +26,7 @@ struct BufferUploadDesc {
   u64 dstOffset = 0;
   u64 size = 0;
   const void *data = nullptr;
+  ResourceState finalState = ResourceState::Common;
 };
 
 struct ImageUploadDesc {
@@ -50,6 +56,7 @@ public:
   virtual void UploadImage(const ImageUploadDesc &desc, const void *data,
                            u64 dataSize) = 0;
   virtual void Flush() = 0;
+  virtual std::vector<PendingBufferAcquire> TakePendingBufferAcquires() = 0;
   virtual std::vector<PendingImageAcquire> TakePendingImageAcquires() = 0;
 };
 

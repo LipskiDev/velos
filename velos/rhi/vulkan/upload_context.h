@@ -15,6 +15,7 @@ public:
   void UploadImage(const ImageUploadDesc &desc, const void *data,
                    u64 dataSize) override;
   void Flush() override;
+  std::vector<PendingBufferAcquire> TakePendingBufferAcquires() override;
   std::vector<PendingImageAcquire> TakePendingImageAcquires() override;
 
 private:
@@ -32,6 +33,7 @@ private:
   std::unique_ptr<CommandList> cmd_;
 
   VkFence fence_ = VK_NULL_HANDLE;
+  std::vector<PendingBufferAcquire> pendingBufferAcquires_;
   std::vector<PendingImageAcquire> pendingImageAcquires_;
 };
 

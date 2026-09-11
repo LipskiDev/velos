@@ -10,6 +10,7 @@ struct BufferDesc {
   u64 size = 0;
   BufferUsage usage = BufferUsage::None;
   MemoryUsage memoryUsage = MemoryUsage::GPUOnly;
+  bool concurrentQueues = false;
   const void *initialData = nullptr;
   const char *debugName = nullptr;
 };
@@ -30,6 +31,7 @@ struct ImageDesc {
   Format format = Format::Undefined;
   ImageType type = ImageType::Image2D;
   ImageUsage usage = ImageUsage::None;
+  bool concurrentQueues = false;
 
   const char *debugName = nullptr;
 };

@@ -29,15 +29,7 @@ UploadContext::UploadContext(Device &device, u64 size)
 
   mappedPtr_ = static_cast<u8 *>(buffer.allocationInfo.pMappedData);
 
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = device_.GetTransferCommandPool();
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
-
-  VK_CHECK(vkAllocateCommandBuffers(device_.GetVkDevice(), &allocInfo,
-                                    &commandBuffer_),
-           "Failed to allocate transfer command buffer");
+  commandBuffer_ = device_.AllocateTransferCommandBuffer();
 
   cmd_ = std::make_unique<CommandList>(device_, commandBuffer_);
 
@@ -54,8 +46,7 @@ UploadContext::~UploadContext() {
   }
 
   if (commandBuffer_ != VK_NULL_HANDLE) {
-    vkFreeCommandBuffers(device_.GetVkDevice(), device_.GetTransferCommandPool(),
-                         1, &commandBuffer_);
+    device_.FreeTransferCommandBuffer(commandBuffer_);
   }
 
   if (stagingBuffer_.IsValid()) {
@@ -93,6 +84,36 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
                    BufferCopyRegion{.srcOffset = offset,
                                     .dstOffset = desc.dstOffset,
                                     .size = desc.size});
+
+  const u32 transferFamily = device_.GetTransferQueueFamily();
+  const u32 graphicsFamily = device_.GetGraphicsQueueFamily();
+  const bool requiresOwnershipTransfer =
+      transferFamily != graphicsFamily &&
+      !device_.GetBuffer(desc.dstBuffer).concurrentQueues;
+
+  if (requiresOwnershipTransfer) {
+    cmd_->Barrier(BufferBarrier{
+        .buffer = desc.dstBuffer,
+        .oldState = ResourceState::TransferDst,
+        .newState = ResourceState::TransferDst,
+        .srcQueueFamilyIndex = transferFamily,
+        .dstQueueFamilyIndex = graphicsFamily,
+        .sourceQueue = QueueType::Transfer,
+        .destinationQueue = QueueType::Transfer,
+    });
+    pendingBufferAcquires_.push_back(PendingBufferAcquire{
+        .buffer = desc.dstBuffer,
+        .finalState = desc.finalState,
+    });
+  } else if (!device_.GetBuffer(desc.dstBuffer).concurrentQueues) {
+    cmd_->Barrier(BufferBarrier{
+        .buffer = desc.dstBuffer,
+        .oldState = ResourceState::TransferDst,
+        .newState = desc.finalState,
+        .sourceQueue = QueueType::Transfer,
+        .destinationQueue = QueueType::Graphics,
+    });
+  }
 }
 
 void UploadContext::UploadImage(const ImageUploadDesc &desc,
@@ -186,6 +207,12 @@ void UploadContext::Flush() {
 std::vector<PendingImageAcquire> UploadContext::TakePendingImageAcquires() {
   std::vector<PendingImageAcquire> pending;
   pending.swap(pendingImageAcquires_);
+  return pending;
+}
+
+std::vector<PendingBufferAcquire> UploadContext::TakePendingBufferAcquires() {
+  std::vector<PendingBufferAcquire> pending;
+  pending.swap(pendingBufferAcquires_);
   return pending;
 }
 

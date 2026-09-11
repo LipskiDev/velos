@@ -35,6 +35,10 @@ struct BufferBarrier {
   BufferHandle buffer{};
   ResourceState oldState = ResourceState::Undefined;
   ResourceState newState = ResourceState::Common;
+  u32 srcQueueFamilyIndex = INT_MAX;
+  u32 dstQueueFamilyIndex = INT_MAX;
+  QueueType sourceQueue = QueueType::Graphics;
+  QueueType destinationQueue = QueueType::Graphics;
 };
 
 struct ImageBarrier {
@@ -52,6 +56,8 @@ struct ImageBarrier {
   u32 mipLevelCount = 1;
   u32 baseArrayLayer = 0;
   u32 layerCount = 1;
+  QueueType sourceQueue = QueueType::Graphics;
+  QueueType destinationQueue = QueueType::Graphics;
 };
 
 struct BufferBinding {

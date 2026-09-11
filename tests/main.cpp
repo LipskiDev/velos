@@ -116,6 +116,8 @@ static std::string DescribeTest(const std::string &name) {
     return "Pushes a compute-stage constant, uses it to generate storage-buffer values, and verifies the complete GPU result.";
   if (name == "DispatchRequiresCurrentComputePipeline")
     return "Begins a fresh command buffer and verifies Dispatch rejects calls without a compute pipeline bound in that recording.";
+  if (name == "TimelineComputeToGraphicsQueue")
+    return "Submits independently recorded compute and graphics command lists and verifies their cross-queue timeline chain.";
   if (name == "PixelAccurateClearReadback")
     return "Clears an RGBA8 render target to an exact color, copies it to a GPU-to-CPU buffer, and compares every channel byte.";
   if (name == "PixelUploadCheckerboardReadback")
@@ -262,11 +264,13 @@ expandAll.onclick=e=>{e.stopPropagation();const expand=cards.some(c=>!c.classLis
 
 int main(int argc, char **argv) {
   std::string requested = "vulkan";
+  std::string filter;
   fs::path report = fs::path(__FILE__).parent_path() / "last-run.html";
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--backend" && i + 1 < argc) requested = argv[++i];
     else if (arg == "--report" && i + 1 < argc) report = argv[++i];
+    else if (arg == "--filter" && i + 1 < argc) filter = argv[++i];
     else if (arg == "--list-backends") {
       for (const auto &backend : Backends()) std::cout << backend.name << '\n';
       return 0;
@@ -299,6 +303,8 @@ int main(int argc, char **argv) {
     ~GlfwScope() { glfwTerminate(); }
   };
   auto run = [&](std::string name, std::string kind, const std::function<void()> &test) {
+    if (!filter.empty() && name != "DeviceCreate" && name.find(filter) == std::string::npos)
+      return;
     Result result{.name = std::move(name), .kind = std::move(kind), .backend = selected->name};
     result.description = DescribeTest(result.name);
     pendingImages.clear();
@@ -761,6 +767,140 @@ int main(int argc, char **argv) {
           .imageInfo = &info});
       device->DestroyBindingPool(pool); device->DestroyBindingLayout(layout);
       device->DestroyImageView(view); device->DestroyImage(image);
+    });
+    run("TimelineHostSignalAndWait", "command", [&] {
+      auto semaphore = device->CreateSemaphore(SemaphoreType::Timeline, 3);
+      if (device->GetSemaphoreValue(semaphore) != 3)
+        throw std::runtime_error("Incorrect initial timeline value");
+      device->WaitSemaphore(semaphore, 3, 0);
+      device->SignalSemaphore(semaphore, 7);
+      device->WaitSemaphore(semaphore, 7, 1000000000);
+      if (device->GetSemaphoreValue(semaphore) != 7)
+        throw std::runtime_error("Host signal did not advance timeline");
+      bool rejected = false;
+      try { device->SignalSemaphore(semaphore, 7); }
+      catch (const std::invalid_argument &) { rejected = true; }
+      if (!rejected) throw std::runtime_error("Non-increasing signal accepted");
+      device->DestroySemaphore(semaphore);
+    });
+    run("TimelineQueueWaitAndSignal", "command", [&] {
+      auto gate = device->CreateSemaphore(SemaphoreType::Timeline);
+      auto completed = device->CreateSemaphore(SemaphoreType::Timeline);
+      auto &commands = device->GetCommandList();
+      commands.Begin(); commands.End();
+      const TimelineSemaphorePoint waits[] = {{gate, 1}};
+      const TimelineSemaphorePoint signals[] = {{completed, 2}};
+      device->Submit({.waits = waits, .signals = signals});
+      // Submit returns while the GPU is blocked; release it from the CPU.
+      const auto before = device->GetSemaphoreValue(completed);
+      device->SignalSemaphore(gate, 1);
+      device->WaitSemaphore(completed, 2, 5000000000);
+      device->WaitIdle();
+      if (before != 0 || device->GetSemaphoreValue(completed) != 2)
+        throw std::runtime_error("Queue timeline dependency was not honored");
+      auto &nextCommands = device->GetCommandList();
+      nextCommands.Begin(); nextCommands.End();
+      const TimelineSemaphorePoint nextWaits[] = {{completed, 2}};
+      const TimelineSemaphorePoint nextSignals[] = {{completed, 3}};
+      device->Submit({.waits = nextWaits, .signals = nextSignals});
+      device->WaitSemaphore(completed, 3, 5000000000);
+      device->WaitIdle();
+      device->DestroySemaphore(gate);
+      device->DestroySemaphore(completed);
+    });
+    run("TimelineComputeToGraphicsQueue", "command", [&] {
+      const QueueInfo computeInfo = device->GetQueueInfo(QueueType::Compute);
+      if (computeInfo.type != QueueType::Compute)
+        throw std::runtime_error("Compute queue query returned the wrong type");
+      if (computeInfo.dedicated && computeInfo.aliasesGraphics)
+        throw std::runtime_error("Dedicated compute queue aliases graphics");
+      const QueueRelationship relationship = device->GetQueueRelationship(
+          QueueType::Graphics, QueueType::Compute);
+      if ((relationship == QueueRelationship::SameQueue) !=
+          computeInfo.aliasesGraphics)
+        throw std::runtime_error("Compute queue alias relationship is inconsistent");
+      if ((relationship == QueueRelationship::DifferentFamily) !=
+          computeInfo.dedicated)
+        throw std::runtime_error("Compute queue family relationship is inconsistent");
+      if (device->GetQueueRelationship(QueueType::Compute,
+                                       QueueType::Compute) !=
+          QueueRelationship::SameQueue)
+        throw std::runtime_error("A queue does not alias itself");
+
+      auto timeline = device->CreateSemaphore(SemaphoreType::Timeline);
+
+      auto &compute = device->GetCommandList(QueueType::Compute);
+      compute.Begin();
+      compute.End();
+      const TimelineSemaphorePoint computeSignals[] = {{timeline, 1}};
+      device->Submit(QueueType::Compute, {.signals = computeSignals});
+
+      auto &graphics = device->GetCommandList(QueueType::Graphics);
+      graphics.Begin();
+      graphics.End();
+      const TimelineSemaphorePoint graphicsWaits[] = {{timeline, 1}};
+      const TimelineSemaphorePoint graphicsSignals[] = {{timeline, 2}};
+      device->Submit(QueueType::Graphics,
+                     {.waits = graphicsWaits, .signals = graphicsSignals});
+
+      device->WaitSemaphore(timeline, 2, 5000000000);
+      device->WaitIdle();
+      device->DestroySemaphore(timeline);
+    });
+    run("PooledComputeGraphicsCompute", "command", [&] {
+      auto timeline = device->CreateSemaphore(SemaphoreType::Timeline);
+
+      auto &computeA = device->AcquireCommandList(QueueType::Compute);
+      computeA.Begin(); computeA.End();
+      const TimelineSemaphorePoint computeASignals[] = {{timeline, 1}};
+      device->Submit(QueueType::Compute, computeA,
+                     {.signals = computeASignals});
+
+      auto &graphics = device->AcquireCommandList(QueueType::Graphics);
+      graphics.Begin(); graphics.End();
+      const TimelineSemaphorePoint graphicsWaits[] = {{timeline, 1}};
+      const TimelineSemaphorePoint graphicsSignals[] = {{timeline, 2}};
+      device->Submit(QueueType::Graphics, graphics,
+                     {.waits = graphicsWaits, .signals = graphicsSignals});
+
+      auto &computeB = device->AcquireCommandList(QueueType::Compute);
+      if (&computeA == &computeB)
+        throw std::runtime_error("Compute command list was reused in one frame");
+      computeB.Begin(); computeB.End();
+      const TimelineSemaphorePoint computeBWaits[] = {{timeline, 2}};
+      const TimelineSemaphorePoint computeBSignals[] = {{timeline, 3}};
+      device->Submit(QueueType::Compute, computeB,
+                     {.waits = computeBWaits, .signals = computeBSignals});
+
+      device->WaitSemaphore(timeline, 3, 5000000000);
+      device->WaitIdle();
+      device->DestroySemaphore(timeline);
+    });
+    run("TimelineSubmissionValidation", "validation", [&] {
+      auto binary = device->CreateSemaphore();
+      auto timeline = device->CreateSemaphore(SemaphoreType::Timeline, 1);
+      auto &commands = device->GetCommandList();
+      commands.Begin(); commands.End();
+      auto reject = [&](const SubmitDesc &desc) {
+        bool rejected = false;
+        try { device->Submit(desc); }
+        catch (const std::invalid_argument &) { rejected = true; }
+        if (!rejected) throw std::runtime_error("Invalid submission accepted");
+      };
+      const TimelineSemaphorePoint binaryPoint[] = {{binary, 2}};
+      const TimelineSemaphorePoint invalidPoint[] = {{{}, 2}};
+      const TimelineSemaphorePoint stalePoint[] = {{timeline, 1}};
+      const TimelineSemaphorePoint duplicates[] = {{timeline, 2}, {timeline, 3}};
+      const TimelineSemaphorePoint future[] = {{timeline, 2}};
+      reject({.signals = binaryPoint});
+      reject({.waits = invalidPoint});
+      reject({.signals = stalePoint});
+      reject({.signals = duplicates});
+      reject({.waits = future, .signals = future});
+      // Rejected submissions must leave the frame fence usable.
+      device->Submit(); device->WaitIdle();
+      device->DestroySemaphore(binary);
+      device->DestroySemaphore(timeline);
     });
     run("CommandBufferBeginEnd", "command", [&] {
       auto &commands = device->GetCommandList();
@@ -2829,6 +2969,37 @@ int main(int argc, char **argv) {
         device->DestroyImageView(views[i]); device->DestroyImage(images[i]);
       }
       if (recordingFailure) std::rethrow_exception(recordingFailure);
+    });
+    run("TimelineSubmitAndPresent", "command", [&] {
+      glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+      auto *window = glfwCreateWindow(64, 64, "Timeline presentation", nullptr, nullptr);
+      if (!window) throw std::runtime_error("Could not create presentation window");
+      SwapchainHandle swapchain{};
+      SemaphoreHandle timeline{};
+      std::exception_ptr failure;
+      try {
+        swapchain = device->CreateSwapchain({.windowHandle = window,
+            .width = 64, .height = 64, .bufferCount = 2, .vsync = true});
+        timeline = device->CreateSemaphore(SemaphoreType::Timeline, 1);
+        for (uint64_t value = 2; value <= 5; ++value) {
+          const auto frame = device->BeginFrame(swapchain);
+          if (!frame.success) throw std::runtime_error("Failed to acquire frame");
+          auto &commands = device->GetCommandList();
+          commands.Begin();
+          commands.Barrier(ImageBarrier{.image = frame.backbufferImage,
+              .newLayout = ImageLayout::Present});
+          commands.End();
+          const TimelineSemaphorePoint waits[] = {{timeline, value - 1}};
+          const TimelineSemaphorePoint signals[] = {{timeline, value}};
+          device->SubmitAndPresent(swapchain, {.waits = waits, .signals = signals});
+          device->WaitSemaphore(timeline, value, 5000000000);
+        }
+      } catch (...) { failure = std::current_exception(); }
+      device->WaitIdle();
+      if (timeline) device->DestroySemaphore(timeline);
+      if (swapchain) device->DestroySwapchain(swapchain);
+      glfwDestroyWindow(window);
+      if (failure) std::rethrow_exception(failure);
     });
     run("MultipleSwapchains", "validation", [&] {
       glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);

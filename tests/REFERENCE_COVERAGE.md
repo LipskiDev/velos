@@ -68,8 +68,11 @@ The following advertised paths have executable tests that currently fail:
 - **Advanced compute verification:** storage-image and storage-buffer dispatches
   are covered, but atomics, shared memory, wave ops, and multi-dispatch result
   checks still need dedicated shader cases.
-- **Multiple queues:** no distinct copy/compute/render queues, queue ownership
-  transfer, semaphores, or queue-chain submission API.
+- **Multiple queues:** logical graphics, compute, and transfer queues can be selected
+  for command recording and submission. Timeline semaphore host operations,
+  compute-to-graphics queue chains, pooled compute-graphics-compute submissions,
+  and presentation integration are covered. Cross-family resource ownership tests
+  and multiple physical queues of the same type remain absent.
 - **Mesh/task shaders:** shader stages and draw commands are absent.
 - **Ray tracing:** no BLAS/TLAS, acceleration-structure build/copy/update,
   ray-query/trace commands, or device addresses for acceleration structures.
