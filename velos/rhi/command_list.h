@@ -152,6 +152,7 @@ public:
   virtual void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                         BufferHandle countBuffer, u64 countOffset,
                                         u32 maxDrawCount, u32 stride) = 0;
+  virtual void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1, u32 groupCountZ = 1) = 0;
 
   virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
                         uint32_t groupCountZ) = 0;

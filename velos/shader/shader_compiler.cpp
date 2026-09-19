@@ -2,6 +2,7 @@
 #include "shader_compiler.h"
 
 #include <fstream>
+#include <filesystem>
 #include <shaderc/shaderc.hpp>
 #include <sstream>
 #include <stdexcept>
@@ -10,6 +11,38 @@
 
 namespace Velos {
 namespace {
+class RelativeShaderIncluder final : public shaderc::CompileOptions::IncluderInterface {
+  struct Include {
+    shaderc_include_result result{};
+    std::string name;
+    std::string content;
+  };
+public:
+  shaderc_include_result* GetInclude(const char* requested, shaderc_include_type,
+                                    const char* requesting, size_t depth) override {
+    auto* include = new Include;
+    const auto path = std::filesystem::path(requesting).parent_path() / requested;
+    std::ifstream file(path, std::ios::binary);
+    if (depth > 32 || !file) {
+      include->content = "Cannot include shader file (missing file or excessive nesting): " + path.string();
+    } else {
+      include->name = path.lexically_normal().string();
+      std::ostringstream source;
+      source << file.rdbuf();
+      include->content = source.str();
+    }
+    include->result.source_name = include->name.c_str();
+    include->result.source_name_length = include->name.size();
+    include->result.content = include->content.c_str();
+    include->result.content_length = include->content.size();
+    include->result.user_data = include;
+    return &include->result;
+  }
+  void ReleaseInclude(shaderc_include_result* result) override {
+    delete static_cast<Include*>(result->user_data);
+  }
+};
+
 shaderc_shader_kind ToShadercKind(Velos::RHI::ShaderStage stage) {
   switch (stage) {
   case Velos::RHI::ShaderStage::Vertex:
@@ -18,6 +51,10 @@ shaderc_shader_kind ToShadercKind(Velos::RHI::ShaderStage stage) {
     return shaderc_glsl_fragment_shader;
   case Velos::RHI::ShaderStage::Compute:
     return shaderc_glsl_compute_shader;
+  case Velos::RHI::ShaderStage::Task:
+	  return shaderc_glsl_task_shader;
+  case Velos::RHI::ShaderStage::Mesh:
+	  return shaderc_glsl_mesh_shader;
   default:
     throw std::runtime_error("Unsupported shader stage for shaderc");
   }
@@ -243,6 +280,7 @@ ShaderCompiler::CompileGlslToSpirv(const ShaderCompileInput &input) {
                                shaderc_env_version_vulkan_1_3);
 
   options.SetSourceLanguage(shaderc_source_language_glsl);
+  options.SetIncluder(std::make_unique<RelativeShaderIncluder>());
 
   auto result = compiler.CompileGlslToSpv(source, ToShadercKind(input.stage),
                                           input.path.c_str(),

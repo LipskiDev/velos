@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "rhi/upload_context.h"
@@ -37,8 +36,6 @@ struct FrameBeginResult {
   float imageFenceWaitMs = 0.0f;
 };
 
-// Waits cover all commands. Keep semaphores alive until work completes and
-// externally synchronize signals so their values strictly increase.
 struct TimelineSemaphorePoint {
   SemaphoreHandle semaphore{};
   u64 value = 0;
@@ -55,8 +52,6 @@ struct QueueInfo {
   bool aliasesGraphics = true;
 };
 
-// Describes how two logical RHI queues map to the backend's execution queues.
-// This keeps backend queue handles and family indices out of higher layers.
 enum class QueueRelationship {
   SameQueue,
   SameFamily,
@@ -96,6 +91,8 @@ public:
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) = 0;
   virtual PipelineHandle
   CreateComputePipeline(const ComputePipelineDesc &desc) = 0;
+  virtual PipelineHandle
+  CreateMeshPipeline(const MeshPipelineDesc& desc) = 0;
   virtual void DestroyPipeline(PipelineHandle handle) = 0;
 
   virtual BindingLayoutHandle

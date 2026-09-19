@@ -94,6 +94,14 @@ inline VkShaderStageFlags ToVkShaderStage(ShaderStage stage) {
     flags |= VK_SHADER_STAGE_COMPUTE_BIT;
   }
 
+  if ((stage & ShaderStage::Task) == ShaderStage::Task) {
+	  flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
+  }
+
+  if ((stage & ShaderStage::Mesh) == ShaderStage::Mesh) {
+	  flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+  }
+
   if (flags == 0) {
     throw std::runtime_error("Unsupported ShaderStage (empty)");
   }
@@ -399,6 +407,12 @@ inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stage) {
   if ((stage & ShaderStage::Compute) == ShaderStage::Compute) {
     flags |= VK_SHADER_STAGE_COMPUTE_BIT;
   }
+  if ((stage & ShaderStage::Task) == ShaderStage::Task) {
+    flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
+  }
+  if ((stage & ShaderStage::Mesh) == ShaderStage::Mesh) {
+    flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+  }
 
   return flags;
 }
@@ -560,7 +574,9 @@ inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state,
     }
     return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+           VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT |
+           VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
 
   case ResourceState::ColorAttachmentRead:
   case ResourceState::ColorAttachmentWrite:

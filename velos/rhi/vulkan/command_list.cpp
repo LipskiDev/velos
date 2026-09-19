@@ -684,6 +684,11 @@ void CommandList::DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                 stride);
 }
 
+void CommandList::DrawMeshTasks(u32 groupCountX, u32 groupCountY, u32 groupCountZ)
+{
+	vkCmdDrawMeshTasksEXT(commandBuffer_, groupCountX, groupCountY, groupCountZ);
+}
+
 
 void CommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   if (!boundComputePipeline_.IsValid()) {

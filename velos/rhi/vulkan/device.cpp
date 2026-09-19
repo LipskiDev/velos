@@ -17,7 +17,6 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
-
 #include <vk_mem_alloc.h>
 
 #include <GLFW/glfw3.h>
@@ -205,9 +204,9 @@ Device::BuildPipelineLayout(const PipelineReflectionData &reflection,
       const auto overrideIt = overrides.existingSetLayouts.find(set);
       if (overrideIt != overrides.existingSetLayouts.end()) {
         const BindingLayout &existing = GetBindingLayout(overrideIt->second);
-        if (existing.bindings.size() != bindings.size()) {
+        if (existing.bindings.size() < bindings.size()) {
           throw std::runtime_error("BuildPipelineLayout: override binding "
-                                   "count does not match reflection for set " +
+                                   "count does not cover reflection for set " +
                                    std::to_string(set));
         }
 
@@ -833,6 +832,7 @@ bool HasRequiredExtensions(VkPhysicalDevice device) {
 
   const char *requiredExtensions[] = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	  VK_EXT_MESH_SHADER_EXTENSION_NAME,
   };
 
   for (const char *required : requiredExtensions) {
@@ -858,6 +858,10 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
   VkPhysicalDeviceVulkan11Features vulkan11Features{};
   VkPhysicalDeviceVulkan12Features vulkan12Features{};
   VkPhysicalDeviceVulkan13Features vulkan13Features{};
+	VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
+	meshShaderFeatures.sType =
+		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+	meshShaderFeatures.pNext = &vulkan13Features;
 
   vulkan11Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
@@ -872,11 +876,12 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
 
   VkPhysicalDeviceFeatures2 features2{};
   features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  features2.pNext = &vulkan13Features;
+	features2.pNext = &meshShaderFeatures;
 
   vkGetPhysicalDeviceFeatures2(device, &features2);
 
-  return vulkan13Features.dynamicRendering == VK_TRUE &&
+	return meshShaderFeatures.meshShader == VK_TRUE &&
+		 vulkan13Features.dynamicRendering == VK_TRUE &&
          vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
          vulkan12Features.timelineSemaphore == VK_TRUE &&
          vulkan12Features.drawIndirectCount == VK_TRUE &&
@@ -1089,15 +1094,34 @@ void Device::CreateLogicalDevice() {
   vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
   vulkan13Features.pNext = &vulkan12Features;
 
-  const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+	VkPhysicalDeviceMeshShaderFeaturesEXT supportedMeshShaderFeatures{};
+	supportedMeshShaderFeatures.sType =
+		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+	VkPhysicalDeviceFeatures2 supportedFeatures{};
+	supportedFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	supportedFeatures.pNext = &supportedMeshShaderFeatures;
+	vkGetPhysicalDeviceFeatures2(physicalDevice_, &supportedFeatures);
+
+	VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
+	meshShaderFeatures.sType =
+		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+	meshShaderFeatures.meshShader = VK_TRUE;
+	meshShaderFeatures.taskShader = supportedMeshShaderFeatures.taskShader;
+	meshShaderFeatures.pNext = &vulkan13Features;
+	taskShaderSupported_ = supportedMeshShaderFeatures.taskShader == VK_TRUE;
+
+	const char *deviceExtensions[] = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_EXT_MESH_SHADER_EXTENSION_NAME,
+	};
 
   VkDeviceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  createInfo.pNext = &vulkan13Features;
+	createInfo.pNext = &meshShaderFeatures;
   createInfo.queueCreateInfoCount = static_cast<u32>(queueCreateInfos.size());
   createInfo.pQueueCreateInfos = queueCreateInfos.data();
   createInfo.pEnabledFeatures = &deviceFeatures;
-  createInfo.enabledExtensionCount = 1;
+	createInfo.enabledExtensionCount = static_cast<u32>(std::size(deviceExtensions));
   createInfo.ppEnabledExtensionNames = deviceExtensions;
 
   VK_CHECK(vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_),
@@ -2551,6 +2575,277 @@ PipelineHandle Device::CreateComputePipeline(const ComputePipelineDesc &desc) {
                      Pipeline{.pipeline = pipeline, .layout = pipelineLayout});
 
   return PipelineHandle{handleId};
+}
+
+PipelineHandle Device::CreateMeshPipeline(const MeshPipelineDesc& desc)
+{
+    VL_PROFILE_ZONE_N("Device::CreateMeshPipeline");
+
+    if (!desc.meshShader.IsValid()) {
+        throw std::runtime_error(
+            "CreateMeshPipeline requires a valid mesh");
+    }
+
+    if (!desc.fragmentShader.IsValid()) {
+        throw std::runtime_error(
+            "CreateMeshPipeline requires a valid fragment shader");
+    }
+
+	const Shader* ts = desc.taskShader.IsValid() ? &GetShader(desc.taskShader) : nullptr;
+	if (ts && !taskShaderSupported_) {
+		throw std::runtime_error(
+			"CreateMeshPipeline requested a task shader, but the device does not support task shaders");
+	}
+    const Shader& ms = GetShader(desc.meshShader);
+    const Shader& fs = GetShader(desc.fragmentShader);
+
+	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+	shaderStages.reserve(3);
+	if (ts) {
+		shaderStages.push_back({
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_TASK_BIT_EXT,
+			.module = ts->module,
+			.pName = ts->entryPoint.c_str(),
+		});
+	}
+	shaderStages.push_back({
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+		.module = ms.module,
+		.pName = ms.entryPoint.c_str(),
+	});
+	shaderStages.push_back({
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.module = fs.module,
+		.pName = fs.entryPoint.c_str(),
+	});
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode =
+        desc.raster.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode =
+        desc.raster.cullBackFaces ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
+    rasterizer.frontFace = desc.raster.frontFaceCCW
+        ? VK_FRONT_FACE_COUNTER_CLOCKWISE
+        : VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.blendEnable = desc.blend.enable ? VK_TRUE : VK_FALSE;
+
+    if (desc.blend.enable) {
+        colorBlendAttachment.srcColorBlendFactor =
+            ToVkBlendFactor(desc.blend.srcColor);
+        colorBlendAttachment.dstColorBlendFactor =
+            ToVkBlendFactor(desc.blend.dstColor);
+        colorBlendAttachment.colorBlendOp = ToVkBlendOp(desc.blend.colorOp);
+
+        colorBlendAttachment.srcAlphaBlendFactor =
+            ToVkBlendFactor(desc.blend.srcAlpha);
+        colorBlendAttachment.dstAlphaBlendFactor =
+            ToVkBlendFactor(desc.blend.dstAlpha);
+        colorBlendAttachment.alphaBlendOp = ToVkBlendOp(desc.blend.alphaOp);
+    }
+    else {
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    }
+    colorBlendAttachment.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT,
+                                      VK_DYNAMIC_STATE_SCISSOR };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynamicStates;
+
+    std::vector<VkPushConstantRange> pushConstantRanges = {};
+	pushConstantRanges.reserve((ts ? ts->reflection.pushConstants.size() : 0) +
+        ms.reflection.pushConstants.size() +
+        fs.reflection.pushConstants.size());
+
+    auto addOrMergePushConstantRange = [&](uint32_t offset, uint32_t size,
+        VkShaderStageFlags stageFlags) {
+            const uint32_t newStart = offset;
+            const uint32_t newEnd = offset + size;
+
+            for (auto& existing : pushConstantRanges) {
+                const uint32_t existingStart = existing.offset;
+                const uint32_t existingEnd = existing.offset + existing.size;
+
+                const bool overlaps =
+                    !(newEnd <= existingStart || newStart >= existingEnd);
+
+                if (overlaps) {
+                    const uint32_t mergedStart = std::min(existingStart, newStart);
+                    const uint32_t mergedEnd = std::max(existingEnd, newEnd);
+
+                    existing.offset = mergedStart;
+                    existing.size = mergedEnd - mergedStart;
+                    existing.stageFlags |= stageFlags;
+                    return;
+                }
+
+                // Optional: also merge directly adjacent ranges
+                const bool adjacent =
+                    (newEnd == existingStart || newStart == existingEnd);
+                if (adjacent) {
+                    const uint32_t mergedStart = std::min(existingStart, newStart);
+                    const uint32_t mergedEnd = std::max(existingEnd, newEnd);
+
+                    existing.offset = mergedStart;
+                    existing.size = mergedEnd - mergedStart;
+                    existing.stageFlags |= stageFlags;
+                    return;
+                }
+            }
+
+            VkPushConstantRange pcr{};
+            pcr.offset = offset;
+            pcr.size = size;
+            pcr.stageFlags = stageFlags;
+            pushConstantRanges.push_back(pcr);
+        };
+
+	if (ts) {
+		for (const auto& pushConstantRange : ts->reflection.pushConstants) {
+			addOrMergePushConstantRange(pushConstantRange.offset,
+				pushConstantRange.size,
+				VK_SHADER_STAGE_TASK_BIT_EXT);
+		}
+	}
+
+    for (const auto& pushConstantRange : ms.reflection.pushConstants) {
+        addOrMergePushConstantRange(pushConstantRange.offset,
+            pushConstantRange.size,
+			VK_SHADER_STAGE_MESH_BIT_EXT);
+    }
+
+    for (const auto& pushConstantRange : fs.reflection.pushConstants) {
+        addOrMergePushConstantRange(pushConstantRange.offset,
+            pushConstantRange.size,
+            VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
+
+    std::vector<VkDescriptorSetLayout> vkSetLayouts;
+    vkSetLayouts.reserve(desc.layout.descriptorSetLayoutCount);
+
+    for (u32 i = 0; i < desc.layout.descriptorSetLayoutCount; ++i) {
+        BindingLayoutHandle handle = desc.layout.descriptorSetLayouts[i];
+        const BindingLayout& vkLayout = descriptorSetLayouts_[handle.id];
+        vkSetLayouts.push_back(vkLayout.layout);
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = static_cast<u32>(vkSetLayouts.size());
+    pipelineLayoutInfo.pSetLayouts =
+        vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
+    pipelineLayoutInfo.pushConstantRangeCount = pushConstantRanges.size();
+    pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
+
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VK_CHECK(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr,
+        &pipelineLayout),
+        "Failed to create Vulkan pipeline layout");
+
+    const bool hasColor = desc.colorFormat != Format::Undefined;
+
+    const bool hasDepth = desc.depth.depthFormat != Format::Undefined;
+
+    if (!hasColor && !hasDepth) {
+        vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+
+        throw std::runtime_error(
+            "Graphics pipeline requires at least one attachment");
+    }
+
+    VkFormat colorFormat =
+        hasColor ? ToVkFormat(desc.colorFormat) : VK_FORMAT_UNDEFINED;
+
+    VkFormat depthFormat =
+        hasDepth ? ToVkFormat(desc.depth.depthFormat) : VK_FORMAT_UNDEFINED;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable =
+        desc.depth.depthTestEnable ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable =
+        desc.depth.depthWriteEnable ? VK_TRUE : VK_FALSE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
+    VkPipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    renderingInfo.colorAttachmentCount = hasColor ? 1 : 0;
+    renderingInfo.pColorAttachmentFormats = hasColor ? &colorFormat : nullptr;
+    renderingInfo.depthAttachmentFormat = depthFormat;
+    renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &renderingInfo;
+	pipelineInfo.stageCount = static_cast<u32>(shaderStages.size());
+	pipelineInfo.pStages = shaderStages.data();
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = VK_NULL_HANDLE;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkResult result = vkCreateGraphicsPipelines(
+        device_, pipelineCache_, 1, &pipelineInfo, nullptr, &pipeline);
+
+    if (result != VK_SUCCESS) {
+        vkDestroyPipelineLayout(device_, pipelineLayout, nullptr);
+        throw std::runtime_error("Failed to create Vulkan graphics pipeline");
+    }
+
+    const u32 handleId = nextPipelineHandle_++;
+    pipelines_.emplace(handleId,
+        Pipeline{ .pipeline = pipeline, .layout = pipelineLayout });
+
+    return PipelineHandle{ handleId };
 }
 
 const Pipeline &Device::GetPipeline(PipelineHandle handle) const {

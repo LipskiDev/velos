@@ -156,6 +156,7 @@ public:
   CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
   PipelineHandle
   CreateComputePipeline(const ComputePipelineDesc &desc) override;
+  PipelineHandle CreateMeshPipeline(const MeshPipelineDesc& desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
   const Pipeline &GetPipeline(PipelineHandle handle) const;
 
@@ -289,6 +290,7 @@ private:
 #endif
 
   VkPhysicalDeviceProperties physicalDeviceProperties_{};
+	bool taskShaderSupported_ = false;
 
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   u32 mainQueueFamily = 0;

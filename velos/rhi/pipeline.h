@@ -85,4 +85,22 @@ struct ComputePipelineDesc {
   const char *debugName = nullptr;
 };
 
+struct MeshPipelineDesc {
+	// Optional
+	ShaderHandle taskShader{};
+
+	// Required
+	ShaderHandle meshShader{};
+	ShaderHandle fragmentShader{};
+
+	PipelineLayoutDesc layout{};
+
+	RasterStateDesc raster{};
+	DepthStateDesc depth{};
+	BlendStateDesc blend{};
+
+	Format colorFormat = Format::Undefined;
+	const char* debugName = nullptr;
+};
+
 }; // namespace Velos::RHI
