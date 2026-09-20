@@ -5,6 +5,7 @@
 #include "vlpch.h"
 
 #include <stdexcept>
+#include <vector>
 
 namespace Velos::Vulkan {
 using namespace Velos::RHI;
@@ -132,16 +133,13 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
     throw std::runtime_error("BeginRendering requires at least one attachment");
   }
 
-  if (renderingInfo.colorAttachmentCount > 1) {
-    throw std::runtime_error(
-        "BeginRendering currently supports at most one color attachment");
-  }
+  std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos(
+      hasColor ? renderingInfo.colorAttachmentCount : 0);
 
-  VkRenderingAttachmentInfo colorAttachmentInfo{};
-
-  if (hasColor) {
+  for (size_t i = 0; i < colorAttachmentInfos.size(); ++i) {
     const ColorAttachmentDesc &colorAttachment =
-        renderingInfo.colorAttachments[0];
+        renderingInfo.colorAttachments[i];
+    auto &colorAttachmentInfo = colorAttachmentInfos[i];
 
     const ImageView &colorView =
         device_.GetImageView(colorAttachment.view);
@@ -240,7 +238,8 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   vkRenderingInfo.colorAttachmentCount =
       hasColor ? renderingInfo.colorAttachmentCount : 0;
 
-  vkRenderingInfo.pColorAttachments = hasColor ? &colorAttachmentInfo : nullptr;
+  vkRenderingInfo.pColorAttachments =
+      hasColor ? colorAttachmentInfos.data() : nullptr;
   vkRenderingInfo.pDepthAttachment =
       hasDepthAttachment ? &depthAttachmentInfo : nullptr;
   vkRenderingInfo.pStencilAttachment = nullptr;
