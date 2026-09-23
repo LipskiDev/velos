@@ -89,7 +89,7 @@ static std::string DescribeTest(const std::string &name) {
   if (name == "BlendReverseSubtractPixelOutput")
     return "Enables blending with one/one factors and reverse subtraction, then verifies the exact destination-minus-source result.";
   if (name == "MultipleRenderTargetsPixelOutput")
-    return "Binds two color attachments in one rendering pass, clears each to a distinct color, reads both images back, and verifies every pixel.";
+    return "Draws distinct fragment-shader outputs to two color attachments, reads both images back, and verifies every pixel.";
   if (name == "CubeArrayImageView")
     return "Creates a 12-layer cube array and a cube-array view. The test fails while the declared cube-array RHI type is unsupported.";
   if (name == "MultipleSwapchains")
@@ -2914,19 +2914,31 @@ int main(int argc, char **argv) {
         readbacks[i] = device->CreateBuffer({.size = imageByteCount,
             .usage = BufferUsage::TransferDst, .memoryUsage = MemoryUsage::GPUToCPU});
       }
+      const fs::path shaderRoot = fs::path(__FILE__).parent_path() / "shaders";
+      auto vs = CompileShader(*device, shaderRoot / "fullscreen.vert",
+          ShaderStage::Vertex, "test.mrt.vs");
+      auto fsHandle = CompileShader(*device, shaderRoot / "multiple_targets.frag",
+          ShaderStage::Fragment, "test.mrt.fs");
+      auto pipeline = device->CreateGraphicsPipeline({.vertexShader = vs,
+          .fragmentShader = fsHandle, .raster = {.cullBackFaces = false},
+          .colorAttachments = {{.format = Format::RGBA8_UNORM}, {.format = Format::RGBA8_UNORM}}});
       auto &commands = device->GetCommandList(); commands.Begin();
       for (auto image : images)
         commands.Barrier(ImageBarrier{.image = image, .newLayout = ImageLayout::ColorAttachment,
             .aspect = ImageAspect::Color});
       const ColorAttachmentDesc colors[] = {
           {.view = views[0], .loadOp = LoadOp::Clear, .storeOp = StoreOp::Store,
-           .clearValue = {1, 0, 0, 1}},
+           .clearValue = {0, 0, 1, 1}},
           {.view = views[1], .loadOp = LoadOp::Clear, .storeOp = StoreOp::Store,
-           .clearValue = {0, 1, 0, 1}}};
+           .clearValue = {0, 0, 1, 1}}};
       std::exception_ptr recordingFailure;
       try {
         commands.BeginRendering({.renderArea = {{0, 0}, {width, height}},
             .colorAttachments = colors, .colorAttachmentCount = 2});
+        commands.BindPipeline(pipeline);
+        commands.SetViewport({.width = static_cast<float>(width), .height = static_cast<float>(height)});
+        commands.SetScissor({.extent = {width, height}});
+        commands.Draw(3);
         commands.EndRendering();
         for (int i = 0; i < 2; ++i) {
           commands.Barrier(ImageBarrier{.image = images[i],
@@ -2962,12 +2974,15 @@ int main(int argc, char **argv) {
         publishPixelComparison(width * 2, height, expected, actual);
         if (actual != expected)
           recordingFailure = std::make_exception_ptr(
-              std::runtime_error("multiple render-target clear output mismatch"));
+              std::runtime_error("multiple render-target shader output mismatch"));
       }
       for (int i = 1; i >= 0; --i) {
         device->DestroyBuffer(readbacks[i]);
         device->DestroyImageView(views[i]); device->DestroyImage(images[i]);
       }
+      device->DestroyPipeline(pipeline);
+      device->DestroyShader(fsHandle);
+      device->DestroyShader(vs);
       if (recordingFailure) std::rethrow_exception(recordingFailure);
     });
     run("TimelineSubmitAndPresent", "command", [&] {

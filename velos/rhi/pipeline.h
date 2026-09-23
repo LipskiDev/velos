@@ -5,6 +5,7 @@
 #include "../core/types.h"
 #include "handles.h"
 #include "types.h"
+#include <glm/vec4.hpp>
 
 namespace Velos::RHI {
 enum class VertexInputRate {
@@ -60,6 +61,13 @@ struct BlendStateDesc {
   BlendOp alphaOp = BlendOp::Add;
 };
 
+struct AttachmentDesc {
+	Format format = Format::Undefined;
+	LoadOp loadOp = LoadOp::Clear;
+	StoreOp storeOp = StoreOp::Store;
+	glm::vec4 clearValue{};
+};
+
 struct GraphicsPipelineDesc {
   ShaderHandle vertexShader{};
   ShaderHandle fragmentShader{};
@@ -73,7 +81,10 @@ struct GraphicsPipelineDesc {
   DepthStateDesc depth{};
   BlendStateDesc blend{};
 
+  std::vector<AttachmentDesc> colorAttachments{};
+  // Used when colorAttachments is empty.
   Format colorFormat = Format::Undefined;
+
   const char *debugName = nullptr;
 };
 
@@ -99,6 +110,7 @@ struct MeshPipelineDesc {
 	DepthStateDesc depth{};
 	BlendStateDesc blend{};
 
+	std::vector<AttachmentDesc> colorAttachments{};
 	Format colorFormat = Format::Undefined;
 	const char* debugName = nullptr;
 };

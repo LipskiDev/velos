@@ -882,6 +882,7 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
 
 	return meshShaderFeatures.meshShader == VK_TRUE &&
 		 vulkan13Features.dynamicRendering == VK_TRUE &&
+         vulkan13Features.maintenance4 == VK_TRUE &&
          vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
          vulkan12Features.timelineSemaphore == VK_TRUE &&
          vulkan12Features.drawIndirectCount == VK_TRUE &&
@@ -1091,6 +1092,7 @@ void Device::CreateLogicalDevice() {
   vulkan13Features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
   vulkan13Features.dynamicRendering = VK_TRUE;
+  vulkan13Features.maintenance4 = VK_TRUE;
   vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
   vulkan13Features.pNext = &vulkan12Features;
 
@@ -2318,8 +2320,6 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
   colorBlending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   colorBlending.logicOpEnable = VK_FALSE;
-  colorBlending.attachmentCount = 1;
-  colorBlending.pAttachments = &colorBlendAttachment;
 
   VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
                                     VK_DYNAMIC_STATE_SCISSOR};
@@ -2410,7 +2410,16 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
                                   &pipelineLayout),
            "Failed to create Vulkan pipeline layout");
 
-  const bool hasColor = desc.colorFormat != Format::Undefined;
+  std::vector<VkFormat> colorFormats;
+  for (const auto& attachment : desc.colorAttachments)
+    colorFormats.push_back(ToVkFormat(attachment.format));
+  if (colorFormats.empty() && desc.colorFormat != Format::Undefined)
+    colorFormats.push_back(ToVkFormat(desc.colorFormat));
+  const bool hasColor = !colorFormats.empty();
+  std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(
+      colorFormats.size(), colorBlendAttachment);
+  colorBlending.attachmentCount = static_cast<u32>(blendAttachments.size());
+  colorBlending.pAttachments = blendAttachments.data();
 
   const bool hasDepth = desc.depth.depthFormat != Format::Undefined;
 
@@ -2420,9 +2429,6 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
     throw std::runtime_error(
         "Graphics pipeline requires at least one attachment");
   }
-
-  VkFormat colorFormat =
-      hasColor ? ToVkFormat(desc.colorFormat) : VK_FORMAT_UNDEFINED;
 
   VkFormat depthFormat =
       hasDepth ? ToVkFormat(desc.depth.depthFormat) : VK_FORMAT_UNDEFINED;
@@ -2440,8 +2446,8 @@ Device::CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) {
 
   VkPipelineRenderingCreateInfo renderingInfo{};
   renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-  renderingInfo.colorAttachmentCount = hasColor ? 1 : 0;
-  renderingInfo.pColorAttachmentFormats = hasColor ? &colorFormat : nullptr;
+  renderingInfo.colorAttachmentCount = static_cast<u32>(colorFormats.size());
+  renderingInfo.pColorAttachmentFormats = colorFormats.data();
   renderingInfo.depthAttachmentFormat = depthFormat;
   renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
@@ -2680,8 +2686,6 @@ PipelineHandle Device::CreateMeshPipeline(const MeshPipelineDesc& desc)
     colorBlending.sType =
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
 
     VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT,
                                       VK_DYNAMIC_STATE_SCISSOR };
@@ -2781,7 +2785,16 @@ PipelineHandle Device::CreateMeshPipeline(const MeshPipelineDesc& desc)
         &pipelineLayout),
         "Failed to create Vulkan pipeline layout");
 
-    const bool hasColor = desc.colorFormat != Format::Undefined;
+    std::vector<VkFormat> colorFormats;
+    for (const auto& attachment : desc.colorAttachments)
+        colorFormats.push_back(ToVkFormat(attachment.format));
+    if (colorFormats.empty() && desc.colorFormat != Format::Undefined)
+        colorFormats.push_back(ToVkFormat(desc.colorFormat));
+    const bool hasColor = !colorFormats.empty();
+    std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(
+        colorFormats.size(), colorBlendAttachment);
+    colorBlending.attachmentCount = static_cast<u32>(blendAttachments.size());
+    colorBlending.pAttachments = blendAttachments.data();
 
     const bool hasDepth = desc.depth.depthFormat != Format::Undefined;
 
@@ -2791,9 +2804,6 @@ PipelineHandle Device::CreateMeshPipeline(const MeshPipelineDesc& desc)
         throw std::runtime_error(
             "Graphics pipeline requires at least one attachment");
     }
-
-    VkFormat colorFormat =
-        hasColor ? ToVkFormat(desc.colorFormat) : VK_FORMAT_UNDEFINED;
 
     VkFormat depthFormat =
         hasDepth ? ToVkFormat(desc.depth.depthFormat) : VK_FORMAT_UNDEFINED;
@@ -2811,8 +2821,8 @@ PipelineHandle Device::CreateMeshPipeline(const MeshPipelineDesc& desc)
 
     VkPipelineRenderingCreateInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    renderingInfo.colorAttachmentCount = hasColor ? 1 : 0;
-    renderingInfo.pColorAttachmentFormats = hasColor ? &colorFormat : nullptr;
+    renderingInfo.colorAttachmentCount = static_cast<u32>(colorFormats.size());
+    renderingInfo.pColorAttachmentFormats = colorFormats.data();
     renderingInfo.depthAttachmentFormat = depthFormat;
     renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
