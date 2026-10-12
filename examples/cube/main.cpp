@@ -43,7 +43,10 @@ int main() {
 
   std::cout << "Creating swapchain\n";
   SwapchainHandle swapchain = device->CreateSwapchain({
-      .windowHandle = app.GetWindow().GetNativeHandle(),
+      .window = {
+          .type = WindowHandleType::GLFW,
+          .value = app.GetWindow().GetNativeHandle(),
+      },
       .width = static_cast<u32>(app.GetWindow().GetWidth()),
       .height = static_cast<u32>(app.GetWindow().GetHeight()),
       .format = Format::RGBA8_UNORM,

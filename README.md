@@ -123,7 +123,10 @@ Velos::RHI::IDevice* device = Velos::RHI::CreateDevice({
 });
 
 Velos::RHI::SwapchainHandle swapchain = device->CreateSwapchain({
-    .windowHandle = glfwGetWin32Window(window), // or equivalent
+    .window = {
+        .type = Velos::RHI::WindowHandleType::GLFW,
+        .value = window,
+    },
     .width        = 1280,
     .height       = 720,
     .format       = Velos::RHI::Format::BGRA8_UNORM,

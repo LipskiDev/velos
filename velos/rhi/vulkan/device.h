@@ -1,16 +1,14 @@
 #pragma once
 
-#include <rhi/vulkan/profiler.h>
-
 #include <array>
 #include <filesystem>
 #include <unordered_map>
 #include <vector>
+#include <volk.h>
 #include <vk_mem_alloc.h>
 
 #include "rhi/device.h"
 #include "rhi/types.h"
-#include "rhi/vulkan/profiler.h"
 #include "rhi/vulkan/swapchain.h"
 #include "shader/shader_compiler.h"
 
@@ -54,6 +52,11 @@ struct Image {
   u32 arrayLayers = 1;
 
   bool owned = true;
+  bool sparse = false;
+  VkExtent3D sparseGranularity{};
+  VkDeviceSize sparsePageSize = 0;
+  u32 sparsePageCount = 0;
+  std::unordered_map<u64, u32> sparseBindings;
 };
 
 struct ImageView {
@@ -61,6 +64,9 @@ struct ImageView {
   ImageHandle image;
   Format format = Format::Undefined;
   ImageAspect aspect = ImageAspect::Color;
+  ImageViewType type = ImageViewType::View2D;
+  u32 baseArrayLayer = 0;
+  u32 arrayLayerCount = 1;
 
   bool owned = true;
 };
@@ -119,9 +125,9 @@ public:
   explicit Device(const DeviceDesc &desc);
   ~Device() override;
 
-  void CreateAllocator();
-
   GraphicsAPI GetBackend() const override;
+
+  void CreateAllocator();
 
   SwapchainHandle CreateSwapchain(const SwapchainDesc &desc) override;
   void DestroySwapchain(SwapchainHandle handle) override;
@@ -135,6 +141,12 @@ public:
   void UnmapBuffer(BufferHandle handle) override;
 
   ImageHandle CreateImage(const ImageDesc &desc) override;
+  ImageHandle CreateSparseImage(const ImageDesc &desc,
+                                u64 memoryBudgetBytes) override;
+  SparseImageMemoryInfo
+  GetSparseImageMemoryInfo(ImageHandle image) const override;
+  void BindSparseImagePages(
+      ImageHandle image, std::span<const SparseImagePageBind> pages) override;
   void DestroyImage(ImageHandle handle) override;
   const Image &GetImage(ImageHandle handle) const;
   void SetImageLayout(ImageHandle handle, u32 baseMipLevel, u32 mipLevelCount,

@@ -74,7 +74,7 @@ Swapchain::Swapchain(VkInstance instance,
       graphicsQueueFamily_(graphicsQueueFamily), width_(desc.width),
       height_(desc.height), desc_(desc) {
   std::cout << "Creating Surface\n";
-  CreateSurface(desc.windowHandle);
+  CreateSurface(desc.window);
 
   std::cout << "Creating Swapchain\n";
   CreateSwapchain(desc);
@@ -92,8 +92,13 @@ Swapchain::~Swapchain() {
   }
 }
 
-void Swapchain::CreateSurface(void *windowHandle) {
-  window_ = static_cast<GLFWwindow *>(windowHandle);
+void Swapchain::CreateSurface(const WindowHandle &windowHandle) {
+  if (windowHandle.type != WindowHandleType::GLFW) {
+    throw std::runtime_error(
+        "The Vulkan backend currently requires a GLFW window handle");
+  }
+
+  window_ = static_cast<GLFWwindow *>(windowHandle.value);
   if (!window_) {
     throw std::runtime_error("Swapchain requires a valid GLFW window handle");
   }

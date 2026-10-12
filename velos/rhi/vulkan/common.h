@@ -306,6 +306,8 @@ inline VkImageViewType ToVkImageViewType(ImageViewType type) {
     return VK_IMAGE_VIEW_TYPE_2D;
   case ImageViewType::Cube:
     return VK_IMAGE_VIEW_TYPE_CUBE;
+  case ImageViewType::CubeArray:
+	  return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
   case ImageViewType::View2DArray:
       return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
   default:

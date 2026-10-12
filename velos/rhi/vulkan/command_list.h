@@ -70,11 +70,16 @@ public:
             u32 baseInstance = 0) override;
   void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
                    i32 vertexOffset = 0, u32 baseInstance = 0) override;
+  void DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
+                            u32 firstIndex = 0, i32 vertexOffset = 0,
+                            u32 baseInstance = 0) override;
   void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) override;
   void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                 BufferHandle countBuffer, u64 countOffset,
                                 u32 maxDrawCount, u32 stride) override;
   void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1, u32 groupCountZ = 1) override;
+  void DrawMeshTasksIndirect(BufferHandle buffer, u64 offset, u32 drawCount,
+                             u32 stride) override;
 
   void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
                 uint32_t groupCountZ) override;

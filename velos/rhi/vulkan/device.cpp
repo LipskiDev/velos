@@ -810,10 +810,13 @@ bool HasRequiredQueues(VkPhysicalDevice device) {
         (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
     const bool hasCompute =
         (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-	const bool hasTransfer =
+    const bool hasTransfer =
         (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
+    const bool hasSparse =
+        (queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) != 0;
 
-    if (queueFamily.queueCount > 0 && hasGraphics && hasCompute && hasTransfer) {
+    if (queueFamily.queueCount > 0 && hasGraphics && hasCompute && hasTransfer &&
+        hasSparse) {
       return true;
     }
   }
@@ -881,6 +884,8 @@ bool HasRequiredFeatures(VkPhysicalDevice device) {
   vkGetPhysicalDeviceFeatures2(device, &features2);
 
 	return meshShaderFeatures.meshShader == VK_TRUE &&
+		 features2.features.sparseBinding == VK_TRUE &&
+		 features2.features.sparseResidencyImage2D == VK_TRUE &&
 		 vulkan13Features.dynamicRendering == VK_TRUE &&
          vulkan13Features.maintenance4 == VK_TRUE &&
          vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE &&
@@ -994,8 +999,9 @@ void Device::CreateLogicalDevice() {
   bool foundDedicatedTransferQueue = false;
   for (u32 i = 0; i < queueFamilyCount; ++i) {
     const VkQueueFlags flags = queueFamilies[i].queueFlags;
-    const VkQueueFlags mainQueueFlags =
-        VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+    const VkQueueFlags mainQueueFlags = VK_QUEUE_GRAPHICS_BIT |
+        VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT |
+        VK_QUEUE_SPARSE_BINDING_BIT;
     if (!foundMainQueue && (flags & mainQueueFlags) == mainQueueFlags) {
       mainQueueFamily = i;
       foundMainQueue = true;
@@ -1068,6 +1074,8 @@ void Device::CreateLogicalDevice() {
 
   VkPhysicalDeviceFeatures deviceFeatures{};
   deviceFeatures.multiDrawIndirect = VK_TRUE;
+  deviceFeatures.sparseBinding = VK_TRUE;
+  deviceFeatures.sparseResidencyImage2D = VK_TRUE;
 
   VkPhysicalDeviceVulkan11Features vulkan11Features{};
   vulkan11Features.sType =
@@ -1821,11 +1829,6 @@ ImageHandle Device::CreateImage(const ImageDesc &desc) {
       throw std::runtime_error(
           "CreateImage: cube textures must have depth == 1");
     }
-
-    if (desc.arrayLayers != 6) {
-      throw std::runtime_error(
-          "CreateImage: cube textures must have exactly 6 array layers");
-    }
   }
 
   VkImageCreateInfo createInfo{};
@@ -1901,6 +1904,227 @@ ImageHandle Device::CreateImage(const ImageDesc &desc) {
 
   return ImageHandle{handleId};
 }
+
+ImageHandle Device::CreateSparseImage(const ImageDesc &desc,
+                                      u64 memoryBudgetBytes) {
+  VL_PROFILE_ZONE_N("Device::CreateSparseImage");
+  if (desc.width == 0 || desc.height == 0 || desc.depth != 1 ||
+      desc.mipLevels == 0 || desc.arrayLayers == 0 ||
+      desc.format == Format::Undefined || desc.usage == ImageUsage::None) {
+    throw std::invalid_argument("CreateSparseImage: invalid image description");
+  }
+  if (desc.type == ImageType::Cube &&
+      (desc.width != desc.height || (desc.arrayLayers % 6) != 0)) {
+    throw std::invalid_argument(
+        "CreateSparseImage: cube arrays require square images and six-layer groups");
+  }
+
+  VkImageCreateInfo createInfo{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  createInfo.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+                     VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+  if (desc.type == ImageType::Cube) {
+    createInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+  }
+  createInfo.imageType = ToVkImageType(desc.type);
+  createInfo.format = ToVkFormat(desc.format);
+  createInfo.extent = {desc.width, desc.height, desc.depth};
+  createInfo.mipLevels = desc.mipLevels;
+  createInfo.arrayLayers = desc.arrayLayers;
+  createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+  createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+  createInfo.usage = ToVkImageUsage(desc.usage);
+  createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VkImage image = VK_NULL_HANDLE;
+  VK_CHECK(vkCreateImage(device_, &createInfo, nullptr, &image),
+           "CreateSparseImage: vkCreateImage failed");
+
+  u32 requirementCount = 0;
+  vkGetImageSparseMemoryRequirements(device_, image, &requirementCount, nullptr);
+  std::vector<VkSparseImageMemoryRequirements> sparseRequirements(requirementCount);
+  vkGetImageSparseMemoryRequirements(device_, image, &requirementCount,
+                                     sparseRequirements.data());
+  const VkImageAspectFlags wantedAspect =
+      HasFlag(desc.usage, ImageUsage::DepthStencil)
+          ? VK_IMAGE_ASPECT_DEPTH_BIT
+          : VK_IMAGE_ASPECT_COLOR_BIT;
+  const auto requirement = std::find_if(
+      sparseRequirements.begin(), sparseRequirements.end(),
+      [wantedAspect](const VkSparseImageMemoryRequirements &candidate) {
+        return (candidate.formatProperties.aspectMask & wantedAspect) != 0;
+      });
+  if (requirement == sparseRequirements.end() ||
+      requirement->imageMipTailFirstLod < desc.mipLevels) {
+    vkDestroyImage(device_, image, nullptr);
+    throw std::runtime_error(
+        "CreateSparseImage: format has no usable per-block sparse residency");
+  }
+
+  VkMemoryRequirements memoryRequirements{};
+  vkGetImageMemoryRequirements(device_, image, &memoryRequirements);
+  const VkDeviceSize pageSize = memoryRequirements.alignment;
+  const u32 pageCount = static_cast<u32>(memoryBudgetBytes / pageSize);
+  if (pageCount == 0) {
+    vkDestroyImage(device_, image, nullptr);
+    throw std::invalid_argument(
+        "CreateSparseImage: memory budget is smaller than one sparse page");
+  }
+
+  VkMemoryAllocateInfo allocationInfo{
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = pageSize * pageCount,
+      .memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  const VkResult allocationResult =
+      vkAllocateMemory(device_, &allocationInfo, nullptr, &memory);
+  if (allocationResult != VK_SUCCESS) {
+    vkDestroyImage(device_, image, nullptr);
+    throw std::runtime_error("CreateSparseImage: page-pool allocation failed");
+  }
+
+  Image sparseImage{};
+  sparseImage.image = image;
+  sparseImage.memory = memory;
+  sparseImage.type = desc.type;
+  sparseImage.format = desc.format;
+  sparseImage.usage = desc.usage;
+  sparseImage.mipLayouts.resize(desc.mipLevels, ImageLayout::Undefined);
+  sparseImage.width = desc.width;
+  sparseImage.height = desc.height;
+  sparseImage.depth = desc.depth;
+  sparseImage.mipLevels = desc.mipLevels;
+  sparseImage.arrayLayers = desc.arrayLayers;
+  sparseImage.owned = true;
+  sparseImage.sparse = true;
+  sparseImage.sparseGranularity = requirement->formatProperties.imageGranularity;
+  sparseImage.sparsePageSize = pageSize;
+  sparseImage.sparsePageCount = pageCount;
+
+  const u32 handleId = nextImageHandle_++;
+  images_.emplace(handleId, std::move(sparseImage));
+  return ImageHandle{handleId};
+}
+
+SparseImageMemoryInfo
+Device::GetSparseImageMemoryInfo(ImageHandle handle) const {
+  const Image &image = GetImage(handle);
+  if (!image.sparse) {
+    throw std::invalid_argument("GetSparseImageMemoryInfo: image is not sparse");
+  }
+  return {
+      .pageWidth = image.sparseGranularity.width,
+      .pageHeight = image.sparseGranularity.height,
+      .pageSize = image.sparsePageSize,
+      .pageCount = image.sparsePageCount,
+  };
+}
+
+void Device::BindSparseImagePages(
+    ImageHandle handle, std::span<const SparseImagePageBind> pages) {
+  Image &image = images_.at(handle.id);
+  if (!image.sparse) {
+    throw std::invalid_argument("BindSparseImagePages: image is not sparse");
+  }
+
+  const auto keyFor = [](const SparseImagePageBind &page) -> u64 {
+    return (static_cast<u64>(page.mipLevel) << 56) |
+           (static_cast<u64>(page.arrayLayer) << 32) |
+           (static_cast<u64>(page.blockY) << 16) |
+           static_cast<u64>(page.blockX);
+  };
+  std::unordered_map<u64, u32> desired;
+  desired.reserve(pages.size());
+  for (const SparseImagePageBind &page : pages) {
+    if (page.mipLevel >= image.mipLevels ||
+        page.arrayLayer >= image.arrayLayers ||
+        page.memoryPage >= image.sparsePageCount) {
+      throw std::out_of_range("BindSparseImagePages: page binding is out of range");
+    }
+    if (!desired.emplace(keyFor(page), page.memoryPage).second) {
+      throw std::invalid_argument("BindSparseImagePages: duplicate image block");
+    }
+  }
+
+  std::vector<VkSparseImageMemoryBind> binds;
+  binds.reserve(image.sparseBindings.size() + pages.size());
+  const auto appendBind = [&image, &binds](u64 key, VkDeviceMemory memory,
+                                          VkDeviceSize memoryOffset) {
+    const u32 mip = static_cast<u32>((key >> 56) & 0xffu);
+    const u32 layer = static_cast<u32>((key >> 32) & 0xffffffu);
+    const u32 blockY = static_cast<u32>((key >> 16) & 0xffffu);
+    const u32 blockX = static_cast<u32>(key & 0xffffu);
+    const u32 mipWidth = std::max(1u, image.width >> mip);
+    const u32 mipHeight = std::max(1u, image.height >> mip);
+    const u32 x = blockX * image.sparseGranularity.width;
+    const u32 y = blockY * image.sparseGranularity.height;
+    if (x >= mipWidth || y >= mipHeight) {
+      throw std::out_of_range("BindSparseImagePages: block is outside mip extent");
+    }
+    VkSparseImageMemoryBind bind{};
+    bind.subresource = {
+        .aspectMask = static_cast<VkImageAspectFlags>(
+            HasFlag(image.usage, ImageUsage::DepthStencil)
+                ? VK_IMAGE_ASPECT_DEPTH_BIT
+                : VK_IMAGE_ASPECT_COLOR_BIT),
+        .mipLevel = mip,
+        .arrayLayer = layer,
+    };
+    bind.offset = {static_cast<i32>(x), static_cast<i32>(y), 0};
+    bind.extent = {
+        std::min(image.sparseGranularity.width, mipWidth - x),
+        std::min(image.sparseGranularity.height, mipHeight - y), 1};
+    bind.memory = memory;
+    bind.memoryOffset = memoryOffset;
+    binds.push_back(bind);
+  };
+
+  for (const auto &[key, oldPage] : image.sparseBindings) {
+    const auto replacement = desired.find(key);
+    if (replacement == desired.end()) {
+      appendBind(key, VK_NULL_HANDLE, 0);
+    } else if (replacement->second != oldPage) {
+      appendBind(key, image.memory,
+                 static_cast<VkDeviceSize>(replacement->second) *
+                     image.sparsePageSize);
+    }
+  }
+  for (const SparseImagePageBind &page : pages) {
+    const u64 key = keyFor(page);
+    if (!image.sparseBindings.contains(key)) {
+      appendBind(key, image.memory,
+                 static_cast<VkDeviceSize>(page.memoryPage) *
+                     image.sparsePageSize);
+    }
+  }
+  if (binds.empty()) return;
+
+  VkSparseImageMemoryBindInfo imageBind{
+      .image = image.image,
+      .bindCount = static_cast<u32>(binds.size()),
+      .pBinds = binds.data(),
+  };
+  VkBindSparseInfo bindInfo{
+      .sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
+      .imageBindCount = 1,
+      .pImageBinds = &imageBind,
+  };
+  VkFence fence = VK_NULL_HANDLE;
+  VkFenceCreateInfo fenceInfo{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+  VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr, &fence),
+           "BindSparseImagePages: fence creation failed");
+  const VkResult bindResult = vkQueueBindSparse(graphicsQueue_, 1, &bindInfo, fence);
+  if (bindResult == VK_SUCCESS) {
+    VK_CHECK(vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX),
+             "BindSparseImagePages: sparse bind wait failed");
+  }
+  vkDestroyFence(device_, fence, nullptr);
+  VK_CHECK(bindResult, "BindSparseImagePages: vkQueueBindSparse failed");
+  image.sparseBindings = std::move(desired);
+}
+
 void Device::DestroyImage(ImageHandle handle) {
   if (!handle.IsValid()) {
     return;
@@ -2033,6 +2257,9 @@ ImageViewHandle Device::CreateImageView(const ImageViewDesc &desc) {
   vkView.image = desc.image;
   vkView.format = viewFormat;
   vkView.aspect = aspect;
+  vkView.type = desc.type;
+  vkView.baseArrayLayer = desc.baseArrayLayer;
+  vkView.arrayLayerCount = desc.arrayLayerCount;
   vkView.owned = true;
 
   u32 handleId = nextImageViewHandle_++;

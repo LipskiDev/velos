@@ -485,6 +485,45 @@ int main(int argc, char **argv) {
       if (!image || !view) throw std::runtime_error("invalid cube handles");
       device->DestroyImageView(view); device->DestroyImage(image);
     });
+    run("LayeredCubeDepthRendering", "rendering", [&] {
+      constexpr uint32_t extent = 16;
+      auto image = device->CreateImage({.width = extent, .height = extent,
+          .arrayLayers = 6, .format = Format::D32_FLOAT,
+          .type = ImageType::Cube,
+          .usage = ImageUsage::DepthStencil | ImageUsage::Sampled,
+          .debugName = "test.layered.cube.depth"});
+      auto attachmentView = device->CreateImageView({.image = image,
+          .format = Format::D32_FLOAT, .type = ImageViewType::View2DArray,
+          .aspect = ImageAspect::Depth, .arrayLayerCount = 6,
+          .debugName = "test.layered.cube.depth.attachment"});
+      auto samplingView = device->CreateImageView({.image = image,
+          .format = Format::D32_FLOAT, .type = ImageViewType::Cube,
+          .aspect = ImageAspect::Depth, .arrayLayerCount = 6,
+          .debugName = "test.layered.cube.depth.sampling"});
+
+      auto &commands = device->GetCommandList();
+      commands.Begin();
+      commands.Barrier(ImageBarrier{.image = image,
+          .newLayout = ImageLayout::DepthAttachment,
+          .aspect = ImageAspect::Depth, .layerCount = 6});
+      const DepthAttachmentDesc depth{.view = attachmentView,
+          .loadOp = LoadOp::Clear, .storeOp = StoreOp::Store,
+          .clearDepth = 1.0f};
+      commands.BeginRendering({.renderArea = {{0, 0}, {extent, extent}},
+          .depthAttachment = &depth, .layerCount = 6});
+      commands.EndRendering();
+      commands.Barrier(ImageBarrier{.image = image,
+          .oldLayout = ImageLayout::DepthAttachment,
+          .newLayout = ImageLayout::ShaderReadOnly,
+          .aspect = ImageAspect::Depth, .layerCount = 6});
+      commands.End();
+      device->Submit();
+      device->WaitIdle();
+
+      device->DestroyImageView(samplingView);
+      device->DestroyImageView(attachmentView);
+      device->DestroyImage(image);
+    });
     run("CubeArrayImageView", "texture", [&] {
       ImageHandle image{};
       ImageViewHandle view{};
@@ -2993,7 +3032,10 @@ int main(int argc, char **argv) {
       SemaphoreHandle timeline{};
       std::exception_ptr failure;
       try {
-        swapchain = device->CreateSwapchain({.windowHandle = window,
+        swapchain = device->CreateSwapchain({.window = {
+                                                 .type = WindowHandleType::GLFW,
+                                                 .value = window,
+                                             },
             .width = 64, .height = 64, .bufferCount = 2, .vsync = true});
         timeline = device->CreateSemaphore(SemaphoreType::Timeline, 1);
         for (uint64_t value = 2; value <= 5; ++value) {
@@ -3031,9 +3073,15 @@ int main(int argc, char **argv) {
       SwapchainHandle second{};
       std::exception_ptr creationFailure;
       try {
-        first = device->CreateSwapchain({.windowHandle = firstWindow,
+        first = device->CreateSwapchain({.window = {
+                                             .type = WindowHandleType::GLFW,
+                                             .value = firstWindow,
+                                         },
             .width = 64, .height = 64, .bufferCount = 2, .vsync = true});
-        second = device->CreateSwapchain({.windowHandle = secondWindow,
+        second = device->CreateSwapchain({.window = {
+                                              .type = WindowHandleType::GLFW,
+                                              .value = secondWindow,
+                                          },
             .width = 64, .height = 64, .bufferCount = 2, .vsync = true});
         if (!first || !second || first.id == second.id)
           throw std::runtime_error("multiple swapchains did not return distinct handles");

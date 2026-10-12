@@ -12,7 +12,7 @@
 namespace Velos::RHI {
 enum class GraphicsAPI {
   Vulkan,
-  // D3D12,
+  D3D12,
   // Metal
 };
 
@@ -76,6 +76,12 @@ public:
   virtual void UnmapBuffer(BufferHandle handle) = 0;
 
   virtual ImageHandle CreateImage(const ImageDesc &desc) = 0;
+  virtual ImageHandle CreateSparseImage(const ImageDesc &desc,
+                                        u64 memoryBudgetBytes) = 0;
+  virtual SparseImageMemoryInfo
+  GetSparseImageMemoryInfo(ImageHandle image) const = 0;
+  virtual void BindSparseImagePages(
+      ImageHandle image, std::span<const SparseImagePageBind> pages) = 0;
   virtual void DestroyImage(ImageHandle image) = 0;
 
   virtual ImageViewHandle CreateImageView(const ImageViewDesc &desc) = 0;

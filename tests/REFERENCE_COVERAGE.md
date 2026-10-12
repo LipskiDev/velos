@@ -15,6 +15,7 @@ to the Velos RHI as of this branch.
 - Uniform-buffer, storage-buffer, sampled-texture, and storage-texture bindings
 - Command recording/submission, viewport, scissor, and explicit barriers
 - Render-pass clear of a mip or array slice
+- Multiple color-attachment clears with independent pixel readback
 - Vertex-input, normalized byte attributes, 16/32-bit indexed drawing,
   triangle strips, and depth test/write behavior with pixel readback
 - Fragment discard preserving the existing render-target contents
@@ -39,7 +40,6 @@ The following advertised paths have executable tests that currently fail:
 - command-list compute-pipeline state reset between recordings
 - generated mip-chain intermediate layout transitions
 - cube-array images/views
-- multiple render targets
 - multiple simultaneous swapchains
 
 ## Missing functionality blocking direct AGFX equivalents
@@ -51,8 +51,6 @@ The following advertised paths have executable tests that currently fail:
 - **3D textures:** `ImageType` only exposes `Image2D` and `Cube`.
 - **Cube arrays:** `ImageViewType::CubeArray` exists, but cube image creation
   requires exactly six layers and the Vulkan view conversion rejects the type.
-- **Multiple render targets:** Vulkan `BeginRendering` explicitly rejects more
-  than one color attachment.
 - **Multiple swapchains:** Vulkan device state stores a single swapchain and
   rejects creation of a second one.
 - **Indirect execution:** no draw-indirect, draw-indexed-indirect,

@@ -124,6 +124,11 @@ void CommandList::Barrier(const ImageBarrier &barrier) {
 }
 
 void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
+  if (renderingInfo.layerCount == 0) {
+    throw std::invalid_argument(
+        "BeginRendering: layerCount must be greater than zero");
+  }
+
   const bool hasColor = renderingInfo.colorAttachmentCount > 0 &&
                         renderingInfo.colorAttachments != nullptr;
 
@@ -143,6 +148,10 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
     const ImageView &colorView =
         device_.GetImageView(colorAttachment.view);
+    if (colorView.arrayLayerCount < renderingInfo.layerCount) {
+      throw std::invalid_argument(
+          "BeginRendering: color attachment view has fewer layers than layerCount");
+    }
 
     VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     switch (colorAttachment.loadOp) {
@@ -190,6 +199,10 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
     const DepthAttachmentDesc &depthAttachment = *renderingInfo.depthAttachment;
     const ImageView &depthView =
         device_.GetImageView(depthAttachment.view);
+    if (depthView.arrayLayerCount < renderingInfo.layerCount) {
+      throw std::invalid_argument(
+          "BeginRendering: depth attachment view has fewer layers than layerCount");
+    }
 
     VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     switch (depthAttachment.loadOp) {
@@ -234,7 +247,7 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
       renderingInfo.renderArea.extent.width;
   vkRenderingInfo.renderArea.extent.height =
       renderingInfo.renderArea.extent.height;
-  vkRenderingInfo.layerCount = 1;
+  vkRenderingInfo.layerCount = renderingInfo.layerCount;
   vkRenderingInfo.colorAttachmentCount =
       hasColor ? renderingInfo.colorAttachmentCount : 0;
 
@@ -654,6 +667,13 @@ void CommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
                    baseInstance);
 }
 
+void CommandList::DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
+                                       u32 firstIndex, i32 vertexOffset,
+                                       u32 baseInstance) {
+  vkCmdDrawIndexed(commandBuffer_, indexCount, instanceCount, firstIndex,
+                   vertexOffset, baseInstance);
+}
+
 
 void CommandList::DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride)
 {
@@ -686,6 +706,18 @@ void CommandList::DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
 void CommandList::DrawMeshTasks(u32 groupCountX, u32 groupCountY, u32 groupCountZ)
 {
 	vkCmdDrawMeshTasksEXT(commandBuffer_, groupCountX, groupCountY, groupCountZ);
+}
+
+void CommandList::DrawMeshTasksIndirect(BufferHandle handle, u64 offset,
+                                        u32 drawCount, u32 stride)
+{
+	const Buffer& buffer = device_.GetBuffer(handle);
+	if (!HasFlag(buffer.usage, BufferUsage::Indirect)) {
+		throw std::invalid_argument(
+			"DrawMeshTasksIndirect buffer requires Indirect BufferUsage");
+	}
+	vkCmdDrawMeshTasksIndirectEXT(commandBuffer_, buffer.buffer, offset,
+		drawCount, stride);
 }
 
 

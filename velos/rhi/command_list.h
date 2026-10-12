@@ -29,6 +29,7 @@ struct RenderingInfo {
   const ColorAttachmentDesc *colorAttachments = nullptr;
   u32 colorAttachmentCount = 0;
   const DepthAttachmentDesc *depthAttachment = nullptr;
+  u32 layerCount = 1;
 };
 
 struct BufferBarrier {
@@ -148,11 +149,18 @@ public:
   virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
                            i32 vertexOffset = 0,
                            u32 baseInstance = 0) = 0;
+  virtual void DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
+                                    u32 firstIndex = 0,
+                                    i32 vertexOffset = 0,
+                                    u32 baseInstance = 0) = 0;
   virtual void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) = 0;
   virtual void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                         BufferHandle countBuffer, u64 countOffset,
                                         u32 maxDrawCount, u32 stride) = 0;
   virtual void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1, u32 groupCountZ = 1) = 0;
+  virtual void DrawMeshTasksIndirect(BufferHandle buffer, u64 offset,
+                                     u32 drawCount = 1,
+                                     u32 stride = sizeof(u32) * 3) = 0;
 
   virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY,
                         uint32_t groupCountZ) = 0;

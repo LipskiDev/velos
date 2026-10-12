@@ -36,7 +36,7 @@ public:
   SwapchainDesc GetDesc() const { return desc_; }
 
 private:
-  void CreateSurface(void *windowHandle);
+  void CreateSurface(const WindowHandle &windowHandle);
   void CreateSwapchain(const SwapchainDesc &desc);
   void CreateImageViews();
   void DestroySwapchainResources();
