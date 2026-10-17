@@ -55,6 +55,7 @@ project "VelosRhiTests"
     root .. "/external/stb",
     root .. "/external/SPIRV-Reflect"
   }
+  removefiles { root .. "/tests/d3d12/**.cpp" }
 
   defines { "_CRT_SECURE_NO_WARNINGS", "GLFW_INCLUDE_NONE" }
   links { "GlfwTest" }
@@ -63,8 +64,16 @@ project "VelosRhiTests"
     systemversion "latest"
     includedirs { vulkanSdk .. "/Include" }
     libdirs { vulkanSdk .. "/Lib" }
-    defines { "VL_PLATFORM_WINDOWS", "_GLFW_WIN32" }
-    links { "vulkan-1", "user32", "gdi32", "shell32", "ole32", "shaderc_combinedd" }
+    defines { "VL_PLATFORM_WINDOWS", "VL_HAS_D3D12", "_GLFW_WIN32" }
+    links { "vulkan-1", "d3d12", "dxgi", "dxguid", "dxcompiler", "user32", "gdi32", "shell32", "ole32" }
+    postbuildcommands {
+      '{COPYFILE} "' .. path.join(vulkanSdk, 'Bin', 'dxcompiler.dll') .. '" "%{cfg.targetdir}"',
+      '{COPYFILE} "$(WindowsSdkDir)bin\\$(TargetPlatformVersion)\\x64\\dxil.dll" "%{cfg.targetdir}"'
+    }
+  filter { "system:windows", "configurations:Debug" }
+    links { "shaderc_combinedd" }
+  filter { "system:windows", "configurations:Release" }
+    links { "shaderc_combined" }
 
   filter "configurations:Debug"
     defines { "VL_DEBUG" }

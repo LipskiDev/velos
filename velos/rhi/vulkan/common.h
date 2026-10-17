@@ -35,47 +35,47 @@ inline void VK_CHECK(VkResult result, const char *message) {
 
 inline VkFormat ToVkFormat(Format format) {
   switch (format) {
-  case Format::RGBA8_UNORM:
-    return VK_FORMAT_R8G8B8A8_UNORM;
-  case Format::BGRA8_UNORM:
-    return VK_FORMAT_B8G8R8A8_UNORM;
-  case Format::RGBA8_SRGB:
-    return VK_FORMAT_R8G8B8A8_SRGB;
-  case Format::BGRA8_SRGB:
-    return VK_FORMAT_B8G8R8A8_SRGB;
-  case Format::RGBA16_FLOAT:
-    return VK_FORMAT_R16G16B16A16_SFLOAT;
-  case Format::R32_FLOAT:
-    return VK_FORMAT_R32_SFLOAT;
-  case Format::RG32_FLOAT:
-    return VK_FORMAT_R32G32_SFLOAT;
-  case Format::RGB32_FLOAT:
-    return VK_FORMAT_R32G32B32_SFLOAT;
-  case Format::RGBA32_FLOAT:
-    return VK_FORMAT_R32G32B32A32_SFLOAT;
-  case Format::D32_FLOAT:
-    return VK_FORMAT_D32_SFLOAT;
-  case Format::D24_UNORM_S8_UINT:
-    return VK_FORMAT_D24_UNORM_S8_UINT;
-  default:
-    return VK_FORMAT_UNDEFINED;
+    case Format::RGBA8_UNORM:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+    case Format::BGRA8_UNORM:
+      return VK_FORMAT_B8G8R8A8_UNORM;
+    case Format::RGBA8_SRGB:
+      return VK_FORMAT_R8G8B8A8_SRGB;
+    case Format::BGRA8_SRGB:
+      return VK_FORMAT_B8G8R8A8_SRGB;
+    case Format::RGBA16_FLOAT:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case Format::R32_FLOAT:
+      return VK_FORMAT_R32_SFLOAT;
+    case Format::RG32_FLOAT:
+      return VK_FORMAT_R32G32_SFLOAT;
+    case Format::RGB32_FLOAT:
+      return VK_FORMAT_R32G32B32_SFLOAT;
+    case Format::RGBA32_FLOAT:
+      return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case Format::D32_FLOAT:
+      return VK_FORMAT_D32_SFLOAT;
+    case Format::D24_UNORM_S8_UINT:
+      return VK_FORMAT_D24_UNORM_S8_UINT;
+    default:
+      return VK_FORMAT_UNDEFINED;
   }
 }
 
 inline VkFormat ToVkVertexFormat(VertexFormat format) {
   switch (format) {
-  case VertexFormat::Float32:
-    return VK_FORMAT_R32_SFLOAT;
-  case VertexFormat::Float32x2:
-    return VK_FORMAT_R32G32_SFLOAT;
-  case VertexFormat::Float32x3:
-    return VK_FORMAT_R32G32B32_SFLOAT;
-  case VertexFormat::Float32x4:
-    return VK_FORMAT_R32G32B32A32_SFLOAT;
-  case VertexFormat::UNorm8x4:
-    return VK_FORMAT_R8G8B8A8_UNORM;
-  default:
-    throw std::runtime_error("Unsupported VertexFormat");
+    case VertexFormat::Float32:
+      return VK_FORMAT_R32_SFLOAT;
+    case VertexFormat::Float32x2:
+      return VK_FORMAT_R32G32_SFLOAT;
+    case VertexFormat::Float32x3:
+      return VK_FORMAT_R32G32B32_SFLOAT;
+    case VertexFormat::Float32x4:
+      return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case VertexFormat::UNorm8x4:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+    default:
+      throw std::runtime_error("Unsupported VertexFormat");
   }
 }
 
@@ -95,11 +95,11 @@ inline VkShaderStageFlags ToVkShaderStage(ShaderStage stage) {
   }
 
   if ((stage & ShaderStage::Task) == ShaderStage::Task) {
-	  flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
+    flags |= VK_SHADER_STAGE_TASK_BIT_EXT;
   }
 
   if ((stage & ShaderStage::Mesh) == ShaderStage::Mesh) {
-	  flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+    flags |= VK_SHADER_STAGE_MESH_BIT_EXT;
   }
 
   if (flags == 0) {
@@ -111,14 +111,14 @@ inline VkShaderStageFlags ToVkShaderStage(ShaderStage stage) {
 
 inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveTopology topology) {
   switch (topology) {
-  case PrimitiveTopology::TriangleList:
-    return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  case PrimitiveTopology::TriangleStrip:
-    return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-  case PrimitiveTopology::LineList:
-    return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-  default:
-    throw std::runtime_error("Unsupported primitive topology");
+    case PrimitiveTopology::TriangleList:
+      return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    case PrimitiveTopology::TriangleStrip:
+      return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    case PrimitiveTopology::LineList:
+      return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    default:
+      throw std::runtime_error("Unsupported primitive topology");
   }
 }
 
@@ -157,24 +157,24 @@ inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryUsage usage) {
   VmaAllocationCreateInfo allocInfo{};
 
   switch (usage) {
-  case MemoryUsage::GPUOnly:
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    break;
+    case MemoryUsage::GPUOnly:
+      allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+      break;
 
-  case MemoryUsage::CPUToGPU:
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                      VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    break;
+    case MemoryUsage::CPUToGPU:
+      allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+      allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT;
+      break;
 
-  case MemoryUsage::GPUToCPU:
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
-                      VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    break;
+    case MemoryUsage::GPUToCPU:
+      allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+      allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT;
+      break;
 
-  default:
-    throw std::runtime_error("Unsupported MemoryUsage");
+    default:
+      throw std::runtime_error("Unsupported MemoryUsage");
   }
 
   return allocInfo;
@@ -182,17 +182,17 @@ inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryUsage usage) {
 
 inline VkMemoryPropertyFlags ToVkMemoryPropertyFlags(MemoryUsage usage) {
   switch (usage) {
-  case MemoryUsage::GPUOnly:
-    return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    case MemoryUsage::GPUOnly:
+      return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-  case MemoryUsage::CPUToGPU:
-    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    case MemoryUsage::CPUToGPU:
+      return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-  case MemoryUsage::GPUToCPU:
-    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-           VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    case MemoryUsage::GPUToCPU:
+      return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+             VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
   }
 
   throw std::runtime_error("Unsupported MemoryUsage");
@@ -200,10 +200,10 @@ inline VkMemoryPropertyFlags ToVkMemoryPropertyFlags(MemoryUsage usage) {
 
 inline VkVertexInputRate ToVkInputRate(VertexInputRate rate) {
   switch (rate) {
-  case VertexInputRate::PerVertex:
-    return VK_VERTEX_INPUT_RATE_VERTEX;
-  case VertexInputRate::PerInstance:
-    return VK_VERTEX_INPUT_RATE_INSTANCE;
+    case VertexInputRate::PerVertex:
+      return VK_VERTEX_INPUT_RATE_VERTEX;
+    case VertexInputRate::PerInstance:
+      return VK_VERTEX_INPUT_RATE_INSTANCE;
   }
 
   throw std::runtime_error("Unsupported VertexInputRate");
@@ -259,28 +259,28 @@ inline VkImageAspectFlags ToVkImageAspect(ImageAspect aspect) {
 
 inline VkImageLayout ToVkImageLayout(ImageLayout layout) {
   switch (layout) {
-  case ImageLayout::Undefined:
-    return VK_IMAGE_LAYOUT_UNDEFINED;
+    case ImageLayout::Undefined:
+      return VK_IMAGE_LAYOUT_UNDEFINED;
 
-  case ImageLayout::ColorAttachment:
-    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    case ImageLayout::ColorAttachment:
+      return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-  case ImageLayout::DepthAttachment:
-    return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    case ImageLayout::DepthAttachment:
+      return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
-  case ImageLayout::ShaderReadOnly:
-    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    case ImageLayout::ShaderReadOnly:
+      return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-  case ImageLayout::TransferSrc:
-    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    case ImageLayout::TransferSrc:
+      return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-  case ImageLayout::TransferDst:
-    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    case ImageLayout::TransferDst:
+      return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-  case ImageLayout::Present:
-    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  case ImageLayout::General:
-    return VK_IMAGE_LAYOUT_GENERAL;
+    case ImageLayout::Present:
+      return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    case ImageLayout::General:
+      return VK_IMAGE_LAYOUT_GENERAL;
   }
 
   throw std::runtime_error("Unsupported ImageLayout");
@@ -288,110 +288,112 @@ inline VkImageLayout ToVkImageLayout(ImageLayout layout) {
 
 inline VkImageType ToVkImageType(ImageType type) {
   switch (type) {
-  case ImageType::Image2D:
-    return VK_IMAGE_TYPE_2D;
+    case ImageType::Image2D:
+      return VK_IMAGE_TYPE_2D;
 
-  case ImageType::Cube:
-    // Cubemaps are still 2D images in Vulkan
-    return VK_IMAGE_TYPE_2D;
+    case ImageType::Cube:
+      // Cubemaps are still 2D images in Vulkan
+      return VK_IMAGE_TYPE_2D;
 
-  default:
-    throw std::runtime_error("Unknown ImageType");
+    default:
+      throw std::runtime_error("Unknown ImageType");
   }
 }
 
 inline VkImageViewType ToVkImageViewType(ImageViewType type) {
   switch (type) {
-  case ImageViewType::View2D:
-    return VK_IMAGE_VIEW_TYPE_2D;
-  case ImageViewType::Cube:
-    return VK_IMAGE_VIEW_TYPE_CUBE;
-  case ImageViewType::View2DArray:
+    case ImageViewType::View2D:
+      return VK_IMAGE_VIEW_TYPE_2D;
+    case ImageViewType::Cube:
+      return VK_IMAGE_VIEW_TYPE_CUBE;
+    case ImageViewType::CubeArray:
+      return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+    case ImageViewType::View2DArray:
       return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-  default:
-    throw std::runtime_error("Unknown ImageType");
+    default:
+      throw std::runtime_error("Unknown ImageType");
   }
 }
 
 inline bool IsDepthFormat(Format format) {
   switch (format) {
-  case Format::D32_FLOAT:
-  case Format::D24_UNORM_S8_UINT:
-    return true;
+    case Format::D32_FLOAT:
+    case Format::D24_UNORM_S8_UINT:
+      return true;
 
-  default:
-    return false;
+    default:
+      return false;
   }
 }
 
 inline bool HasStencilAspect(Format format) {
   switch (format) {
-  case Format::D24_UNORM_S8_UINT:
-    return true;
+    case Format::D24_UNORM_S8_UINT:
+      return true;
 
-  default:
-    return false;
+    default:
+      return false;
   }
 }
 
 inline ImageAspect DefaultImageAspectFromFormat(Format format) {
   switch (format) {
-  case Format::RGBA8_UNORM:
-  case Format::BGRA8_UNORM:
-    return ImageAspect::Color;
+    case Format::RGBA8_UNORM:
+    case Format::BGRA8_UNORM:
+      return ImageAspect::Color;
 
-  case Format::D32_FLOAT:
-    return ImageAspect::Depth;
+    case Format::D32_FLOAT:
+      return ImageAspect::Depth;
 
-  case Format::D24_UNORM_S8_UINT:
-    return ImageAspect::Depth | ImageAspect::Stencil;
+    case Format::D24_UNORM_S8_UINT:
+      return ImageAspect::Depth | ImageAspect::Stencil;
 
-  case Format::Undefined:
-  default:
-    return ImageAspect::None;
+    case Format::Undefined:
+    default:
+      return ImageAspect::None;
   }
 }
 
 inline VkFilter ToVkFilter(Filter filter) {
   switch (filter) {
-  case Filter::Nearest:
-    return VK_FILTER_NEAREST;
-  case Filter::Linear:
-    return VK_FILTER_LINEAR;
-  default:
-    return VK_FILTER_LINEAR;
+    case Filter::Nearest:
+      return VK_FILTER_NEAREST;
+    case Filter::Linear:
+      return VK_FILTER_LINEAR;
+    default:
+      return VK_FILTER_LINEAR;
   }
 }
 
 inline VkSamplerAddressMode ToVkSamplerAddressMode(SamplerAddressMode mode) {
   switch (mode) {
-  case SamplerAddressMode::Repeat:
-    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  case SamplerAddressMode::ClampToEdge:
-    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  default:
-    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case SamplerAddressMode::Repeat:
+      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case SamplerAddressMode::ClampToEdge:
+      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    default:
+      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
   }
 }
 
 inline VkDescriptorType ToVkDescriptorType(BindingType type) {
   switch (type) {
-  case BindingType::UniformBuffer:
-    return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  case BindingType::CombinedImageSampler:
-    return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  case BindingType::StorageImage:
-    return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  case BindingType::StorageBuffer:
-    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  case BindingType::SampledTexture:
-    return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-  case BindingType::Sampler:
-    return VK_DESCRIPTOR_TYPE_SAMPLER;
-  case BindingType::StorageTexture:
-    return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  default:
-    return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    case BindingType::UniformBuffer:
+      return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    case BindingType::CombinedImageSampler:
+      return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    case BindingType::StorageImage:
+      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    case BindingType::StorageBuffer:
+      return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    case BindingType::SampledTexture:
+      return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    case BindingType::Sampler:
+      return VK_DESCRIPTOR_TYPE_SAMPLER;
+    case BindingType::StorageTexture:
+      return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    default:
+      return VK_DESCRIPTOR_TYPE_MAX_ENUM;
   }
 }
 
@@ -419,181 +421,181 @@ inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stage) {
 
 inline VkIndexType ToVkIndexType(IndexType type) {
   switch (type) {
-  case IndexType::U16:
-    return VK_INDEX_TYPE_UINT16;
-  case IndexType::U32:
-    return VK_INDEX_TYPE_UINT32;
-  default:
-    throw std::runtime_error("Unsupported IndexType");
+    case IndexType::U16:
+      return VK_INDEX_TYPE_UINT16;
+    case IndexType::U32:
+      return VK_INDEX_TYPE_UINT32;
+    default:
+      throw std::runtime_error("Unsupported IndexType");
   }
 }
 
 inline VkBlendFactor ToVkBlendFactor(BlendFactor factor) {
   switch (factor) {
-  case BlendFactor::Zero:
-    return VK_BLEND_FACTOR_ZERO;
-  case BlendFactor::One:
-    return VK_BLEND_FACTOR_ONE;
+    case BlendFactor::Zero:
+      return VK_BLEND_FACTOR_ZERO;
+    case BlendFactor::One:
+      return VK_BLEND_FACTOR_ONE;
 
-  case BlendFactor::SrcColor:
-    return VK_BLEND_FACTOR_SRC_COLOR;
-  case BlendFactor::OneMinusSrcColor:
-    return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    case BlendFactor::SrcColor:
+      return VK_BLEND_FACTOR_SRC_COLOR;
+    case BlendFactor::OneMinusSrcColor:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
 
-  case BlendFactor::DstColor:
-    return VK_BLEND_FACTOR_DST_COLOR;
-  case BlendFactor::OneMinusDstColor:
-    return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+    case BlendFactor::DstColor:
+      return VK_BLEND_FACTOR_DST_COLOR;
+    case BlendFactor::OneMinusDstColor:
+      return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
 
-  case BlendFactor::SrcAlpha:
-    return VK_BLEND_FACTOR_SRC_ALPHA;
-  case BlendFactor::OneMinusSrcAlpha:
-    return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    case BlendFactor::SrcAlpha:
+      return VK_BLEND_FACTOR_SRC_ALPHA;
+    case BlendFactor::OneMinusSrcAlpha:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 
-  case BlendFactor::DstAlpha:
-    return VK_BLEND_FACTOR_DST_ALPHA;
-  case BlendFactor::OneMinusDstAlpha:
-    return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    case BlendFactor::DstAlpha:
+      return VK_BLEND_FACTOR_DST_ALPHA;
+    case BlendFactor::OneMinusDstAlpha:
+      return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
 
-  case BlendFactor::ConstantColor:
-    return VK_BLEND_FACTOR_CONSTANT_COLOR;
-  case BlendFactor::OneMinusConstantColor:
-    return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+    case BlendFactor::ConstantColor:
+      return VK_BLEND_FACTOR_CONSTANT_COLOR;
+    case BlendFactor::OneMinusConstantColor:
+      return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
 
-  case BlendFactor::ConstantAlpha:
-    return VK_BLEND_FACTOR_CONSTANT_ALPHA;
-  case BlendFactor::OneMinusConstantAlpha:
-    return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+    case BlendFactor::ConstantAlpha:
+      return VK_BLEND_FACTOR_CONSTANT_ALPHA;
+    case BlendFactor::OneMinusConstantAlpha:
+      return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
 
-  default:
-    throw std::runtime_error("Unsupported BlendFactor");
+    default:
+      throw std::runtime_error("Unsupported BlendFactor");
   }
 }
 
 inline VkBlendOp ToVkBlendOp(BlendOp op) {
   switch (op) {
-  case BlendOp::Add:
-    return VK_BLEND_OP_ADD;
-  case BlendOp::Subtract:
-    return VK_BLEND_OP_SUBTRACT;
-  case BlendOp::ReverseSubtract:
-    return VK_BLEND_OP_REVERSE_SUBTRACT;
-  case BlendOp::Min:
-    return VK_BLEND_OP_MIN;
-  case BlendOp::Max:
-    return VK_BLEND_OP_MAX;
+    case BlendOp::Add:
+      return VK_BLEND_OP_ADD;
+    case BlendOp::Subtract:
+      return VK_BLEND_OP_SUBTRACT;
+    case BlendOp::ReverseSubtract:
+      return VK_BLEND_OP_REVERSE_SUBTRACT;
+    case BlendOp::Min:
+      return VK_BLEND_OP_MIN;
+    case BlendOp::Max:
+      return VK_BLEND_OP_MAX;
 
-  default:
-    throw std::runtime_error("Unsupported BlendOp");
+    default:
+      throw std::runtime_error("Unsupported BlendOp");
   }
 }
 inline VkAccessFlags ToVkAccessFlags(ResourceState state) {
   switch (state) {
-  case ResourceState::Undefined:
-  case ResourceState::Common:
-  case ResourceState::Present:
-    return 0;
+    case ResourceState::Undefined:
+    case ResourceState::Common:
+    case ResourceState::Present:
+      return 0;
 
-  case ResourceState::TransferSrc:
-    return VK_ACCESS_TRANSFER_READ_BIT;
+    case ResourceState::TransferSrc:
+      return VK_ACCESS_TRANSFER_READ_BIT;
 
-  case ResourceState::TransferDst:
-    return VK_ACCESS_TRANSFER_WRITE_BIT;
+    case ResourceState::TransferDst:
+      return VK_ACCESS_TRANSFER_WRITE_BIT;
 
-  case ResourceState::VertexBuffer:
-    return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    case ResourceState::VertexBuffer:
+      return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
 
-  case ResourceState::IndexBuffer:
-    return VK_ACCESS_INDEX_READ_BIT;
+    case ResourceState::IndexBuffer:
+      return VK_ACCESS_INDEX_READ_BIT;
 
-  case ResourceState::UniformBuffer:
-    return VK_ACCESS_UNIFORM_READ_BIT;
+    case ResourceState::UniformBuffer:
+      return VK_ACCESS_UNIFORM_READ_BIT;
 
-  case ResourceState::ShaderRead:
-    return VK_ACCESS_SHADER_READ_BIT;
+    case ResourceState::ShaderRead:
+      return VK_ACCESS_SHADER_READ_BIT;
 
-  case ResourceState::ShaderWrite:
-    return VK_ACCESS_SHADER_WRITE_BIT;
+    case ResourceState::ShaderWrite:
+      return VK_ACCESS_SHADER_WRITE_BIT;
 
-  case ResourceState::ShaderReadWrite:
-    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    case ResourceState::ShaderReadWrite:
+      return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 
-  case ResourceState::ColorAttachmentRead:
-    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+    case ResourceState::ColorAttachmentRead:
+      return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
-  case ResourceState::ColorAttachmentWrite:
-    return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    case ResourceState::ColorAttachmentWrite:
+      return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-  case ResourceState::RenderTarget:
-    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    case ResourceState::RenderTarget:
+      return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-  case ResourceState::DepthWrite:
-    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    case ResourceState::DepthWrite:
+      return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  case ResourceState::DepthRead:
-    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    case ResourceState::DepthRead:
+      return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 
-  case ResourceState::DepthReadWrite:
-    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    case ResourceState::DepthReadWrite:
+      return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  case ResourceState::IndirectArgument:
-    return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+    case ResourceState::IndirectArgument:
+      return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
   }
 
   throw std::runtime_error("Unsupported ResourceState");
 }
 
 inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state,
-                                                QueueType queue) {
+                                               QueueType queue) {
   switch (state) {
-  case ResourceState::Undefined:
-    return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    case ResourceState::Undefined:
+      return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-  case ResourceState::Common:
-    return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-  case ResourceState::TransferSrc:
-  case ResourceState::TransferDst:
-    return VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-  case ResourceState::VertexBuffer:
-  case ResourceState::IndexBuffer:
-    return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-
-  case ResourceState::UniformBuffer:
-  case ResourceState::ShaderRead:
-  case ResourceState::ShaderWrite:
-  case ResourceState::ShaderReadWrite:
-    if (queue == QueueType::Compute) {
-      return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-    }
-    if (queue == QueueType::Transfer) {
+    case ResourceState::Common:
       return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    }
-    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-           VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT |
-           VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
 
-  case ResourceState::ColorAttachmentRead:
-  case ResourceState::ColorAttachmentWrite:
-  case ResourceState::RenderTarget:
-    return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case ResourceState::TransferSrc:
+    case ResourceState::TransferDst:
+      return VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-  case ResourceState::DepthWrite:
-  case ResourceState::DepthRead:
-  case ResourceState::DepthReadWrite:
-    return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    case ResourceState::VertexBuffer:
+    case ResourceState::IndexBuffer:
+      return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
 
-  case ResourceState::IndirectArgument:
+    case ResourceState::UniformBuffer:
+    case ResourceState::ShaderRead:
+    case ResourceState::ShaderWrite:
+    case ResourceState::ShaderReadWrite:
+      if (queue == QueueType::Compute) {
+        return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+      }
+      if (queue == QueueType::Transfer) {
+        return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      }
+      return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+             VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT |
+             VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
+
+    case ResourceState::ColorAttachmentRead:
+    case ResourceState::ColorAttachmentWrite:
+    case ResourceState::RenderTarget:
+      return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    case ResourceState::DepthWrite:
+    case ResourceState::DepthRead:
+    case ResourceState::DepthReadWrite:
+      return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+    case ResourceState::IndirectArgument:
       return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
 
-  case ResourceState::Present:
-    return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    case ResourceState::Present:
+      return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
   }
 
   throw std::runtime_error("Unsupported ResourceState");
@@ -601,64 +603,64 @@ inline VkPipelineStageFlags ToVkExecutionStage(ResourceState state,
 
 inline VkAccessFlags ToVkAccessFlags(ImageLayout layout) {
   switch (layout) {
-  case ImageLayout::Undefined:
-    return 0;
+    case ImageLayout::Undefined:
+      return 0;
 
-  case ImageLayout::ColorAttachment:
-    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    case ImageLayout::ColorAttachment:
+      return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-  case ImageLayout::DepthAttachment:
-    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    case ImageLayout::DepthAttachment:
+      return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  case ImageLayout::ShaderReadOnly:
-    return VK_ACCESS_SHADER_READ_BIT;
+    case ImageLayout::ShaderReadOnly:
+      return VK_ACCESS_SHADER_READ_BIT;
 
-  case ImageLayout::TransferSrc:
-    return VK_ACCESS_TRANSFER_READ_BIT;
+    case ImageLayout::TransferSrc:
+      return VK_ACCESS_TRANSFER_READ_BIT;
 
-  case ImageLayout::TransferDst:
-    return VK_ACCESS_TRANSFER_WRITE_BIT;
+    case ImageLayout::TransferDst:
+      return VK_ACCESS_TRANSFER_WRITE_BIT;
 
-  case ImageLayout::General:
-    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    case ImageLayout::General:
+      return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 
-  case ImageLayout::Present:
-    return 0;
+    case ImageLayout::Present:
+      return 0;
 
-  default:
-    return 0;
+    default:
+      return 0;
   }
 }
 
 inline VkPipelineStageFlags ToVkExecutionStage(ImageLayout layout) {
   switch (layout) {
-  case ImageLayout::Undefined:
-    return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    case ImageLayout::Undefined:
+      return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-  case ImageLayout::ColorAttachment:
-    return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case ImageLayout::ColorAttachment:
+      return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-  case ImageLayout::DepthAttachment:
-    return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    case ImageLayout::DepthAttachment:
+      return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 
-  case ImageLayout::ShaderReadOnly:
-    return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    case ImageLayout::ShaderReadOnly:
+      return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
-  case ImageLayout::TransferSrc:
-  case ImageLayout::TransferDst:
-    return VK_PIPELINE_STAGE_TRANSFER_BIT;
+    case ImageLayout::TransferSrc:
+    case ImageLayout::TransferDst:
+      return VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-  case ImageLayout::Present:
-    return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    case ImageLayout::Present:
+      return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-  case ImageLayout::General:
-    return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    case ImageLayout::General:
+      return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-  default:
-    return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    default:
+      return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
   }
 }
 
@@ -676,4 +678,4 @@ inline VulkanBarrierInfo GetBufferBarrierInfo(
 inline VulkanBarrierInfo GetImageBarrierInfo(ImageLayout layout) {
   return VulkanBarrierInfo{ToVkAccessFlags(layout), ToVkExecutionStage(layout)};
 }
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

@@ -12,7 +12,7 @@
 namespace Velos::RHI {
 enum class GraphicsAPI {
   Vulkan,
-  // D3D12,
+  D3D12,
   // Metal
 };
 
@@ -59,7 +59,7 @@ enum class QueueRelationship {
 };
 
 class IDevice {
-public:
+ public:
   virtual ~IDevice() = default;
 
   virtual GraphicsAPI GetBackend() const = 0;
@@ -76,6 +76,12 @@ public:
   virtual void UnmapBuffer(BufferHandle handle) = 0;
 
   virtual ImageHandle CreateImage(const ImageDesc &desc) = 0;
+  virtual ImageHandle CreateSparseImage(const ImageDesc &desc,
+                                        u64 memoryBudgetBytes) = 0;
+  virtual SparseImageMemoryInfo GetSparseImageMemoryInfo(
+      ImageHandle image) const = 0;
+  virtual void BindSparseImagePages(
+      ImageHandle image, std::span<const SparseImagePageBind> pages) = 0;
   virtual void DestroyImage(ImageHandle image) = 0;
 
   virtual ImageViewHandle CreateImageView(const ImageViewDesc &desc) = 0;
@@ -87,23 +93,21 @@ public:
   virtual ShaderHandle CreateShader(const ShaderDesc &desc) = 0;
   virtual void DestroyShader(ShaderHandle handle) = 0;
 
-  virtual PipelineHandle
-  CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) = 0;
-  virtual PipelineHandle
-  CreateComputePipeline(const ComputePipelineDesc &desc) = 0;
-  virtual PipelineHandle
-  CreateMeshPipeline(const MeshPipelineDesc& desc) = 0;
+  virtual PipelineHandle CreateGraphicsPipeline(
+      const GraphicsPipelineDesc &desc) = 0;
+  virtual PipelineHandle CreateComputePipeline(
+      const ComputePipelineDesc &desc) = 0;
+  virtual PipelineHandle CreateMeshPipeline(const MeshPipelineDesc &desc) = 0;
   virtual void DestroyPipeline(PipelineHandle handle) = 0;
 
-  virtual BindingLayoutHandle
-  CreateBindingLayout(const BindingLayoutDesc &desc) = 0;
+  virtual BindingLayoutHandle CreateBindingLayout(
+      const BindingLayoutDesc &desc) = 0;
   virtual void DestroyBindingLayout(BindingLayoutHandle handle) = 0;
 
-  virtual BindingPoolHandle
-  CreateBindingPool(const BindingPoolDesc &desc) = 0;
+  virtual BindingPoolHandle CreateBindingPool(const BindingPoolDesc &desc) = 0;
   virtual void DestroyBindingPool(BindingPoolHandle handle) = 0;
-  virtual BindingSetHandle
-  AllocateBindingSet(const BindingSetAllocationDesc& desc) = 0;
+  virtual BindingSetHandle AllocateBindingSet(
+      const BindingSetAllocationDesc &desc) = 0;
 
   virtual void UpdateBindingSet(const BindingWriteDesc &desc) = 0;
 
@@ -121,10 +125,11 @@ public:
   virtual FenceHandle CreateFence(bool signaled = false) = 0;
   virtual void DestroyFence(FenceHandle handle) = 0;
   virtual bool IsFenceSignaled(FenceHandle handle) const = 0;
-  virtual void WaitFence(FenceHandle handle, u64 timeoutNanoseconds = UINT64_MAX) = 0;
+  virtual void WaitFence(FenceHandle handle,
+                         u64 timeoutNanoseconds = UINT64_MAX) = 0;
   virtual void ResetFence(FenceHandle handle) = 0;
-  virtual SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
-                                          u64 initialValue = 0) = 0;
+  virtual SemaphoreHandle CreateSemaphore(
+      SemaphoreType type = SemaphoreType::Binary, u64 initialValue = 0) = 0;
   virtual void DestroySemaphore(SemaphoreHandle handle) = 0;
   virtual void SignalSemaphore(SemaphoreHandle handle, u64 value) = 0;
   virtual u64 GetSemaphoreValue(SemaphoreHandle handle) const = 0;
@@ -143,25 +148,27 @@ public:
   void Submit(const SubmitDesc &desc = {}) {
     Submit(QueueType::Graphics, desc);
   }
-  virtual void SubmitAndPresent(SwapchainHandle swapchain, const SubmitDesc &desc = {}) = 0;
+  virtual void SubmitAndPresent(SwapchainHandle swapchain,
+                                const SubmitDesc &desc = {}) = 0;
 
   virtual void WaitIdle() = 0;
   virtual void CollectGarbage() = 0;
 
-  virtual std::unique_ptr<IUploadContext>
-  CreateUploadContext(u64 stagingBufferSize = 16 * 1024 * 1024) = 0;
-  virtual void AcquireUploadedBuffers(std::span<const PendingBufferAcquire> pendingAcquires) = 0;
-  virtual void AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires) = 0;
+  virtual std::unique_ptr<IUploadContext> CreateUploadContext(
+      u64 stagingBufferSize = 16 * 1024 * 1024) = 0;
+  virtual void AcquireUploadedBuffers(
+      std::span<const PendingBufferAcquire> pendingAcquires) = 0;
+  virtual void AcquireUploadedImages(
+      std::span<const PendingImageAcquire> pendingAcquires) = 0;
 
   virtual GeneratedPipelineLayout BuildPipelineLayout(
-      const PipelineReflectionData& reflection,
-      const PipelineLayoutOverrides& overrides = {}
-  ) = 0;
+      const PipelineReflectionData &reflection,
+      const PipelineLayoutOverrides &overrides = {}) = 0;
 
-public:
+ public:
   virtual Extent2D GetSwapchainDimensions() const = 0;
 };
 
 IDevice *CreateDevice(const DeviceDesc &desc);
 void DestroyDevice(IDevice *device);
-} // namespace Velos::RHI
+}  // namespace Velos::RHI

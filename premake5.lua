@@ -177,12 +177,13 @@ project "Velos"
 
 		defines
 		{
-			"VL_PLATFORM_WINDOWS"
+			"VL_PLATFORM_WINDOWS", "VL_HAS_D3D12"
 		}
 
 		links
 		{
 			"vulkan-1",
+			"d3d12", "dxgi", "dxguid", "dxcompiler",
 			"user32",
 			"gdi32",
 			"shell32",
@@ -194,6 +195,7 @@ project "Velos"
 		{
 			"external/tracy/public/TracyClient.cpp"
 		}
+		removefiles { "velos/rhi/d3d12/**" }
 
 		includedirs
 		{
@@ -397,3 +399,33 @@ project "VelosImGui"
 		optimize "Speed"
 
 	filter {}
+
+if os.host() == "windows" then
+project "D3D12ParityTests"
+    location "build/D3D12ParityTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++23"
+    staticruntime "off"
+    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+    objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+    debugdir (_WORKING_DIR)
+    files { "tests/d3d12/**.cpp", "tests/d3d12/**.hlsl" }
+    includedirs { "velos", "velos/core", "external/glm", "external/SPIRV-Reflect" }
+    defines { "VL_PLATFORM_WINDOWS", "VL_HAS_D3D12" }
+    links { "Velos", "d3d12", "dxgi", "dxguid", "user32" }
+    systemversion "latest"
+    postbuildcommands {
+        '{COPYFILE} "' .. path.join(VulkanSDK, 'Bin', 'dxcompiler.dll') .. '" "%{cfg.targetdir}"',
+        '{COPYFILE} "$(WindowsSdkDir)bin\\$(TargetPlatformVersion)\\x64\\dxil.dll" "%{cfg.targetdir}"'
+    }
+    filter "files:**.hlsl"
+        buildaction "None"
+    filter "configurations:Debug"
+        runtime "Debug"
+        symbols "On"
+    filter "configurations:Release or Profile"
+        runtime "Release"
+        optimize "Speed"
+    filter {}
+end

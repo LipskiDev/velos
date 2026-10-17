@@ -17,8 +17,8 @@ using namespace Velos::RHI;
 
 namespace {
 
-VkSurfaceFormatKHR
-ChooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats) {
+VkSurfaceFormatKHR ChooseSurfaceFormat(
+    const std::vector<VkSurfaceFormatKHR> &formats) {
   for (const auto &format : formats) {
     if (format.format == VK_FORMAT_B8G8R8A8_UNORM &&
         format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -29,9 +29,8 @@ ChooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats) {
   return formats[0];
 }
 
-VkPresentModeKHR
-ChoosePresentMode(const std::vector<VkPresentModeKHR> &presentModes,
-                  bool vsync) {
+VkPresentModeKHR ChoosePresentMode(
+    const std::vector<VkPresentModeKHR> &presentModes, bool vsync) {
   if (vsync) {
     return VK_PRESENT_MODE_FIFO_KHR;
   }
@@ -65,16 +64,19 @@ VkExtent2D ChooseExtent(const VkSurfaceCapabilitiesKHR &capabilities, u32 width,
   return extent;
 }
 
-} // namespace
-Swapchain::Swapchain(VkInstance instance,
-                                 VkPhysicalDevice physicalDevice,
-                                 VkDevice device, u32 graphicsQueueFamily,
-                                 const SwapchainDesc &desc)
-    : instance_(instance), physicalDevice_(physicalDevice), device_(device),
-      graphicsQueueFamily_(graphicsQueueFamily), width_(desc.width),
-      height_(desc.height), desc_(desc) {
+}  // namespace
+Swapchain::Swapchain(VkInstance instance, VkPhysicalDevice physicalDevice,
+                     VkDevice device, u32 graphicsQueueFamily,
+                     const SwapchainDesc &desc)
+    : instance_(instance),
+      physicalDevice_(physicalDevice),
+      device_(device),
+      graphicsQueueFamily_(graphicsQueueFamily),
+      width_(desc.width),
+      height_(desc.height),
+      desc_(desc) {
   std::cout << "Creating Surface\n";
-  CreateSurface(desc.windowHandle);
+  CreateSurface(desc.window);
 
   std::cout << "Creating Swapchain\n";
   CreateSwapchain(desc);
@@ -92,8 +94,13 @@ Swapchain::~Swapchain() {
   }
 }
 
-void Swapchain::CreateSurface(void *windowHandle) {
-  window_ = static_cast<GLFWwindow *>(windowHandle);
+void Swapchain::CreateSurface(const WindowHandle &windowHandle) {
+  if (windowHandle.type != WindowHandleType::GLFW) {
+    throw std::runtime_error(
+        "The Vulkan backend currently requires a GLFW window handle");
+  }
+
+  window_ = static_cast<GLFWwindow *>(windowHandle.value);
   if (!window_) {
     throw std::runtime_error("Swapchain requires a valid GLFW window handle");
   }
@@ -104,10 +111,10 @@ void Swapchain::CreateSurface(void *windowHandle) {
 
 void Swapchain::CreateSwapchain(const SwapchainDesc &desc) {
   VkBool32 presentSupported = VK_FALSE;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_,
-                                                graphicsQueueFamily_, surface_,
-                                                &presentSupported),
-           "Failed to query surface support");
+  VK_CHECK(
+      vkGetPhysicalDeviceSurfaceSupportKHR(
+          physicalDevice_, graphicsQueueFamily_, surface_, &presentSupported),
+      "Failed to query surface support");
 
   if (presentSupported != VK_TRUE) {
     throw std::runtime_error(
@@ -143,10 +150,10 @@ void Swapchain::CreateSwapchain(const SwapchainDesc &desc) {
   }
 
   std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_,
-                                                     &presentModeCount,
-                                                     presentModes.data()),
-           "Failed to query present modes");
+  VK_CHECK(
+      vkGetPhysicalDeviceSurfacePresentModesKHR(
+          physicalDevice_, surface_, &presentModeCount, presentModes.data()),
+      "Failed to query present modes");
 
   const VkSurfaceFormatKHR chosenFormat = ChooseSurfaceFormat(formats);
   const VkPresentModeKHR chosenPresentMode =
@@ -155,16 +162,16 @@ void Swapchain::CreateSwapchain(const SwapchainDesc &desc) {
       ChooseExtent(capabilities, desc.width, desc.height);
   auto PresentModeToString = [](VkPresentModeKHR mode) {
     switch (mode) {
-    case VK_PRESENT_MODE_FIFO_KHR:
-      return "FIFO (vsync ON)";
-    case VK_PRESENT_MODE_MAILBOX_KHR:
-      return "MAILBOX (triple buffering)";
-    case VK_PRESENT_MODE_IMMEDIATE_KHR:
-      return "IMMEDIATE (no vsync)";
-    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
-      return "FIFO_RELAXED";
-    default:
-      return "UNKNOWN";
+      case VK_PRESENT_MODE_FIFO_KHR:
+        return "FIFO (vsync ON)";
+      case VK_PRESENT_MODE_MAILBOX_KHR:
+        return "MAILBOX (triple buffering)";
+      case VK_PRESENT_MODE_IMMEDIATE_KHR:
+        return "IMMEDIATE (no vsync)";
+      case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+        return "FIFO_RELAXED";
+      default:
+        return "UNKNOWN";
     }
   };
 
@@ -256,4 +263,4 @@ void Swapchain::DestroySwapchainResources() {
   }
 }
 
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

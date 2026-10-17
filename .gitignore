@@ -5,6 +5,9 @@
 bin/
 bin-int/
 build/
+cache/
+*.sln
+*.slnx
 
 *.o
 *.obj

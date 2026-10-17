@@ -13,10 +13,10 @@ struct SwapchainImage {
 };
 
 class Swapchain {
-public:
+ public:
   Swapchain(VkInstance instance, VkPhysicalDevice physicalDevice,
-                  VkDevice device, u32 graphicsQueueFamily,
-                  const SwapchainDesc &desc);
+            VkDevice device, u32 graphicsQueueFamily,
+            const SwapchainDesc &desc);
   ~Swapchain();
 
   Swapchain(const Swapchain &) = delete;
@@ -29,19 +29,17 @@ public:
   u32 GetHeight() const { return height_; }
 
   u32 GetImageCount() const { return static_cast<u32>(images_.size()); }
-  const SwapchainImage &GetImage(u32 index) const {
-    return images_[index];
-  }
+  const SwapchainImage &GetImage(u32 index) const { return images_[index]; }
 
   SwapchainDesc GetDesc() const { return desc_; }
 
-private:
-  void CreateSurface(void *windowHandle);
+ private:
+  void CreateSurface(const WindowHandle &windowHandle);
   void CreateSwapchain(const SwapchainDesc &desc);
   void CreateImageViews();
   void DestroySwapchainResources();
 
-private:
+ private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
@@ -60,4 +58,4 @@ private:
   std::vector<VkImage> rawImages_;
   std::vector<SwapchainImage> images_;
 };
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan
