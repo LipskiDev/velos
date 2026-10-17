@@ -18,6 +18,7 @@ enum class ShaderSourceLanguage {
 
 enum class ShaderBinaryFormat {
   Spirv,
+  Dxil,
 };
 
 struct ShaderCompileInput {
@@ -40,6 +41,7 @@ enum class ShaderResourceType {
   AccelerationStructure,
 };
 
+enum class ShaderResourceScalarType { Float, Signed, Unsigned };
 struct ShaderResourceBinding {
   std::string name;
   ShaderResourceType type;
@@ -48,6 +50,10 @@ struct ShaderResourceBinding {
   u32 arraySize = 1;
   bool runtimeArray = false;
   RHI::ShaderStage stage;
+  bool readOnly = false;
+  u32 structureStride = 0;
+  RHI::ImageViewType imageViewType = RHI::ImageViewType::View2D;
+  ShaderResourceScalarType scalarType = ShaderResourceScalarType::Float;
 };
 
 struct PushConstantRangeInfo {
@@ -62,36 +68,49 @@ struct ShaderReflectionData {
 
   std::vector<ShaderResourceBinding> resources;
   std::vector<PushConstantRangeInfo> pushConstants;
+  bool rootConstantsCompatible = true;
 };
 
 struct ShaderCompileOutput {
+  std::vector<std::byte> dxil;
   std::vector<std::uint32_t> spirv;
   ShaderReflectionData reflection;
+
+  std::span<const std::byte> GetBytecode() const {
+    if (!dxil.empty())
+      return dxil;
+    return std::span<const std::byte>(
+        reinterpret_cast<const std::byte *>(spirv.data()),
+        spirv.size() * sizeof(std::uint32_t));
+  }
 };
 
 struct PipelineReflectionData {
-	std::vector<ShaderResourceBinding> resources;
-	std::vector<PushConstantRangeInfo> pushConstants;
+  std::vector<ShaderResourceBinding> resources;
+  std::vector<PushConstantRangeInfo> pushConstants;
 };
 
 struct PipelineLayoutOverrides {
-	std::unordered_map<u32, RHI::BindingLayoutHandle> existingSetLayouts;
+  std::unordered_map<u32, RHI::BindingLayoutHandle> existingSetLayouts;
 };
 
 RHI::BindingType ToBindingType(ShaderResourceType type);
 
 class ShaderCompiler {
-public:
+ public:
   static ShaderCompileOutput CompileFile(const ShaderCompileInput &input);
-  static PipelineReflectionData MergeShaderReflection(std::span<const ShaderReflectionData> shaders);
+  static PipelineReflectionData MergeShaderReflection(
+      std::span<const ShaderReflectionData> shaders);
 
-private:
-  static ShaderCompileOutput
-  CompileGlslToSpirv(const ShaderCompileInput &input);
-  static ShaderCompileOutput
-  CompileHlslToSpirv(const ShaderCompileInput &input);
-  static ShaderCompileOutput
-  CompileSlangToSpirv(const ShaderCompileInput &input);
+ private:
+  static ShaderCompileOutput CompileHlslWithDxc(
+      const ShaderCompileInput &input);
+  static ShaderCompileOutput CompileGlslToSpirv(
+      const ShaderCompileInput &input);
+  static ShaderCompileOutput CompileHlslToSpirv(
+      const ShaderCompileInput &input);
+  static ShaderCompileOutput CompileSlangToSpirv(
+      const ShaderCompileInput &input);
   static ShaderCompileOutput LoadSpirvBinary(const std::string &path);
 
   static ShaderReflectionData ReflectSpirv(const std::vector<uint32_t> &spirv,
@@ -103,9 +122,7 @@ private:
                                    RHI::ShaderStage stage,
                                    ShaderReflectionData &out);
 
-
-
-private:
+ private:
   static std::string ReadTextFile(const std::string &path);
 };
-} // namespace Velos
+}  // namespace Velos

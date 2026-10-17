@@ -11,7 +11,7 @@
 
 ---
 
-velos is a modern Render Hardware Interface (RHI) with a Vulkan backend, designed to provide a clean abstraction over GPU APIs for real-time rendering. It serves as the foundation for [Rodan](https://github.com/LipskiDev/Rodan).
+velos is a modern Render Hardware Interface (RHI) with Vulkan and D3D12 backends, designed to provide a clean abstraction over GPU APIs for real-time rendering. It serves as the foundation for [Iryven](https://github.com/LipskiDev/Iryven).
 
 velos is **not** a rendering engine - scene systems, materials, lighting, and rendering techniques are intentionally left to higher-level systems built on top.
 
@@ -100,10 +100,10 @@ Requires a C++23 compiler, Vulkan SDK, and Premake5.
 - [x] SPIRV-Reflect shader reflection
 - [x] CPU & GPU profiling (Tracy)
 - [x] Deferred resource deletion
-- [ ] Resource state tracking
-- [ ] DirectX 12 backend
-- [ ] Bindless resource model
-- [ ] Multi-queue submission
+- [x] D3D12 per-subresource resource state tracking
+- [x] DirectX 12 core rendering backend (see remaining API gaps below)
+- [x] Descriptor arrays and partially bound resources
+- [x] Graphics, compute, and transfer queue timeline submissions
 
 ---
 
@@ -272,6 +272,50 @@ device->DestroySwapchain(swapchain);
 Velos::RHI::DestroyDevice(device);
 ```
 
+### D3D12 queues
+
+The device owns separate DIRECT (graphics/presentation), COMPUTE, and COPY
+(transfer) queues. `GetComputeQueue()` and `GetTransferQueue()` expose the
+native queues. `AcquireCommandList(QueueType::Compute/Transfer)` provides a
+matching command list; call `Begin()`, record commands, `End()`, then
+`Submit(queueType, commands)`. Each auxiliary queue currently reuses one
+allocator/list, waiting for its previous submission before reuse. Descriptors,
+pipelines, and staging allocations remain alive until that submission finishes.
+`WaitIdle()` waits for all three queues.
+
+`GetCommandList(Graphics)` returns the main frame list for UI/presentation.
+`AcquireCommandList(Graphics)` instead leases an independent DIRECT list from
+the current frame slot's batch pool, even while the main list is recording.
+End and submit every batch before submitting the main list. Batch submissions
+keep the main list recording and retain their own descriptors/staging objects.
+Pool entries are reused only after the frame-slot completion fence has passed.
+
+Queue queries report distinct queues without family ownership transfers.
+RHI `SubmitDesc` timeline waits/signals are supported on queue submissions and
+on the main list's `SubmitAndPresent` call.
+COPY queues accept only copy-compatible states; textures must pass through
+COMMON when crossing between COPY and DIRECT/COMPUTE. The existing synchronous
+upload context continues using DIRECT; explicit transfer command lists use COPY.
+
+### Sparse images on D3D12
+
+`CreateSparseImage(desc, memoryBudgetBytes)` creates a reserved 2D texture or
+cube array and a default-heap tile pool. `GetSparseImageMemoryInfo` reports the
+adapter's tile width/height, 64 KiB page size, and physical page count. The
+budget is rounded down to whole pages and capped at the texture's virtual tile
+count.
+
+`BindSparseImagePages(image, pages)` supplies the complete desired residency
+set, matching the Vulkan backend. Omitted blocks are unmapped; an empty set
+unmaps everything. Unchanged sets do no GPU work. Changes wait for prior GPU
+work, update tile mappings, and complete before returning. Clear or copy newly
+mapped render-target/depth regions before using their contents.
+
+The current per-block API requires tiled resources tier 2 or higher and rejects
+packed mip tails and combined depth/stencil formats. D32 depth cubemaps are
+supported. The caller must finish GPU use and destroy image views before
+destroying the image; its reserved resource and page pool are released together.
+
 ### Timeline semaphores
 
 Vulkan device selection requires timeline semaphore support and enables it.
@@ -310,3 +354,84 @@ Signal values must strictly increase, including relative to pending signals.
 The caller must synchronize CPU/GPU signals and keep semaphores alive until all
 uses complete. Descriptor spans need remain valid only during the submission
 call. CPU waits retain the existing exception behavior on timeout.
+
+### D3D12 mesh drawing
+
+Mesh pipelines support both direct `DrawMeshTasks` and `DrawMeshTasksIndirect`,
+with or without a task/amplification shader. Vertex and indexed draw calls require
+a conventional graphics pipeline; mesh draws require a mesh pipeline and an
+active rendering scope on the graphics queue.
+
+Indirect records contain three `u32` group counts (X, Y, Z). The stride must be
+at least 12 bytes and a multiple of four; the byte offset must also be a multiple
+of four. Command signatures are cached per stride on the device and reused across
+pipelines. The argument buffer needs `BufferUsage::Indirect`, sufficient space
+for `drawCount * stride` bytes after the offset, and indirect-readable state.
+Default-heap buffers in COMMON may implicitly promote; GPU-written buffers must
+be transitioned from shader-write access to `ResourceState::IndirectArgument`
+before rendering. Upload buffers in GENERIC_READ are also supported.
+
+Zero direct group counts and zero indirect draw counts are no-ops. Direct counts
+are checked against the baseline D3D12 mesh group limits; callers generating
+indirect commands on the GPU must ensure the generated counts satisfy those limits.
+
+### D3D12 texture queue handoffs
+
+Texture barriers track native state separately for each mip, array layer and
+depth/stencil plane. Their source state comes from native tracking, while the
+requested destination state is restricted to stages supported by the recording
+queue (compute shader reads exclude pixel-shader access).
+
+At command-list end, DIRECT and COMPUTE lists explicitly release transitioned
+textures to COMMON on the producer queue. This conservative policy adds release
+and acquire transitions even between lists on the same queue, but allows either
+queue to perform the next transition legally. Buffer submission decay remains
+unchanged. The next image-layout query reports Undefined for released textures
+so a new acquire barrier is recorded; contents are preserved. This is a native
+D3D12 COMMON state, not a Vulkan discard operation.
+
+Queue submissions must still wait on the producer's completion semaphore/fence.
+Releasing a texture does not synchronize queues by itself. Per-mip barriers only
+affect the requested range, and same-state UAV barriers preserve write ordering.
+
+### D3D12 descriptor table reuse
+
+Repeated binds of an unchanged binding set reuse its shader-visible descriptor
+tables within the current command-list recording, including across pipelines
+whose table layouts have identical descriptor formats and counts. Binding-set
+writes create a new version. Cached snapshots are not shared across recordings,
+so update-after-bind is resolved independently at each submission. Frame resources
+retain descriptor allocations until the associated completion fence is retired.
+
+Sampler heaps remain limited to 2,048 descriptors. Applications should use a
+small shared sampler table independently of large bindless texture arrays rather
+than reserve one sampler slot for every possible texture.
+
+### D3D12 push constants
+
+Push blocks at `b0, space2147483647` use native 32-bit root constants, with
+independent values for each shader stage and support for partial writes. The
+root signature accounts for descriptor tables and the 64-DWORD limit. If it
+cannot fit all stage blocks, the largest blocks spill to root CBVs until it fits.
+Blocks containing arrays also use CBVs because root constants do not support
+HLSL constant-buffer arrays.
+
+Fallback writes suballocate 256-byte-aligned slices from persistently mapped
+1 MiB upload pages. Each frame or auxiliary command context retains its pages
+until GPU completion, then reuses them. Push updates do not create a committed
+resource per write. The public `PushConstants` API and HLSL declarations remain
+the same for Vulkan and D3D12.
+
+### Remaining D3D12 API gaps
+
+Core graphics/compute/mesh rendering, uploads, descriptors, sparse images,
+resizing, and GPU timeline submissions are implemented. Full RHI parity is not
+complete: timestamp queries, generic image-to-buffer copies, mip generation and
+blitting, indexed indirect/count drawing, and indirect dispatch are not implemented.
+The public FenceHandle API and semaphore host wait/signal methods also remain
+stubs; internal frame/queue fences and GPU submission waits/signals are implemented.
+Use tests/d3d12/README.md for supported paths and validation instructions.
+
+D3D12 uses committed allocations and conservative queue handoffs. Some resource
+destruction and host-mirror operations wait for GPU completion. These are current
+implementation tradeoffs rather than guarantees of Vulkan-equivalent performance.

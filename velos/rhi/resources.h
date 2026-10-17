@@ -138,16 +138,13 @@ struct BufferImageCopyRegion {
 };
 
 enum class BindingFlags : u32 {
-	None = 0,
-	PartiallyBound = 1 << 0,
-	UpdateAfterBind = 1 << 1,
-	VariableCount = 1 << 2,
+  None = 0,
+  PartiallyBound = 1 << 0,
+  UpdateAfterBind = 1 << 1,
+  VariableCount = 1 << 2,
 };
 
-enum class BindingPoolFlags : u32 {
-	None = 0,
-	UpdateAfterBind = 1 << 0
-};
+enum class BindingPoolFlags : u32 { None = 0, UpdateAfterBind = 1 << 0 };
 
 struct BindingDesc {
   u32 binding = 0;
@@ -158,10 +155,10 @@ struct BindingDesc {
 };
 
 struct BindingSetAllocationDesc {
-	BindingPoolHandle pool;
-	BindingLayoutHandle layout;
-	u32 variableBindingCount = 0;
-	const char* debugName = nullptr;
+  BindingPoolHandle pool;
+  BindingLayoutHandle layout;
+  u32 variableBindingCount = 0;
+  const char *debugName = nullptr;
 };
 
 struct BindingLayoutDesc {
@@ -202,8 +199,8 @@ struct BindingWriteDesc {
 };
 
 struct GeneratedPipelineLayout {
-	std::vector<RHI::BindingLayoutHandle> setLayouts;
-	std::vector<RHI::BindingLayoutHandle> ownedSetLayouts;
+  std::vector<RHI::BindingLayoutHandle> setLayouts;
+  std::vector<RHI::BindingLayoutHandle> ownedSetLayouts;
 };
 
-}; // namespace Velos::RHI
+};  // namespace Velos::RHI

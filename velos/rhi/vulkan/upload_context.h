@@ -6,7 +6,7 @@ namespace Velos::Vulkan {
 using namespace Velos::RHI;
 
 class UploadContext final : public IUploadContext {
-public:
+ public:
   UploadContext(Device &device, u64 size);
   ~UploadContext() override;
 
@@ -18,10 +18,10 @@ public:
   std::vector<PendingBufferAcquire> TakePendingBufferAcquires() override;
   std::vector<PendingImageAcquire> TakePendingImageAcquires() override;
 
-private:
+ private:
   u64 Allocate(u64 size, u64 alignment);
 
-private:
+ private:
   Device &device_;
 
   BufferHandle stagingBuffer_{};
@@ -37,4 +37,4 @@ private:
   std::vector<PendingImageAcquire> pendingImageAcquires_;
 };
 
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

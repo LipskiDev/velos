@@ -6,7 +6,8 @@ namespace Velos::RHI {
 
 static constexpr u32 kInvalidHandle = -1;
 
-template <typename Tag> struct Handle {
+template <typename Tag>
+struct Handle {
   u32 id = kInvalidHandle;
 
   constexpr bool IsValid() const { return id != kInvalidHandle; }
@@ -44,4 +45,4 @@ using QueryPoolHandle = Handle<QueryPoolTag>;
 using FenceHandle = Handle<FenceTag>;
 using SemaphoreHandle = Handle<SemaphoreTag>;
 
-} // namespace Velos::RHI
+}  // namespace Velos::RHI

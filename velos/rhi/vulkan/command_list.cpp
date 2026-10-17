@@ -10,8 +10,7 @@
 namespace Velos::Vulkan {
 using namespace Velos::RHI;
 
-CommandList::CommandList(Device &device,
-                                     VkCommandBuffer commandBuffer)
+CommandList::CommandList(Device &device, VkCommandBuffer commandBuffer)
     : device_(device), commandBuffer_(commandBuffer) {}
 
 void CommandList::Begin() {
@@ -95,19 +94,23 @@ void CommandList::Barrier(const ImageBarrier &barrier) {
   vkBarrier.newLayout = ToVkImageLayout(barrier.newLayout);
 
   const VulkanBarrierInfo srcInfo =
-      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.oldState,
-                                                       barrier.sourceQueue)
-                                : GetImageBarrierInfo(barrier.oldLayout);
+      barrier.useExplicitStates
+          ? GetBufferBarrierInfo(barrier.oldState, barrier.sourceQueue)
+          : GetImageBarrierInfo(barrier.oldLayout);
   const VulkanBarrierInfo dstInfo =
-      barrier.useExplicitStates ? GetBufferBarrierInfo(barrier.newState,
-                                                       barrier.destinationQueue)
-                                : GetImageBarrierInfo(barrier.newLayout);
+      barrier.useExplicitStates
+          ? GetBufferBarrierInfo(barrier.newState, barrier.destinationQueue)
+          : GetImageBarrierInfo(barrier.newLayout);
 
   vkBarrier.srcAccessMask = srcInfo.access;
   vkBarrier.dstAccessMask = dstInfo.access;
 
-  vkBarrier.srcQueueFamilyIndex = barrier.srcQueueFamilyIndex == INT_MAX ? VK_QUEUE_FAMILY_IGNORED : barrier.srcQueueFamilyIndex;
-  vkBarrier.dstQueueFamilyIndex = barrier.dstQueueFamilyIndex == INT_MAX ? VK_QUEUE_FAMILY_IGNORED : barrier.dstQueueFamilyIndex;
+  vkBarrier.srcQueueFamilyIndex = barrier.srcQueueFamilyIndex == INT_MAX
+                                      ? VK_QUEUE_FAMILY_IGNORED
+                                      : barrier.srcQueueFamilyIndex;
+  vkBarrier.dstQueueFamilyIndex = barrier.dstQueueFamilyIndex == INT_MAX
+                                      ? VK_QUEUE_FAMILY_IGNORED
+                                      : barrier.dstQueueFamilyIndex;
   vkBarrier.image = image.image;
 
   vkBarrier.subresourceRange.aspectMask = ToVkImageAspect(barrier.aspect);
@@ -146,34 +149,34 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
         renderingInfo.colorAttachments[i];
     auto &colorAttachmentInfo = colorAttachmentInfos[i];
 
-    const ImageView &colorView =
-        device_.GetImageView(colorAttachment.view);
+    const ImageView &colorView = device_.GetImageView(colorAttachment.view);
     if (colorView.arrayLayerCount < renderingInfo.layerCount) {
       throw std::invalid_argument(
-          "BeginRendering: color attachment view has fewer layers than layerCount");
+          "BeginRendering: color attachment view has fewer layers than "
+          "layerCount");
     }
 
     VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     switch (colorAttachment.loadOp) {
-    case LoadOp::Load:
-      loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-      break;
-    case LoadOp::Clear:
-      loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      break;
-    case LoadOp::DontCare:
-      loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      break;
+      case LoadOp::Load:
+        loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        break;
+      case LoadOp::Clear:
+        loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        break;
+      case LoadOp::DontCare:
+        loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        break;
     }
 
     VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     switch (colorAttachment.storeOp) {
-    case StoreOp::Store:
-      storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      break;
-    case StoreOp::DontCare:
-      storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      break;
+      case StoreOp::Store:
+        storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        break;
+      case StoreOp::DontCare:
+        storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        break;
     }
 
     VkClearValue clearValue{};
@@ -197,34 +200,34 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
 
   if (hasDepthAttachment) {
     const DepthAttachmentDesc &depthAttachment = *renderingInfo.depthAttachment;
-    const ImageView &depthView =
-        device_.GetImageView(depthAttachment.view);
+    const ImageView &depthView = device_.GetImageView(depthAttachment.view);
     if (depthView.arrayLayerCount < renderingInfo.layerCount) {
       throw std::invalid_argument(
-          "BeginRendering: depth attachment view has fewer layers than layerCount");
+          "BeginRendering: depth attachment view has fewer layers than "
+          "layerCount");
     }
 
     VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     switch (depthAttachment.loadOp) {
-    case LoadOp::Load:
-      depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-      break;
-    case LoadOp::Clear:
-      depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      break;
-    case LoadOp::DontCare:
-      depthLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      break;
+      case LoadOp::Load:
+        depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        break;
+      case LoadOp::Clear:
+        depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        break;
+      case LoadOp::DontCare:
+        depthLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        break;
     }
 
     VkAttachmentStoreOp depthStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
     switch (depthAttachment.storeOp) {
-    case StoreOp::Store:
-      depthStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-      break;
-    case StoreOp::DontCare:
-      depthStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      break;
+      case StoreOp::Store:
+        depthStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+        break;
+      case StoreOp::DontCare:
+        depthStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        break;
     }
 
     VkClearValue depthClearValue{};
@@ -260,7 +263,9 @@ void CommandList::BeginRendering(const RenderingInfo &renderingInfo) {
   vkCmdBeginRendering(commandBuffer_, &vkRenderingInfo);
 }
 
-void CommandList::EndRendering() { vkCmdEndRendering(commandBuffer_); }
+void CommandList::EndRendering() {
+  vkCmdEndRendering(commandBuffer_);
+}
 
 void CommandList::BindPipeline(PipelineHandle pipeline) {
   const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
@@ -280,8 +285,8 @@ void CommandList::BindComputePipeline(PipelineHandle pipeline) {
 }
 
 void CommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
-                                        uint32_t height, uint32_t mipLevels,
-                                        uint32_t arrayLayers) {
+                                  uint32_t height, uint32_t mipLevels,
+                                  uint32_t arrayLayers) {
   if (mipLevels <= 1) {
     return;
   }
@@ -321,8 +326,8 @@ void CommandList::GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
 }
 
 void CommandList::BlitMip(ImageHandle imageHandle, uint32_t width,
-                                uint32_t height, uint32_t srcMip,
-                                uint32_t dstMip, uint32_t arrayLayers) {
+                          uint32_t height, uint32_t srcMip, uint32_t dstMip,
+                          uint32_t arrayLayers) {
   const Image &image = device_.GetImage(imageHandle);
 
   const int32_t srcWidth =
@@ -356,10 +361,8 @@ void CommandList::BlitMip(ImageHandle imageHandle, uint32_t width,
                  VK_FILTER_LINEAR);
 }
 
-void CommandList::BindVertexBuffer(u32 firstSlot,
-                                         BufferHandle bufferHandle,
-                                         u64 offset) {
-
+void CommandList::BindVertexBuffer(u32 firstSlot, BufferHandle bufferHandle,
+                                   u64 offset) {
   const Buffer &buffer = device_.GetBuffer(bufferHandle);
 
   if (buffer.buffer == VK_NULL_HANDLE) {
@@ -381,8 +384,8 @@ void CommandList::BindVertexBuffer(u32 firstSlot,
   vkCmdBindVertexBuffers(commandBuffer_, firstSlot, 1, &vkBuffer, &vkOffset);
 }
 
-void CommandList::BindIndexBuffer(BufferHandle buffer,
-                                        IndexType indexType, u64 offset) {
+void CommandList::BindIndexBuffer(BufferHandle buffer, IndexType indexType,
+                                  u64 offset) {
   if (!buffer.IsValid()) {
     throw std::runtime_error("BindIndexBuffer: requires a valid buffer handle");
   }
@@ -399,7 +402,7 @@ void CommandList::BindUniformBuffer(u32, BufferHandle, u64, u64) {
 }
 
 void CommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
-                                      const void *data) {
+                                const void *data) {
   PipelineHandle pipeline{};
 
   if (stage == ShaderStage::Compute) {
@@ -420,7 +423,7 @@ void CommandList::PushConstants(ShaderStage stage, u32 offset, u32 size,
 }
 
 void CommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
-                                   const BufferCopyRegion &region) {
+                             const BufferCopyRegion &region) {
   VkBuffer srcBuffer = device_.GetBuffer(src).buffer;
   VkBuffer dstBuffer = device_.GetBuffer(dst).buffer;
 
@@ -433,10 +436,9 @@ void CommandList::CopyBuffer(BufferHandle src, BufferHandle dst,
 }
 
 void CommandList::SetBindings(PipelineHandle pipeline, u32 setIndex,
-                                          BindingSetHandle descriptorSet) {
+                              BindingSetHandle descriptorSet) {
   const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
-  const BindingSet &vkDescriptorSet =
-      device_.GetBindingSet(descriptorSet);
+  const BindingSet &vkDescriptorSet = device_.GetBindingSet(descriptorSet);
 
   VkDescriptorSet set = vkDescriptorSet.set;
 
@@ -451,9 +453,8 @@ void CommandList::SetBindings(PipelineHandle pipeline, u32 setIndex,
                           vkPipeline.layout, setIndex, 1, &set, 0, nullptr);
 }
 
-void CommandList::SetComputeBindings(PipelineHandle pipeline,
-                                                 uint32_t setIndex,
-                                                 BindingSetHandle set) {
+void CommandList::SetComputeBindings(PipelineHandle pipeline, uint32_t setIndex,
+                                     BindingSetHandle set) {
   const Pipeline &vkPipeline = device_.GetPipeline(pipeline);
   const BindingSet &vkSet = device_.GetBindingSet(set);
 
@@ -471,13 +472,13 @@ void CommandList::UpdateBuffer(const BufferUpdateDesc &update) {
   }
 
   if (update.offset + update.size > dst.size) {
-    throw std::runtime_error(
-        "CommandList::UpdateBuffer: write out of bounds");
+    throw std::runtime_error("CommandList::UpdateBuffer: write out of bounds");
   }
 
   if (dst.memoryUsage == MemoryUsage::GPUOnly) {
-    throw std::runtime_error("CommandList::UpdateBuffer: cannot update "
-                             "GPUOnly buffer directly");
+    throw std::runtime_error(
+        "CommandList::UpdateBuffer: cannot update "
+        "GPUOnly buffer directly");
   }
 
   void *mapped = dst.allocationInfo.pMappedData;
@@ -506,17 +507,19 @@ void CommandList::UpdateBuffer(const BufferUpdateDesc &update) {
   }
 }
 void CommandList::CopyBufferToImage(BufferHandle src, ImageHandle dst,
-                                          const BufferImageCopyRegion &region) {
-
+                                    const BufferImageCopyRegion &region) {
   const Buffer &source = device_.GetBuffer(src);
   const Image &destination = device_.GetImage(dst);
   if (!HasFlag(source.usage, BufferUsage::TransferSrc))
-    throw std::runtime_error("CopyBufferToImage: source requires TransferSrc usage");
+    throw std::runtime_error(
+        "CopyBufferToImage: source requires TransferSrc usage");
   if (!HasFlag(destination.usage, ImageUsage::TransferDst))
-    throw std::runtime_error("CopyBufferToImage: destination requires TransferDst usage");
+    throw std::runtime_error(
+        "CopyBufferToImage: destination requires TransferDst usage");
   if (region.mipLevel >= destination.mipLevels ||
       region.baseArrayLayer + region.layerCount > destination.arrayLayers)
-    throw std::runtime_error("CopyBufferToImage: image subresource is out of bounds");
+    throw std::runtime_error(
+        "CopyBufferToImage: image subresource is out of bounds");
 
   VkBufferImageCopy copy{};
 
@@ -545,12 +548,15 @@ void CommandList::CopyImageToBuffer(ImageHandle src, BufferHandle dst,
   const Image &source = device_.GetImage(src);
   const Buffer &destination = device_.GetBuffer(dst);
   if (!HasFlag(source.usage, ImageUsage::TransferSrc))
-    throw std::runtime_error("CopyImageToBuffer: source requires TransferSrc usage");
+    throw std::runtime_error(
+        "CopyImageToBuffer: source requires TransferSrc usage");
   if (!HasFlag(destination.usage, BufferUsage::TransferDst))
-    throw std::runtime_error("CopyImageToBuffer: destination requires TransferDst usage");
+    throw std::runtime_error(
+        "CopyImageToBuffer: destination requires TransferDst usage");
   if (region.mipLevel >= source.mipLevels ||
       region.baseArrayLayer + region.layerCount > source.arrayLayers)
-    throw std::runtime_error("CopyImageToBuffer: image subresource is out of bounds");
+    throw std::runtime_error(
+        "CopyImageToBuffer: image subresource is out of bounds");
 
   VkBufferImageCopy copy{};
   copy.bufferOffset = region.bufferOffset;
@@ -572,8 +578,7 @@ void CommandList::CopyImageToBuffer(ImageHandle src, BufferHandle dst,
 }
 
 void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
-                                        std::span<const ImageBarrier> images) {
-
+                                  std::span<const ImageBarrier> images) {
   std::vector<VkBufferMemoryBarrier> vkBufferBarriers;
   std::vector<VkImageMemoryBarrier> vkImageBarriers;
 
@@ -592,9 +597,11 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
     vkBarrier.srcAccessMask = srcInfo.access;
     vkBarrier.dstAccessMask = dstInfo.access;
     vkBarrier.srcQueueFamilyIndex = b.srcQueueFamilyIndex == INT_MAX
-        ? VK_QUEUE_FAMILY_IGNORED : b.srcQueueFamilyIndex;
+                                        ? VK_QUEUE_FAMILY_IGNORED
+                                        : b.srcQueueFamilyIndex;
     vkBarrier.dstQueueFamilyIndex = b.dstQueueFamilyIndex == INT_MAX
-        ? VK_QUEUE_FAMILY_IGNORED : b.dstQueueFamilyIndex;
+                                        ? VK_QUEUE_FAMILY_IGNORED
+                                        : b.dstQueueFamilyIndex;
     vkBarrier.buffer = device_.GetBuffer(b.buffer).buffer;
     vkBarrier.offset = 0;
     vkBarrier.size = VK_WHOLE_SIZE;
@@ -606,13 +613,13 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
   }
 
   for (const auto &i : images) {
-    const auto srcInfo =
-        i.useExplicitStates ? GetBufferBarrierInfo(i.oldState, i.sourceQueue)
-                            : GetImageBarrierInfo(i.oldLayout);
+    const auto srcInfo = i.useExplicitStates
+                             ? GetBufferBarrierInfo(i.oldState, i.sourceQueue)
+                             : GetImageBarrierInfo(i.oldLayout);
     const auto dstInfo =
-        i.useExplicitStates ? GetBufferBarrierInfo(i.newState,
-                                                   i.destinationQueue)
-                            : GetImageBarrierInfo(i.newLayout);
+        i.useExplicitStates
+            ? GetBufferBarrierInfo(i.newState, i.destinationQueue)
+            : GetImageBarrierInfo(i.newLayout);
 
     VkImageMemoryBarrier vkBarrier{};
     vkBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -629,10 +636,11 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
     vkBarrier.subresourceRange.baseArrayLayer = i.baseArrayLayer;
     vkBarrier.subresourceRange.layerCount = i.layerCount;
     vkBarrier.srcQueueFamilyIndex = i.srcQueueFamilyIndex == INT_MAX
-        ? VK_QUEUE_FAMILY_IGNORED : i.srcQueueFamilyIndex;
+                                        ? VK_QUEUE_FAMILY_IGNORED
+                                        : i.srcQueueFamilyIndex;
     vkBarrier.dstQueueFamilyIndex = i.dstQueueFamilyIndex == INT_MAX
-        ? VK_QUEUE_FAMILY_IGNORED : i.dstQueueFamilyIndex;
-
+                                        ? VK_QUEUE_FAMILY_IGNORED
+                                        : i.dstQueueFamilyIndex;
 
     vkImageBarriers.push_back(vkBarrier);
 
@@ -655,14 +663,14 @@ void CommandList::PipelineBarrier(std::span<const BufferBarrier> buffers,
                            i.newLayout);
   }
 }
-void CommandList::Draw(u32 vertexCount, u32 instanceCount,
-                             u32 firstVertex, u32 baseInstance) {
+void CommandList::Draw(u32 vertexCount, u32 instanceCount, u32 firstVertex,
+                       u32 baseInstance) {
   vkCmdDraw(commandBuffer_, vertexCount, instanceCount, firstVertex,
             baseInstance);
 }
 
-void CommandList::DrawIndexed(u32 indexCount, u32 firstIndex,
-                              i32 vertexOffset, u32 baseInstance) {
+void CommandList::DrawIndexed(u32 indexCount, u32 firstIndex, i32 vertexOffset,
+                              u32 baseInstance) {
   vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset,
                    baseInstance);
 }
@@ -674,21 +682,22 @@ void CommandList::DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
                    vertexOffset, baseInstance);
 }
 
+void CommandList::DrawIndexedIndirect(BufferHandle buffer, u64 offset,
+                                      u32 drawCount, u32 stride) {
+  Buffer vkBuffer = device_.GetBuffer(buffer);
 
-void CommandList::DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride)
-{
-    Buffer vkBuffer = device_.GetBuffer(buffer);
+  if (!HasFlag(vkBuffer.usage, BufferUsage::Indirect)) {
+    throw std::runtime_error("Buffer does not have Indirect BufferUsage flag");
+  }
 
-    if (!HasFlag(vkBuffer.usage, BufferUsage::Indirect)) {
-        throw std::runtime_error("Buffer does not have Indirect BufferUsage flag");
-    }
-
-    vkCmdDrawIndexedIndirect(commandBuffer_, vkBuffer.buffer, offset, drawCount, stride);
+  vkCmdDrawIndexedIndirect(commandBuffer_, vkBuffer.buffer, offset, drawCount,
+                           stride);
 }
 
 void CommandList::DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
-                                           BufferHandle countBuffer, u64 countOffset,
-                                           u32 maxDrawCount, u32 stride) {
+                                           BufferHandle countBuffer,
+                                           u64 countOffset, u32 maxDrawCount,
+                                           u32 stride) {
   Buffer vkBuffer = device_.GetBuffer(buffer);
   Buffer vkCountBuffer = device_.GetBuffer(countBuffer);
 
@@ -703,23 +712,21 @@ void CommandList::DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                 stride);
 }
 
-void CommandList::DrawMeshTasks(u32 groupCountX, u32 groupCountY, u32 groupCountZ)
-{
-	vkCmdDrawMeshTasksEXT(commandBuffer_, groupCountX, groupCountY, groupCountZ);
+void CommandList::DrawMeshTasks(u32 groupCountX, u32 groupCountY,
+                                u32 groupCountZ) {
+  vkCmdDrawMeshTasksEXT(commandBuffer_, groupCountX, groupCountY, groupCountZ);
 }
 
 void CommandList::DrawMeshTasksIndirect(BufferHandle handle, u64 offset,
-                                        u32 drawCount, u32 stride)
-{
-	const Buffer& buffer = device_.GetBuffer(handle);
-	if (!HasFlag(buffer.usage, BufferUsage::Indirect)) {
-		throw std::invalid_argument(
-			"DrawMeshTasksIndirect buffer requires Indirect BufferUsage");
-	}
-	vkCmdDrawMeshTasksIndirectEXT(commandBuffer_, buffer.buffer, offset,
-		drawCount, stride);
+                                        u32 drawCount, u32 stride) {
+  const Buffer &buffer = device_.GetBuffer(handle);
+  if (!HasFlag(buffer.usage, BufferUsage::Indirect)) {
+    throw std::invalid_argument(
+        "DrawMeshTasksIndirect buffer requires Indirect BufferUsage");
+  }
+  vkCmdDrawMeshTasksIndirectEXT(commandBuffer_, buffer.buffer, offset,
+                                drawCount, stride);
 }
-
 
 void CommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
   if (!boundComputePipeline_.IsValid()) {
@@ -748,4 +755,4 @@ void CommandList::DispatchIndirect(BufferHandle buffer, u64 offset) {
   vkCmdDispatchIndirect(commandBuffer_, vkBuffer.buffer, offset);
 }
 
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

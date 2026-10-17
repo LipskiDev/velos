@@ -68,11 +68,11 @@ struct BufferBinding {
 };
 
 struct DrawIndexedIndirectCommand {
-    u32 indexCount;
-    u32 instanceCount;
-    u32 firstIndex;
-    i32 vertexOffset;
-    u32 firstInstance;
+  u32 indexCount;
+  u32 instanceCount;
+  u32 firstIndex;
+  i32 vertexOffset;
+  u32 firstInstance;
 };
 
 static_assert(sizeof(DrawIndexedIndirectCommand) == 20);
@@ -86,7 +86,7 @@ struct DispatchIndirectCommand {
 static_assert(sizeof(DispatchIndirectCommand) == 12);
 
 class ICommandList {
-public:
+ public:
   virtual ~ICommandList() = default;
 
   virtual void Begin() = 0;
@@ -118,9 +118,9 @@ public:
                                  u64 size) = 0;
 
   virtual void SetBindings(PipelineHandle pipeline, u32 setIndex,
-                                 BindingSetHandle descriptorSet) = 0;
+                           BindingSetHandle descriptorSet) = 0;
   virtual void SetComputeBindings(PipelineHandle pipeline, u32 setIndex,
-                                        BindingSetHandle descriptorSet) = 0;
+                                  BindingSetHandle descriptorSet) = 0;
 
   virtual void GenerateMipmaps(ImageHandle imageHandle, uint32_t width,
                                uint32_t height, uint32_t mipLevels,
@@ -147,17 +147,18 @@ public:
   virtual void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
                     u32 baseInstance = 0) = 0;
   virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
-                           i32 vertexOffset = 0,
-                           u32 baseInstance = 0) = 0;
+                           i32 vertexOffset = 0, u32 baseInstance = 0) = 0;
   virtual void DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
-                                    u32 firstIndex = 0,
-                                    i32 vertexOffset = 0,
+                                    u32 firstIndex = 0, i32 vertexOffset = 0,
                                     u32 baseInstance = 0) = 0;
-  virtual void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) = 0;
+  virtual void DrawIndexedIndirect(BufferHandle buffer, u64 offset,
+                                   u32 drawCount, u32 stride) = 0;
   virtual void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
-                                        BufferHandle countBuffer, u64 countOffset,
-                                        u32 maxDrawCount, u32 stride) = 0;
-  virtual void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1, u32 groupCountZ = 1) = 0;
+                                        BufferHandle countBuffer,
+                                        u64 countOffset, u32 maxDrawCount,
+                                        u32 stride) = 0;
+  virtual void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1,
+                             u32 groupCountZ = 1) = 0;
   virtual void DrawMeshTasksIndirect(BufferHandle buffer, u64 offset,
                                      u32 drawCount = 1,
                                      u32 stride = sizeof(u32) * 3) = 0;
@@ -166,4 +167,4 @@ public:
                         uint32_t groupCountZ) = 0;
   virtual void DispatchIndirect(BufferHandle buffer, u64 offset) = 0;
 };
-} // namespace Velos::RHI
+}  // namespace Velos::RHI

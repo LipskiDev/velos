@@ -13,7 +13,6 @@ static u64 AlignUp(u64 value, u64 alignment) {
 
 UploadContext::UploadContext(Device &device, u64 size)
     : device_(device), capacity_(size) {
-
   BufferDesc desc{};
   desc.size = size;
   desc.usage = BufferUsage::TransferSrc;
@@ -80,10 +79,10 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
                      device_.GetBuffer(stagingBuffer_).allocation, offset,
                      desc.size);
 
-  cmd_->CopyBuffer(stagingBuffer_, desc.dstBuffer,
-                   BufferCopyRegion{.srcOffset = offset,
-                                    .dstOffset = desc.dstOffset,
-                                    .size = desc.size});
+  cmd_->CopyBuffer(
+      stagingBuffer_, desc.dstBuffer,
+      BufferCopyRegion{
+          .srcOffset = offset, .dstOffset = desc.dstOffset, .size = desc.size});
 
   const u32 transferFamily = device_.GetTransferQueueFamily();
   const u32 graphicsFamily = device_.GetGraphicsQueueFamily();
@@ -116,8 +115,8 @@ void UploadContext::UploadBuffer(const BufferUploadDesc &desc) {
   }
 }
 
-void UploadContext::UploadImage(const ImageUploadDesc &desc,
-                                      const void *data, u64 dataSize) {
+void UploadContext::UploadImage(const ImageUploadDesc &desc, const void *data,
+                                u64 dataSize) {
   if (!data || dataSize == 0) {
     return;
   }
@@ -165,8 +164,10 @@ void UploadContext::UploadImage(const ImageUploadDesc &desc,
       .newState = ResourceState::TransferDst,
       .useExplicitStates = requiresOwnershipTransfer,
       .aspect = desc.aspect,
-      .srcQueueFamilyIndex = requiresOwnershipTransfer ? transferFamily : INT_MAX,
-      .dstQueueFamilyIndex = requiresOwnershipTransfer ? graphicsFamily : INT_MAX,
+      .srcQueueFamilyIndex =
+          requiresOwnershipTransfer ? transferFamily : INT_MAX,
+      .dstQueueFamilyIndex =
+          requiresOwnershipTransfer ? graphicsFamily : INT_MAX,
       .baseMipLevel = desc.mipLevel,
       .mipLevelCount = 1,
       .baseArrayLayer = desc.baseArrayLayer,
@@ -216,4 +217,4 @@ std::vector<PendingBufferAcquire> UploadContext::TakePendingBufferAcquires() {
   return pending;
 }
 
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

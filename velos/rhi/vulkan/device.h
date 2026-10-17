@@ -121,7 +121,7 @@ struct QueryPool {
 };
 
 class Device final : public IDevice {
-public:
+ public:
   explicit Device(const DeviceDesc &desc);
   ~Device() override;
 
@@ -143,8 +143,8 @@ public:
   ImageHandle CreateImage(const ImageDesc &desc) override;
   ImageHandle CreateSparseImage(const ImageDesc &desc,
                                 u64 memoryBudgetBytes) override;
-  SparseImageMemoryInfo
-  GetSparseImageMemoryInfo(ImageHandle image) const override;
+  SparseImageMemoryInfo GetSparseImageMemoryInfo(
+      ImageHandle image) const override;
   void BindSparseImagePages(
       ImageHandle image, std::span<const SparseImagePageBind> pages) override;
   void DestroyImage(ImageHandle handle) override;
@@ -164,33 +164,29 @@ public:
   void DestroyShader(ShaderHandle handle) override;
   const Shader &GetShader(ShaderHandle handle) const;
 
-  PipelineHandle
-  CreateGraphicsPipeline(const GraphicsPipelineDesc &desc) override;
-  PipelineHandle
-  CreateComputePipeline(const ComputePipelineDesc &desc) override;
-  PipelineHandle CreateMeshPipeline(const MeshPipelineDesc& desc) override;
+  PipelineHandle CreateGraphicsPipeline(
+      const GraphicsPipelineDesc &desc) override;
+  PipelineHandle CreateComputePipeline(
+      const ComputePipelineDesc &desc) override;
+  PipelineHandle CreateMeshPipeline(const MeshPipelineDesc &desc) override;
   void DestroyPipeline(PipelineHandle handle) override;
   const Pipeline &GetPipeline(PipelineHandle handle) const;
 
-  BindingLayoutHandle
-  CreateBindingLayout(const BindingLayoutDesc &desc) override;
+  BindingLayoutHandle CreateBindingLayout(
+      const BindingLayoutDesc &desc) override;
   void DestroyBindingLayout(BindingLayoutHandle handle) override;
-  const BindingLayout &
-  GetBindingLayout(BindingLayoutHandle handle) const;
+  const BindingLayout &GetBindingLayout(BindingLayoutHandle handle) const;
 
-  BindingPoolHandle
-  CreateBindingPool(const BindingPoolDesc &desc) override;
+  BindingPoolHandle CreateBindingPool(const BindingPoolDesc &desc) override;
   void DestroyBindingPool(BindingPoolHandle handle) override;
-  const BindingPool &
-  GetBindingPool(BindingPoolHandle handle) const;
-  BindingSetHandle
-  AllocateBindingSet(const BindingSetAllocationDesc& desc) override;
+  const BindingPool &GetBindingPool(BindingPoolHandle handle) const;
+  BindingSetHandle AllocateBindingSet(
+      const BindingSetAllocationDesc &desc) override;
 
   void UpdateBindingSet(const BindingWriteDesc &desc) override;
   const BindingSet &GetBindingSet(BindingSetHandle handle) const;
 
-  QueryPoolHandle
-  CreateTimestampQueryPool(const QueryPoolDesc &desc) override;
+  QueryPoolHandle CreateTimestampQueryPool(const QueryPoolDesc &desc) override;
   void DestroyQueryPool(QueryPoolHandle handle) override;
   bool GetTimestampQueryResults(QueryPoolHandle handle, u32 firstQuery,
                                 u32 queryCount, u64 *results) override;
@@ -202,7 +198,8 @@ public:
   FenceHandle CreateFence(bool signaled = false) override;
   void DestroyFence(FenceHandle handle) override;
   bool IsFenceSignaled(FenceHandle handle) const override;
-  void WaitFence(FenceHandle handle, u64 timeoutNanoseconds = UINT64_MAX) override;
+  void WaitFence(FenceHandle handle,
+                 u64 timeoutNanoseconds = UINT64_MAX) override;
   void ResetFence(FenceHandle handle) override;
   SemaphoreHandle CreateSemaphore(SemaphoreType type = SemaphoreType::Binary,
                                   u64 initialValue = 0) override;
@@ -219,31 +216,32 @@ public:
   ICommandList &AcquireCommandList(QueueType type) override;
   void Submit(QueueType type, ICommandList &commandList,
               const SubmitDesc &desc = {}) override;
-  ICommandList &GetCommandList(
-      QueueType type = QueueType::Graphics) override;
+  ICommandList &GetCommandList(QueueType type = QueueType::Graphics) override;
   using IDevice::Submit;
   void Submit(QueueType type, const SubmitDesc &desc = {}) override;
-  void SubmitAndPresent(SwapchainHandle swapchain, const SubmitDesc &desc = {}) override;
+  void SubmitAndPresent(SwapchainHandle swapchain,
+                        const SubmitDesc &desc = {}) override;
 
   void ClearCurrentSwapchainImage(float r, float g, float b, float a);
 
   void WaitIdle() override;
   void CollectGarbage() override;
 
-  std::unique_ptr<IUploadContext>
-  CreateUploadContext(u64 stagingBufferSize = 1024 * 16 * 1024) override;
+  std::unique_ptr<IUploadContext> CreateUploadContext(
+      u64 stagingBufferSize = 1024 * 16 * 1024) override;
 
-  void AcquireUploadedBuffers(std::span<const PendingBufferAcquire> pendingAcquires) override;
-  void AcquireUploadedImages(std::span<const PendingImageAcquire> pendingAcquires) override;
+  void AcquireUploadedBuffers(
+      std::span<const PendingBufferAcquire> pendingAcquires) override;
+  void AcquireUploadedImages(
+      std::span<const PendingImageAcquire> pendingAcquires) override;
 
   void DumpLiveResources() const;
 
   GeneratedPipelineLayout BuildPipelineLayout(
-      const PipelineReflectionData& reflection,
-      const PipelineLayoutOverrides& overrides = {}
-  ) override;
+      const PipelineReflectionData &reflection,
+      const PipelineLayoutOverrides &overrides = {}) override;
 
-private:
+ private:
   u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) const;
   void SubmitWithTimeline(VkQueue queue, VkCommandBuffer cmd, VkFence fence,
                           const SubmitDesc &desc,
@@ -252,16 +250,16 @@ private:
   VkQueue GetVkQueue(QueueType type) const;
   VkFence GetFrameFence(QueueType type, u32 frameIndex) const;
   VkCommandBuffer GetFrameCommandBuffer(QueueType type, u32 frameIndex) const;
-  std::unique_ptr<CommandList>& GetFrameCommandList(QueueType type,
+  std::unique_ptr<CommandList> &GetFrameCommandList(QueueType type,
                                                     u32 frameIndex);
-  bool& GetCommandPrepared(QueueType type, u32 frameIndex);
+  bool &GetCommandPrepared(QueueType type, u32 frameIndex);
   VkCommandBuffer AllocateTransferCommandBuffer();
   void FreeTransferCommandBuffer(VkCommandBuffer commandBuffer);
   std::vector<u32> GetResourceQueueFamilies() const;
 
   friend class UploadContext;
 
-private:
+ private:
   void CreateInstance(const DeviceDesc &desc);
   void PickPhysicalDevice();
   void CreateLogicalDevice();
@@ -271,7 +269,7 @@ private:
 
   void DestroySwapchainSyncObjects();
 
-public:
+ public:
   VkInstance GetVkInstance() const { return instance_; }
   VkPhysicalDevice GetVkPhysicalDevice() const { return physicalDevice_; }
   VkDevice GetVkDevice() const { return device_; }
@@ -290,7 +288,7 @@ public:
 
   VmaAllocator GetAllocator() { return allocator_; }
 
-private:
+ private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
@@ -302,7 +300,7 @@ private:
 #endif
 
   VkPhysicalDeviceProperties physicalDeviceProperties_{};
-	bool taskShaderSupported_ = false;
+  bool taskShaderSupported_ = false;
 
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   u32 mainQueueFamily = 0;
@@ -326,8 +324,7 @@ private:
   std::unique_ptr<CommandPools> commandPools_;
 
   std::array<VkCommandBuffer, k_MaxFramesInFlight> commandBuffers_;
-  std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
-      commandLists_;
+  std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight> commandLists_;
   std::array<VkCommandBuffer, k_MaxFramesInFlight> computeCommandBuffers_{};
   std::array<std::unique_ptr<CommandList>, k_MaxFramesInFlight>
       computeCommandLists_;
@@ -369,7 +366,7 @@ private:
   std::array<FrameSyncData, k_MaxFramesInFlight> frames_;
   std::vector<VkSemaphore> swapchainRenderFinishedSemaphores_;
 
-private:
+ private:
   u32 nextShaderHandle_ = 1;
   std::unordered_map<u32, Shader> shaders_;
 
@@ -408,4 +405,4 @@ private:
   };
   std::unordered_map<u32, SemaphoreResource> semaphores_;
 };
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

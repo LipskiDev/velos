@@ -9,11 +9,11 @@ inline void HandleAssert(const char *expr, const char *file, int line) {
             << '\n';
   std::abort();
 }
-} // namespace Velos::Detail
+}  // namespace Velos::Detail
 
-#define VL_ASSERT(expr)                                                        \
-  do {                                                                         \
-    if (!(expr)) {                                                             \
-      ::Velos::Detail::HandleAssert(#expr, __FILE__, __LINE__);                \
-    }                                                                          \
+#define VL_ASSERT(expr)                                         \
+  do {                                                          \
+    if (!(expr)) {                                              \
+      ::Velos::Detail::HandleAssert(#expr, __FILE__, __LINE__); \
+    }                                                           \
   } while (0)

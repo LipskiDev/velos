@@ -10,15 +10,18 @@ enum class QueueType {
   Transfer,
 };
 
-template <typename T> constexpr T operator|(T a, T b) {
+template <typename T>
+constexpr T operator|(T a, T b) {
   return static_cast<T>(static_cast<u32>(a) | static_cast<u32>(b));
 }
 
-template <typename T> constexpr T operator&(T a, T b) {
+template <typename T>
+constexpr T operator&(T a, T b) {
   return static_cast<T>(static_cast<u32>(a) & static_cast<u32>(b));
 }
 
-template <typename T> constexpr bool HasFlag(T value, T flag) {
+template <typename T>
+constexpr bool HasFlag(T value, T flag) {
   return (static_cast<u32>(value) & static_cast<u32>(flag)) != 0;
 }
 
@@ -292,4 +295,4 @@ struct BindingPoolSize {
   u32 count = 0;
 };
 
-} // namespace Velos::RHI
+}  // namespace Velos::RHI

@@ -1,0 +1,19 @@
+# Google-inspired Velos style. Keep identical in Iryven and Velos.
+BasedOnStyle: Google
+Language: Cpp
+Standard: Latest
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 80
+BreakBeforeBraces: Attach
+NamespaceIndentation: None
+AccessModifierOffset: -1
+DerivePointerAlignment: false
+PointerAlignment: Right
+ReferenceAlignment: Right
+SortIncludes: Never
+IncludeBlocks: Preserve
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false

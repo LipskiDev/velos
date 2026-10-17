@@ -9,7 +9,7 @@ using namespace Velos::RHI;
 class Device;
 
 class CommandList final : public ICommandList {
-public:
+ public:
   CommandList(Device &device, VkCommandBuffer commandBuffer);
   explicit CommandList(VkCommandBuffer commandBuffer);
   ~CommandList() override = default;
@@ -42,9 +42,9 @@ public:
                          u64 size) override;
 
   void SetBindings(PipelineHandle pipeline, u32 setIndex,
-                         BindingSetHandle descriptorSet) override;
+                   BindingSetHandle descriptorSet) override;
   void SetComputeBindings(PipelineHandle pipeline, u32 setIndex,
-                                BindingSetHandle descriptorSet) override;
+                          BindingSetHandle descriptorSet) override;
 
   void GenerateMipmaps(ImageHandle imageHandle, uint32_t width, uint32_t height,
                        uint32_t mipLevels, uint32_t arrayLayers) override;
@@ -68,16 +68,18 @@ public:
 
   void Draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0,
             u32 baseInstance = 0) override;
-  void DrawIndexed(u32 indexCount, u32 firstIndex = 0,
-                   i32 vertexOffset = 0, u32 baseInstance = 0) override;
+  void DrawIndexed(u32 indexCount, u32 firstIndex = 0, i32 vertexOffset = 0,
+                   u32 baseInstance = 0) override;
   void DrawIndexedInstanced(u32 indexCount, u32 instanceCount,
                             u32 firstIndex = 0, i32 vertexOffset = 0,
                             u32 baseInstance = 0) override;
-  void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount, u32 stride) override;
+  void DrawIndexedIndirect(BufferHandle buffer, u64 offset, u32 drawCount,
+                           u32 stride) override;
   void DrawIndexedIndirectCount(BufferHandle buffer, u64 offset,
                                 BufferHandle countBuffer, u64 countOffset,
                                 u32 maxDrawCount, u32 stride) override;
-  void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1, u32 groupCountZ = 1) override;
+  void DrawMeshTasks(u32 groupCountX, u32 groupCountY = 1,
+                     u32 groupCountZ = 1) override;
   void DrawMeshTasksIndirect(BufferHandle buffer, u64 offset, u32 drawCount,
                              u32 stride) override;
 
@@ -87,10 +89,10 @@ public:
 
   VkCommandBuffer GetVkCommandBuffer() const { return commandBuffer_; }
 
-private:
+ private:
   Device &device_;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
   PipelineHandle boundGraphicsPipeline_{};
   PipelineHandle boundComputePipeline_{};
 };
-} // namespace Velos::Vulkan
+}  // namespace Velos::Vulkan

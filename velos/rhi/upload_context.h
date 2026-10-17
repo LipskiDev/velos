@@ -13,12 +13,12 @@ struct PendingBufferAcquire {
 };
 
 struct PendingImageAcquire {
-    ImageHandle image;
-    ImageLayout finalLayout;
-    ImageAspect aspect;
-    u32 mipLevel;
-    u32 baseArrayLayer;
-    u32 layerCount;
+  ImageHandle image;
+  ImageLayout finalLayout;
+  ImageAspect aspect;
+  u32 mipLevel;
+  u32 baseArrayLayer;
+  u32 layerCount;
 };
 
 struct BufferUploadDesc {
@@ -48,7 +48,7 @@ struct ImageUploadDesc {
 };
 
 class IUploadContext {
-public:
+ public:
   virtual ~IUploadContext() = default;
 
   virtual void Begin() = 0;
@@ -60,4 +60,4 @@ public:
   virtual std::vector<PendingImageAcquire> TakePendingImageAcquires() = 0;
 };
 
-} // namespace Velos::RHI
+}  // namespace Velos::RHI

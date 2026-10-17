@@ -18,6 +18,7 @@ struct VertexAttributeDesc {
   u32 binding = 0;
   VertexFormat format = VertexFormat::Float32;
   u32 offset = 0;
+  u32 semanticIndex = 0;
 };
 
 struct VertexBufferLayoutDesc {
@@ -62,10 +63,10 @@ struct BlendStateDesc {
 };
 
 struct AttachmentDesc {
-	Format format = Format::Undefined;
-	LoadOp loadOp = LoadOp::Clear;
-	StoreOp storeOp = StoreOp::Store;
-	glm::vec4 clearValue{};
+  Format format = Format::Undefined;
+  LoadOp loadOp = LoadOp::Clear;
+  StoreOp storeOp = StoreOp::Store;
+  glm::vec4 clearValue{};
 };
 
 struct GraphicsPipelineDesc {
@@ -97,22 +98,22 @@ struct ComputePipelineDesc {
 };
 
 struct MeshPipelineDesc {
-	// Optional
-	ShaderHandle taskShader{};
+  // Optional
+  ShaderHandle taskShader{};
 
-	// Required
-	ShaderHandle meshShader{};
-	ShaderHandle fragmentShader{};
+  // Required
+  ShaderHandle meshShader{};
+  ShaderHandle fragmentShader{};
 
-	PipelineLayoutDesc layout{};
+  PipelineLayoutDesc layout{};
 
-	RasterStateDesc raster{};
-	DepthStateDesc depth{};
-	BlendStateDesc blend{};
+  RasterStateDesc raster{};
+  DepthStateDesc depth{};
+  BlendStateDesc blend{};
 
-	std::vector<AttachmentDesc> colorAttachments{};
-	Format colorFormat = Format::Undefined;
-	const char* debugName = nullptr;
+  std::vector<AttachmentDesc> colorAttachments{};
+  Format colorFormat = Format::Undefined;
+  const char *debugName = nullptr;
 };
 
-}; // namespace Velos::RHI
+};  // namespace Velos::RHI

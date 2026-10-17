@@ -43,10 +43,11 @@ int main() {
 
   std::cout << "Creating swapchain\n";
   SwapchainHandle swapchain = device->CreateSwapchain({
-      .window = {
-          .type = WindowHandleType::GLFW,
-          .value = app.GetWindow().GetNativeHandle(),
-      },
+      .window =
+          {
+              .type = WindowHandleType::GLFW,
+              .value = app.GetWindow().GetNativeHandle(),
+          },
       .width = static_cast<u32>(app.GetWindow().GetWidth()),
       .height = static_cast<u32>(app.GetWindow().GetHeight()),
       .format = Format::RGBA8_UNORM,
@@ -314,10 +315,10 @@ int main() {
         glm::lookAt(glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(0.0f, 0.0f, 0.0f),
                     glm::vec3(0.0f, 1.0f, 0.0f));
 
-    glm::mat4 proj = glm::perspective(glm::radians(60.0f),
-                                      static_cast<float>(dims.width) /
-                                          static_cast<float>(dims.height),
-                                      0.1f, 100.0f);
+    glm::mat4 proj = glm::perspective(
+        glm::radians(60.0f),
+        static_cast<float>(dims.width) / static_cast<float>(dims.height), 0.1f,
+        100.0f);
     proj[1][1] *= -1.0f;
 
     glm::mat4 mvp = proj * view * model;
